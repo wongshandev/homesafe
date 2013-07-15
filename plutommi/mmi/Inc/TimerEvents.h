@@ -1950,11 +1950,6 @@ typedef enum
     PHONESET_LED_SWITCHING_TIMER,
 #endif    
 
-#if defined(__MESSAGE_COMMAND_SUPPORT__)
-    MSGCMD_TIMER_BASE,
-    MSGCMD_TIMER_END = MSGCMD_TIMER_BASE + 50,
-#endif
-
     VRE_SYS_TIMER_0,
     VRE_SYS_TIMER_1,
     VRE_SYS_TIMER_2,
@@ -1992,10 +1987,12 @@ typedef enum
 #ifdef __NMC_SUPPORT__
     NMC_TIMER,
 #endif
-
     VS_FW_CUI_MENU_TIMER_1,
     VS_SDK_SCENARIO,
     CAT9010_TIMER,
+#if defined(__WS_HOME_SAFE__)
+   #include "ws_timer.h"
+#endif
     
     MAX_TIMERS  /* Imp: Please do not modify this */
 } MMI_TIMER_IDS;
