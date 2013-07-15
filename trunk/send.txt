@@ -1,0 +1,16 @@
+		TaskSendIlm(MOD_MMI, MOD_MMI, MSG_ID_AZX_SOC_NETWORK_OK);
+void TaskSendIlm(module_type src_mod, module_type dest_mod, msg_type msg_id)
+{
+	ilm_struct *ilm_ptr;
+	ilm_ptr = allocate_ilm(src_mod);
+	ilm_ptr->src_mod_id  = src_mod;
+	ilm_ptr->dest_mod_id = dest_mod;
+	ilm_ptr->sap_id = 0;
+	ilm_ptr->local_para_ptr = NULL;
+	ilm_ptr->peer_buff_ptr = NULL;
+	ilm_ptr->msg_id = msg_id;
+	msg_send_ext_queue(ilm_ptr);
+}
+
+							extern void AzxMmiTaskCallBack(ilm_struct *current_ilm);
+							AzxMmiTaskCallBack(&Message);
