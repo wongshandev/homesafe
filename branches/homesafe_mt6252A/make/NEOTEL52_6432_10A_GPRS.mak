@@ -1257,16 +1257,6 @@ DUAL_LCD			= FALSE  #TRUE, FALSE   #zsl 20111017
 
 COLOR_SUBLCD  = FALSE  #TRUE, FALSE   #zsl 20111017
 
-#*******************************************************************************
-# message command 
-# MC_SPR_NUM_LEN = 20      # message command supper number length
-# MC_SPR_NUM_GRP = 6	   # message command supper number group total
-# MC_PWD_STR_LEN = 6	   # message command password string length
-# MC_CMD_FMT_LEN = 6	   # message command format string minimum length
-#*******************************************************************************
-MESSAGE_COMMAND_SUPPORT = FALSE #leifayu
-MSG_CMD_TASK_SUPPORT = FALSE # message command task.
-
 #ГЏАн
 AZAN_ALARM          = FALSE #TRUE ,FALSE
 # *************************************************************************

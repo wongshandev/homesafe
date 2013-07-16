@@ -1,8 +1,10 @@
 # Define source file lists to SRC_LIST
-		SRC_PATH = homesafe\src
-	    SRC_LIST = homesafe\src\ws_sms.c \
-					homesafe\src\ws_ps.c \
-					homesafe\src\ws_main.c 
+SRC_PATH = homesafe\src
+SRC_LIST = homesafe\src\ws_sms.c \
+           homesafe\src\ws_ps.c \
+           homesafe\src\ws_main.c \
+           homesafe\src\msgcmd_at.c \
+           homesafe\src\msgcmd_process.c
 
  
 

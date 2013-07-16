@@ -29,4 +29,10 @@
 extern int hf_scanf(const char *buff, int buff_sz, const char *format, ...);
 extern void hf_print(char* fmt,...);
 
+#if defined(__MSGCMD_SUPPORT__)
+#ifndef mc_trace
+#define mc_trace hf_print
+#endif
+#endif
+
 #endif
