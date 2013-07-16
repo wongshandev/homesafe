@@ -13862,17 +13862,13 @@ endif
 #end xp
 
 ##
-##message command module
+## HOME SAFE
 ##
-ifeq ($(strip $(MESSAGE_COMMAND_SUPPORT)), TRUE)
-    COM_DEFS          += __MESSAGE_COMMAND_SUPPORT__
-    COMPLIST          += msgcmd
-    CUS_REL_SRC_COMP  += fm_drv
+WS_HOME_SAFE = TRUE
+ifeq ($(strip $(WS_HOME_SAFE)),TRUE)
+  COM_DEFS += __WS_HOME_SAFE__ __MSGCMD_SUPPORT__
+  CUS_REL_SRC_COMP	+= homesafe
+  CUSTOM_COMMINC	+= homesafe\inc
+  COMPLIST          += homesafe
 endif
-  WS_HOME_SAFE = TRUE
-  ifeq ($(strip $(WS_HOME_SAFE)),TRUE)
-	COM_DEFS += __WS_HOME_SAFE__
-	CUS_REL_SRC_COMP	+=	homesafe
-	CUSTOM_COMMINC	    +=	homesafe\inc
-	COMPLIST += homesafe
-  endif
+
