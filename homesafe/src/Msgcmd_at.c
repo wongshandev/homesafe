@@ -12,6 +12,7 @@
 
 
 #if defined(__MSGCMD_SUPPORT__)
+#include "./../inc/msgcmd_at.h"
 #include "alarmsrvgprot.h"
 #include "bootupsrvgprot.h"
 #include "shutdownsrvgprot.h"
@@ -20,7 +21,6 @@
 #include "nvram_interface.h"
 #include "app_str.h"
 #include "TimerEvents.h"
-#include "msgcmd_at.h"
 
 
 /*****************************************************************************
@@ -48,6 +48,7 @@ extern void rmmi_write_to_uart(kal_uint8 * buffer, kal_uint16 length, kal_bool s
 *******/
 extern void MsgCmd_isink(kal_bool open);
 
+//extern void hf_print(char* fmt,...);
 
 /*******************************************************************************
 ** 函数: at_shutdown
@@ -116,7 +117,9 @@ static void at_capture(AtParam_t *vp);
 #ifndef at_replay
 #define at_replay(stuff, fmt, ...) mc_trace(fmt, ##__VA_ARGS__)
 #endif 
-
+#ifndef at_prompt
+#define at_prompt(fmt, ...)  //mc_trace(fmt, ##__VA_ARGS__)
+#endif
 
 //自定义AT命令表
 static const AtCmdTab_t command_table[AT_CMD_IDX_MAX] = {
@@ -124,9 +127,9 @@ static const AtCmdTab_t command_table[AT_CMD_IDX_MAX] = {
     {"$shutdown",     9, AT_CMD_SHUTDOWN,     at_shutdown    },
     {"$catch",        6, AT_CMD_CATCH,        at_catch       },
     {"$isink",        6, AT_CMD_ISINK,        at_isink       },
-    {"$adorecd",      7, AT_CMD_ADORECD,      at_adorecd     },
-    {"$vdorecd",      7, AT_CMD_VDORECD,      at_vdorecd     },
-    {"$capture",      7, AT_CMD_CAPTURE,      at_capture     },
+    {"$adorecd",      8, AT_CMD_ADORECD,      at_adorecd     },
+    {"$vdorecd",      8, AT_CMD_VDORECD,      at_vdorecd     },
+    {"$capture",      8, AT_CMD_CAPTURE,      at_capture     },
 };
 
 
@@ -551,7 +554,7 @@ static U16 msgcmd_AtCmdLineParse(ArgItem_t *argItem, char *cmdStr)
     MMI_BOOL dQuote = MMI_FALSE, next = MMI_FALSE;
     U16 argc;
     
-    if (NULL != argItem || NULL == cmdStr)
+    if (NULL == argItem || NULL == cmdStr)
         return 0;
 
     argc = 0;
@@ -619,7 +622,7 @@ static U16 msgcmd_AtCmdLineParse(ArgItem_t *argItem, char *cmdStr)
             }
         }
 
-        mc_trace(
+        at_prompt(
             "[SPLIT] [%d, len=%d] %s", 
             argc, 
             argItem[argc].len,
@@ -634,7 +637,7 @@ static U16 msgcmd_AtCmdLineParse(ArgItem_t *argItem, char *cmdStr)
     //肯定有错误
     if(dQuote)
     {
-        mc_trace("[SPLIT] quote error. argc=%d", argc);
+        at_prompt("[SPLIT] quote error. argc=%d", argc);
         argc = 0;
     }
     
@@ -692,7 +695,7 @@ MMI_BOOL MsgCmd_AtCmdProc(char *origStr)
                 len ++;
         }
 
-		mc_trace("%s,L:%d, em=%d.", __FUNCTION__, __LINE__, em);
+		at_prompt("%s,L:%d, em=%d.", __FUNCTION__, __LINE__, em);
         if(em != AT_EM_WRONG)
         {
             U32 i;

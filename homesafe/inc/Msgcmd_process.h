@@ -15,7 +15,7 @@
 
 
 #if defined(__MSGCMD_SUPPORT__)
-#include "ws_port.h"
+#include "./ws_port.h"
 #include "gdi_datatype.h"
 #include "app_datetime.h"
 #include "SmsSrvGprot.h"
