@@ -44,9 +44,14 @@ typedef enum {
     VDO_STATUS_MAX
 }VdoRecdStatus;
 
+#define MSGCMD_FILE_PATH_LENGTH   127
+
+#define MSGCMD_ADO_AUTO_SAVE_GAP  (60*5) // 300S
+#define MSGCMD_VDO_AUTO_SAVE_GAP  (60*5) // 300S
+
 /* 录像状态管理 */
 typedef struct {
-    WCHAR         filepath[256]; //文件绝对路径
+    WCHAR         filepath[MSGCMD_FILE_PATH_LENGTH+1]; //文件绝对路径
     U32           time;          //unit: second
     U32           saveGap;       //unit: second
     MMI_BOOL      forever;       //是否无限时录制
@@ -66,7 +71,7 @@ typedef enum {
 
 /* 录音状态管理 */
 typedef struct {
-    WCHAR         filepath[256]; //文件绝对路径
+    WCHAR         filepath[MSGCMD_FILE_PATH_LENGTH+1]; //文件绝对路径
     U32           time;    //unit: second
     U32           saveGap; //unit: second
     MMI_BOOL      forever; //是否无限时录制
@@ -75,9 +80,12 @@ typedef struct {
 }AdoRecdMngr;
 
 
-#define MSGCMD_PHOTO_FOLDER_NAME   L"photos"
-#define MSGCMD_VIDEO_FOLDER_NAME   L"videos"
-#define MSGCMD_AUDIO_FOLDER_NAME   L"audios"
+#define MSGCMD_PHOTOS_FOLDER_NAME   L"photos"
+#define MSGCMD_AUDIOS_FOLDER_NAME   L"audios"
+#define MSGCMD_VIDEOS_FOLDER_NAME   L"videos"
+
+#define MSGCMD_AUDIO_LIST_FILE_NAME L"vdoFiles.lst"
+#define MSGCMD_VIDEO_LIST_FILE_NAME L"adoFiles.lst"
 
 
 /*******************************************************************************
@@ -479,6 +487,65 @@ MMI_BOOL MsgCmd_SendSms(
     SrvSmsCallbackFunc cb);
 
 /*******************************************************************************
+** 函数: MsgCmd_DeleteOldFile
+** 功能: 根据文件列表中的记录删除文件
+** 入参: fullname   -- 录音文件的绝对路径文件名, UCS格式
+**       cmpSize    -- 需要删除的总大小
+** 返回: 函数执行是否正常
+** 作者: wasfayu
+*******/
+S32 MsgCmd_DeleteOldFile(const WCHAR *list_file_name, U64 cmpSize);
+
+/*******************************************************************************
+** 函数: MsgCmd_RecordFileName
+** 功能: 将某个文件的UCS格式名字pdata写入到fname文件中去
+** 入参: fname   -- 文件名, UCS格式
+**       pdata   -- 待写入的数据
+**       datalen -- 待写入的数据长度, 字节为单位
+** 返回: 是否写入成功
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_RecordFileName(const WCHAR *fname, void *pdata, U32 datalen);
+
+/*******************************************************************************
+** 函数: MsgCmd_AdoRecdSetAppend
+** 功能: 增加一段录音时间
+** 参数: 无
+** 返回: 返回设置是否成功
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_AdoRecdSetAppend(void);
+
+/*******************************************************************************
+** 函数: MsgCmd_AdoRecdBusy
+** 功能: 判断是否正在录音
+** 参数: 无
+** 返回: 返回_TRUE表示正在录音; 返回_FALSE表示没有任何录音
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_AdoRecdBusy(void);
+
+/*******************************************************************************
+** 函数: MsgCmd_AdoRecdStop
+** 功能: 停止录像录音
+** 参数: replay_number -- 表示回复启动结果到指定号码, 如果为空则表示不回复
+** 返回: 执行停止录音时返回的错误码
+** 作者: wasfayu
+*******/
+S32 MsgCmd_AdoRecdStop(char *replay_number);
+
+/*******************************************************************************
+** 函数: MsgCmd_AdoRecdStart
+** 功能: 启动录音
+** 参数: forever       -- 是否无限时长录音
+**       time_in_sec   -- 录音时长, 以秒为单位, 如果forever为真, 则忽略改参数
+**       replay_number -- 表示回复启动结果到指定号码, 如果为空则表示不回复
+** 返回: 启动是否成功
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_AdoRecdStart(MMI_BOOL forever, U32 time_in_sec, char *replay_number);
+
+/*******************************************************************************
 ** 函数: MsgCmd_CaptureEntry
 ** 功能: 拍照
 ** 参数: mms_it        -- 是否采用MMS方式发送, 
@@ -489,6 +556,33 @@ MMI_BOOL MsgCmd_SendSms(
 ** 作者: wasfayu
 *******/
 MMI_BOOL MsgCmd_CaptureEntry(MMI_BOOL mms_it, char *replay_number);
+
+/*******************************************************************************
+** 函数: MsgCmd_VdoRecdSetAppend
+** 功能: 增加一段录像时间
+** 参数: 无
+** 返回: 返回设置是否成功
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_VdoRecdSetAppend(void);
+
+/*******************************************************************************
+** 函数: MsgCmd_VdoRecdBusy
+** 功能: 判断是否正在录像
+** 参数: 无
+** 返回: 返回_TRUE表示正在录像; 返回_FALSE表示没有任何录像
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_VdoRecdBusy(void);
+
+/*******************************************************************************
+** 函数: MsgCmd_VdoRecdStop
+** 功能: 停止录像录像
+** 参数: replay_number -- 表示回复停止结果到指定号码, 如果为空则表示不回复
+** 返回: 执行停止录像时返回的错误码
+** 作者: wasfayu
+*******/
+S32 MsgCmd_VdoRecdStop(char *replay_number);
 
 /*******************************************************************************
 ** 函数: MsgCmd_VdoRecdStart

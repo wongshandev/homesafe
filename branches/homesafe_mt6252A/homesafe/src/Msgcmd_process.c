@@ -1087,6 +1087,201 @@ void MsgCmd_send_mms_test(void)
 
 #endif
 
+/*******************************************************************************
+** 函数: MsgCmd_DeleteOldFile
+** 功能: 根据文件列表中的记录删除文件
+** 入参: fullname   -- 录音文件的绝对路径文件名, UCS格式
+**       cmpSize    -- 需要删除的总大小
+** 返回: 函数执行是否正常
+** 作者: wasfayu
+*******/
+S32 MsgCmd_DeleteOldFile(const WCHAR *list_file_name, U64 cmpSize)
+{
+    U32       bufsz;
+    WCHAR    *buffer;
+    U32       line_len, tmpSz=0;
+    U64       total_size = 0;
+    S32       ret = 0;
+    FS_HANDLE main_fd, fd;
+
+    if (NULL == list_file_name)
+        return 0;
+
+    bufsz  = (MSGCMD_FILE_PATH_LENGTH+1)*sizeof(WCHAR);
+	buffer = (WCHAR*)MsgCmd_Malloc(bufsz, 0);
+	
+    kal_wsprintf(buffer, "%c:\\%w", MsgCmd_GetUsableDrive(), list_file_name);
+    
+    main_fd = FS_Open((const WCHAR *)buffer, FS_READ_WRITE);
+    if(main_fd < FS_NO_ERROR)
+    {
+    	MsgCmd_Mfree(buffer);
+	    return 0;
+  	}
+
+	FS_Seek(main_fd, 0, FS_FILE_BEGIN);
+    do{
+        memset(buffer, 0, bufsz);
+		line_len = 0;
+        applib_file_read_line(main_fd, (U8 *)buffer, bufsz, &line_len, &ret);
+
+        //mc_trace("%s,L:%d. ret=%d. line_len=%d. tmpSz=%d.", __FUNCTION__, __LINE__, ret,line_len,tmpSz);
+		if (line_len == 0)
+			break;
+		
+        tmpSz += line_len;
+        if(ret < 0)
+            break;
+        else
+        {     
+            U32 fsz;
+            
+            //去掉尾巴上的回车换行符
+            while(line_len)
+            {
+                if (buffer[line_len-1] == '\r' || 
+                    buffer[line_len-1] == '\n')
+                    buffer[line_len-1] = 0;
+                else
+                    break;
+                
+                line_len --;
+            }        
+            
+            fd = FS_Open((WCHAR*)buffer, FS_READ_ONLY);// FS_OPEN_SHARED|APPLIB_ASYNC_FILE_READ
+            if(fd >= FS_NO_ERROR)
+            {
+                if(FS_GetFileSize(fd, &fsz) >= 0)
+                    total_size += (U64)fsz;
+                    
+                FS_Close(fd);
+                FS_Delete((const WCHAR*)buffer);
+                
+                mc_trace("%s,L:%d, total_size=%d.", __FUNCTION__, __LINE__, total_size);
+            }
+
+            if(total_size >= cmpSize)
+                ret = 1;
+        }
+        
+    }while(ret == 0);
+
+	FS_Close(main_fd);
+	MsgCmd_Mfree(buffer);
+    MsgCmd_DeleteFileFront(list_file_name, tmpSz);
+    
+    return ret;
+}
+
+/*******************************************************************************
+** 函数: MsgCmd_RecordFileName
+** 功能: 将某个文件的UCS格式名字pdata写入到fname文件中去
+** 入参: fname   -- 文件名, UCS格式
+**       pdata   -- 待写入的数据
+**       datalen -- 待写入的数据长度, 字节为单位
+** 返回: 是否写入成功
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_RecordFileName(const WCHAR *fname, void *pdata, U32 datalen)
+{
+    U32       bufsz;
+    MMI_BOOL  result;
+    WCHAR    *buffer;
+    FS_HANDLE fd;
+
+    if (NULL == fname || NULL == pdata || 0 == datalen)
+        return 0;
+
+    bufsz  = (MSGCMD_FILE_PATH_LENGTH+1)*sizeof(WCHAR);
+    buffer = (WCHAR*)MsgCmd_Malloc(bufsz, 0);
+
+    kal_wsprintf(buffer, "%c:\\%w", MsgCmd_GetUsableDrive(), fname);
+    result = MMI_FALSE;
+    
+    fd = FS_Open(buffer, FS_READ_WRITE|FS_CREATE);
+    mc_trace("%s,L:%d, fd=%d.", __FUNCTION__, __LINE__, fd);
+    
+    if(fd >= FS_NO_ERROR)
+    {
+        FS_Seek(fd, 0, FS_FILE_END);
+        FS_Write(fd, (void*)pdata, datalen, NULL);
+        FS_Write(fd, "\r\n", 2, NULL);
+        FS_Commit(fd);
+        FS_Close(fd);
+        result = MMI_TRUE;
+    }
+    
+    MsgCmd_Mfree(buffer);
+    
+    return result;
+}
+
+#if 1//audio record
+static AdoRecdMngr *arm;
+
+static void msgcmd_AdoRecdDoingCb(MDI_RESULT result)
+{
+    mc_trace("%s, result=%d.", __FUNCTION__, result);
+    if (MDI_AUDIO_SUCCESS == result)
+    {
+        arm->time -= arm->saveGap;
+        
+        if (arm->forever)
+        {
+            
+        }
+        
+    }
+
+    if (arm)
+    {
+        MsgCmd_Mfree(arm);
+        arm = NULL;
+    }
+}
+
+/*******************************************************************************
+** 函数: msgcmd_AdoRecdDoing
+** 功能: 执行现时录音
+** 参数: filename  -- 录音保存文件名
+**       time      -- 限时时间, 秒单位
+** 返回: 返回设置是否成功
+** 作者: wasfayu
+*******/
+static MMI_BOOL msgcmd_AdoRecdDoing(WCHAR *filename, U32 time)
+{
+    MDI_RESULT result;
+
+    result = mdi_audio_start_record_with_limit(
+                (void*)filename,
+                MEDIA_WAV_DVI_ADPCM,
+                0,
+                NULL,
+                msgcmd_AdoRecdDoingCb,
+                0,
+                time);
+    mc_trace("%s, result=%d. time=%dS.", __FUNCTION__, result, time);
+    
+    return (MMI_BOOL)(MDI_AUDIO_SUCCESS == result);
+}
+
+/*******************************************************************************
+** 函数: MsgCmd_AdoRecdSetAppend
+** 功能: 增加一段录音时间
+** 参数: 无
+** 返回: 返回设置是否成功
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_AdoRecdSetAppend(void)
+{
+    if (arm)
+    {
+        arm->append = MMI_TRUE;
+        return MMI_TRUE;
+    }
+
+    return MMI_FALSE;
+}
 
 /*******************************************************************************
 ** 函数: MsgCmd_AdoRecdBusy
@@ -1097,7 +1292,7 @@ void MsgCmd_send_mms_test(void)
 *******/
 MMI_BOOL MsgCmd_AdoRecdBusy(void)
 {
-    return MMI_FALSE;
+    return (MMI_BOOL)(arm && ADO_STATUS_IDLE != arm->status);
 }
 
 /*******************************************************************************
@@ -1109,11 +1304,18 @@ MMI_BOOL MsgCmd_AdoRecdBusy(void)
 *******/
 S32 MsgCmd_AdoRecdStop(char *replay_number)
 {
-    mc_trace("%s, replay=%s.", __FUNCTION__, replay_number?replay_number:"NULL");
- 
+    MDI_RESULT result;
+
+    result = mdi_audio_stop_record();
+    mc_trace("%s, result=%d. replay=%s.", __FUNCTION__, result, replay_number?replay_number:"NULL");
+
+    if (arm)
+    {
+        MsgCmd_Mfree(arm);
+        arm = NULL;
+    }
     return 0;
 }
-
 
 /*******************************************************************************
 ** 函数: MsgCmd_AdoRecdStart
@@ -1133,9 +1335,38 @@ MMI_BOOL MsgCmd_AdoRecdStart(MMI_BOOL forever, U32 time_in_sec, char *replay_num
         time_in_sec, 
         replay_number?replay_number:"NULL");
 
-    return 0;
-}
+    if (arm)
+        return MMI_FALSE;
 
+    arm = (AdoRecdMngr*)MsgCmd_Malloc(sizeof(AdoRecdMngr), 0);
+    arm->saveGap = 30;
+    arm->time    = time_in_sec;
+    arm->forever = forever;
+    if (!arm->forever && arm->time < arm->saveGap)
+        arm->saveGap = arm->time;
+    
+    MsgCmd_CombineFilePath(
+        (char *)arm->filepath, 
+        MSGCMD_FILE_PATH_LENGTH*sizeof(WCHAR),
+        MSGCMD_AUDIOS_FOLDER_NAME,
+        L".wav");
+    
+    if (!msgcmd_AdoRecdDoing(arm->filepath, arm->saveGap))
+    {
+        MsgCmd_Mfree(arm);
+        arm = NULL;
+        return MMI_FALSE;
+    }
+    else
+    {
+        arm->status = ADO_STATUS_RECODING;
+    }
+
+    return MMI_TRUE;
+}
+#endif
+
+#if 1 //capture process
 /*******************************************************************************
 ** 函数: msgcmd_CaptureFinish
 ** 功能: 拍照结束
@@ -1333,7 +1564,9 @@ MMI_BOOL MsgCmd_CaptureEntry(MMI_BOOL mms_it, char *replay_number)
 	
     return result;
 }
+#endif
 
+#if 1 //video record
 static VdoRecdMngr *vrm;
 
 /*******************************************************************************
@@ -1439,7 +1672,7 @@ static S32 msgcmd_VdoRecdPreview(VdoRecdMngr *vrm)
             mdi_video_rec_preview_stop();
             mdi_video_rec_power_off();
     		gdi_layer_free(vrm->dispHandle);
-    		vrm->dispHandle = NULL;
+    		vrm->dispHandle = GDI_NULL_HANDLE;
         }
         else
         {
@@ -1451,6 +1684,24 @@ static S32 msgcmd_VdoRecdPreview(VdoRecdMngr *vrm)
 }
 
 /*******************************************************************************
+** 函数: MsgCmd_VdoRecdSetAppend
+** 功能: 增加一段录像时间
+** 参数: 无
+** 返回: 返回设置是否成功
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_VdoRecdSetAppend(void)
+{
+    if (vrm)
+    {
+        vrm->append = MMI_TRUE;
+        return MMI_TRUE;
+    }
+
+    return MMI_FALSE;
+}
+
+/*******************************************************************************
 ** 函数: MsgCmd_VdoRecdBusy
 ** 功能: 判断是否正在录像
 ** 参数: 无
@@ -1459,7 +1710,7 @@ static S32 msgcmd_VdoRecdPreview(VdoRecdMngr *vrm)
 *******/
 MMI_BOOL MsgCmd_VdoRecdBusy(void)
 {
-    return (MMI_BOOL)(vrm && VDO_STATUS_IDLE!=vrm->status);
+    return (MMI_BOOL)(vrm && VDO_STATUS_IDLE != vrm->status);
 }
 
 /*******************************************************************************
@@ -1476,7 +1727,7 @@ S32 MsgCmd_VdoRecdStop(char *replay_number)
     mdi_video_rec_preview_stop();
     mdi_video_rec_power_off();
 	gdi_layer_free(vrm->dispHandle);
-	vrm->dispHandle = NULL;
+	vrm->dispHandle = GDI_NULL_HANDLE;
     
     return 0;
 }
@@ -1518,6 +1769,7 @@ MMI_BOOL MsgCmd_VdoRecdStart(MMI_BOOL forever, U32 time_in_sec, char *replay_num
     
     return (MMI_BOOL)(vrm != NULL);
 }
+#endif
 
 /*******************************************************************************
 ** 函数: MsgCmd_ProcessInit
@@ -1528,7 +1780,27 @@ MMI_BOOL MsgCmd_VdoRecdStart(MMI_BOOL forever, U32 time_in_sec, char *replay_num
 *******/
 void MsgCmd_ProcessInit(void)
 {
-	//创建文件夹
+    do {
+        S32 h, i;
+        S8  buffer[128];
+        WCHAR *folder[] = {
+            MSGCMD_AUDIOS_FOLDER_NAME,
+            MSGCMD_PHOTOS_FOLDER_NAME,
+            MSGCMD_VIDEOS_FOLDER_NAME,
+        };
+        
+    	//用户盘路径
+    	for (i=0; i<sizeof(folder)/sizeof(folder[0]); i++)
+        {   
+        	memset(buffer, 0, 128);
+            kal_wsprintf((WCHAR*)buffer, "%c:\\%s\\", MsgCmd_GetUsableDrive(), folder[i]);
+        	if ((h = FS_Open((const WCHAR*)buffer, FS_OPEN_DIR|FS_READ_ONLY)) >= FS_NO_ERROR)
+                FS_Close(h);
+        	else
+                FS_CreateDir((const WCHAR*)buffer);
+        }
+    
+    }while(0);
 
 	//检测磁盘空间
 }
