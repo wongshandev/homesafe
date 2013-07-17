@@ -125,7 +125,10 @@ static void at_time(AtParam_t *vp);
 
 
 #ifndef at_replay
-#define at_replay(stuff, fmt, ...) mc_trace(fmt, ##__VA_ARGS__)
+#define at_replay(stuff, fmt, ...) do {        \
+		at_print(stuff, fmt, ##__VA_ARGS__);   \
+		mc_trace(fmt, ##__VA_ARGS__);          \
+	}while(0)
 #endif 
 #ifndef at_prompt
 #define at_prompt(fmt, ...)  //mc_trace(fmt, ##__VA_ARGS__)
@@ -143,7 +146,26 @@ static const AtCmdTab_t command_table[AT_CMD_IDX_MAX] = {
     {"$time",         5, AT_CMD_TIME,         at_time        },
 };
 
+/*******************************************************************************
+** 函数: at_print
+** 功能: AT命令调试打印函数
+** 入参: vp
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void at_print(MMI_BOOL stuff, const char *fmt, ...)
+{
+	va_list list;
+	char buffer[512];
+	S32 length;
 
+	memset(buffer, 0, 512);
+	va_start(list, fmt);
+	length = vsprintf(buffer, fmt, list);
+	va_end(list);
+
+	rmmi_write_to_uart(buffer, length, stuff);
+}
 
 /*******************************************************************************
 ** 函数: at_sample
@@ -158,7 +180,7 @@ static void at_sample(AtParam_t *vp)
     switch(vp->mode)
     {
     case AT_EM_SET_OR_EXEC:
-        if (0 == vp->argc || NULL == vp->argv[0].pos)
+        if (0 == vp->argc)
             vp->result = AT_RST_PARAM_ERR;
         else
         {
@@ -199,7 +221,7 @@ static void at_shutdown(AtParam_t *vp)
     switch(vp->mode)
     {
     case AT_EM_SET_OR_EXEC:
-        if (1 != vp->argc || NULL == vp->argv[0].pos)
+        if (1 != vp->argc)
             vp->result = AT_RST_PARAM_ERR;
         else
         {
@@ -247,7 +269,7 @@ static void at_reboot(AtParam_t *vp)
     switch(vp->mode)
     {
     case AT_EM_SET_OR_EXEC:
-        if (1 != vp->argc || NULL == vp->argv[0].pos)
+        if (1 != vp->argc)
             vp->result = AT_RST_PARAM_ERR;
         else
         {
@@ -294,13 +316,14 @@ static void at_catch(AtParam_t *vp)
     switch(vp->mode)
     {
     case AT_EM_SET_OR_EXEC:
-        if (1 != vp->argc || NULL == vp->argv[0].pos)
+        if (1 != vp->argc)
             vp->result = AT_RST_PARAM_ERR;
         else
         {
             U32 val, i;
             port_setting_struct ps;
 
+			val = MsgCmd_Atoi((const char *)vp->argv[0].pos);
             for(i=0; i<sizeof(enableVal)/sizeof(enableVal[0]); i++)
             {
                 if(enableVal[i] == (U8)val)
@@ -406,7 +429,7 @@ static void at_isink(AtParam_t *vp)
     switch(vp->mode)
     {
     case AT_EM_SET_OR_EXEC:
-        if (2 != vp->argc || NULL == vp->argv[0].pos || NULL == vp->argv[1].pos)
+        if (1 != vp->argc)
             vp->result = AT_RST_PARAM_ERR;
         else
         {
@@ -541,7 +564,7 @@ static void at_capture(AtParam_t *vp)
     switch(vp->mode)
     {
     case AT_EM_SET_OR_EXEC:
-        if (1 != vp->argc || NULL == vp->argv[0].pos)
+        if (1 != vp->argc)
             vp->result = AT_RST_PARAM_ERR;
         else
         {
