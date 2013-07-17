@@ -12,7 +12,7 @@
 
 
 #if defined(__MSGCMD_SUPPORT__)
-#include "msgcmd_process.h"
+#include "./../inc/msgcmd_process.h"
 #include "med_api.h"
 #include "mdi_datatype.h"
 #include "mdi_audio.h"
@@ -23,6 +23,7 @@
 #include "filemgrsrvgprot.h"
 #include "shutdownsrvgprot.h"
 #include "bootupsrvgprot.h"
+#include "modeswitchsrvgprot.h"
 #include "alarmsrvgprot.h"
 #include "SettingProt.h"
 #include "imeisrvgprot.h"
@@ -32,8 +33,7 @@
 #include "nvram_struct.h"
 #include "fs_func.h"
 #include "TimerEvents.h"
-#include "ctype.h"
-#include "string.h"
+#include <ctype.h>
 #include "app_str.h"
 #include "app_ltlcom.h"
 #include "app_asyncfile.h"
@@ -1247,7 +1247,8 @@ static MMI_BOOL msgcmd_CapturePreview(U16 pictureW, U16 pictureH)
 	camera_setting_data.shutter_pri   = 0;
 	camera_setting_data.aperture_pri  = 0;
 
-	camera_preview_data.preview_layer_handle = NULL;
+    gdi_layer_get_base_handle(&camera_preview_data.preview_layer_handle);
+	//camera_preview_data.preview_layer_handle = NULL;
 	camera_preview_data.preview_wnd_offset_x = 0;
 	camera_preview_data.preview_wnd_offset_y = 0;
 	camera_preview_data.preview_wnd_width    = pictureW;
@@ -1305,10 +1306,9 @@ MMI_BOOL MsgCmd_CaptureEntry(MMI_BOOL mms_it, char *replay_number)
 		
 		//wait a moment
 		kal_get_time(&tick1);
-		while (tick2 - tick1 < 30)
-		{
-			kal_get_time(&tick2);
-		}
+		do {
+    		kal_get_time(&tick2);
+    	}while (tick2 - tick1 < 50);
 		
 		result = msgcmd_CaptureDoing((S8 *) filename);
 		if (result)
@@ -1325,10 +1325,9 @@ MMI_BOOL MsgCmd_CaptureEntry(MMI_BOOL mms_it, char *replay_number)
 	}
 
 	kal_get_time(&tick1);
-	while (tick2 - tick1 < 50)
-	{
+    do {
 		kal_get_time(&tick2);
-	}
+	}while (tick2 - tick1 < 50);
 	
 	msgcmd_CaptureFinish();
 	
