@@ -26,6 +26,7 @@ typedef enum {
     AT_CMD_ADORECD,
     AT_CMD_VDORECD,
     AT_CMD_CAPTURE,
+    AT_CMD_TIME,
     AT_CMD_IDX_MAX,
 }AtCmdIdx_e;
 

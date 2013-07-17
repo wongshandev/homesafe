@@ -113,6 +113,16 @@ static void at_vdorecd(AtParam_t *vp);
 *******/
 static void at_capture(AtParam_t *vp);
 
+/*******************************************************************************
+** 函数: at_time
+** 功能: AT命令, 设置/获取系统时间
+** 入参: vp
+** 返回: 无  at$time=yyyy-mm-dd,hh:mm:ss
+** 作者: wasfayu
+*******/
+static void at_time(AtParam_t *vp);
+
+
 
 #ifndef at_replay
 #define at_replay(stuff, fmt, ...) mc_trace(fmt, ##__VA_ARGS__)
@@ -130,6 +140,7 @@ static const AtCmdTab_t command_table[AT_CMD_IDX_MAX] = {
     {"$adorecd",      8, AT_CMD_ADORECD,      at_adorecd     },
     {"$vdorecd",      8, AT_CMD_VDORECD,      at_vdorecd     },
     {"$capture",      8, AT_CMD_CAPTURE,      at_capture     },
+    {"$time",         5, AT_CMD_TIME,         at_time        },
 };
 
 
@@ -430,6 +441,16 @@ static void at_isink(AtParam_t *vp)
     }
 }
 
+static void do_adorecd(void)
+{
+    MsgCmd_AdoRecdStart(MMI_FALSE, 60, NULL);
+}
+
+static void do_adostop(void)
+{
+    MsgCmd_AdoRecdStop(NULL);
+}
+
 /*******************************************************************************
 ** 函数: at_adorecd
 ** 功能: AT命令, 控制录像
@@ -446,7 +467,10 @@ static void at_adorecd(AtParam_t *vp)
             vp->result = AT_RST_PARAM_ERR;
         else
         {
-
+            if (MsgCmd_AdoRecdBusy())
+                StartTimer(MSGCMD_TIMER_BASE+4, 50, do_adostop);
+            else
+                StartTimer(MSGCMD_TIMER_BASE+4, 50, do_adorecd);
         }
         break;
         
@@ -500,7 +524,7 @@ static void at_vdorecd(AtParam_t *vp)
     }
 }
 
-void do_capture(void)
+static void do_capture(void)
 {
 	MsgCmd_CaptureEntry(MMI_FALSE, NULL);
 }
@@ -528,6 +552,41 @@ static void at_capture(AtParam_t *vp)
         
     case AT_EM_HELP:
         at_replay(MMI_TRUE, "%s: (mms number)", vp->name);
+        break;
+        
+    case AT_EM_READ:
+    case AT_EM_ACTIVE:        
+        vp->result = AT_RST_PARAM_ERR;
+        break;
+        
+    default:
+        vp->result = AT_RST_UNKOWN_ERR;
+        break;
+    }
+}
+
+/*******************************************************************************
+** 函数: at_time
+** 功能: AT命令, 设置/获取系统时间
+** 入参: vp
+** 返回: 无  at$time=yyyy-mm-dd,hh:mm:ss
+** 作者: wasfayu
+*******/
+static void at_time(AtParam_t *vp)
+{
+    switch(vp->mode)
+    {
+    case AT_EM_SET_OR_EXEC:
+        if (2 != vp->argc)
+            vp->result = AT_RST_PARAM_ERR;
+        else
+        {
+            
+        }
+        break;
+        
+    case AT_EM_HELP:
+        at_replay(MMI_TRUE, "%s: yyyy-mm-dd,hh:mm:ss", vp->name);
         break;
         
     case AT_EM_READ:
