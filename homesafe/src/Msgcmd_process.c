@@ -1383,7 +1383,29 @@ static MMI_BOOL msgcmd_CaptureFinish(void)
 	
 	result = mdi_camera_power_off();
 	mc_trace("%s, L:%d, result=%d.", __FUNCTION__, __LINE__, result);
+
+	/* resume alignment timer */
+	UI_enable_alignment_timers();
+
+	/* resume LED patten */
+	StartLEDPatternBackGround();
+
+	/* let MMI can sleep */
+	TurnOffBacklight();
+
+	/* re-enable keypad tone */
+	mmi_frm_kbd_set_tone_state(MMI_KEY_TONE_ENABLED);
+
+	/* store camera setting back to NVRAM */
+	mmi_camera_store_setting();
+
+	/* resume background audio */
+	mdi_audio_resume_background_play();
 	
+#if defined(MSGCMD_USE_FLASH_LED_4_CAPTURE)	
+	mmi_camera_turn_off_led_highlight();
+#endif
+
 	return MMI_TRUE;
 }
 
@@ -1435,7 +1457,29 @@ static MMI_BOOL msgcmd_CapturePreview(U16 pictureW, U16 pictureH)
 	mc_trace("%s, L:%d, result=%d.", __FUNCTION__, __LINE__, result);
 	if (MDI_RES_CAMERA_SUCCEED != result)
 		return MMI_FALSE;
+
+#if defined(MSGCMD_USE_FLASH_LED_4_CAPTURE) 	
+	mmi_camera_turn_on_preview_led_highlight();
+#endif	  
+
+	/* stop bg music */
+	mdi_audio_suspend_background_play();
+
+	/* stop MMI sleep */
+	TurnOnBacklight(0);
 	
+	/* force all playing keypad tone off */
+	srv_profiles_stop_tone((srv_prof_tone_enum)GetCurKeypadTone());
+	
+	/* disable key pad tone */
+	mmi_frm_kbd_set_tone_state(MMI_KEY_TONE_DISABLED);
+	
+	/* disalbe align timer	*/
+	UI_disable_alignment_timers();
+	
+	/* stop LED patten */
+	StopLEDPatternBackGround();
+
 	mdi_camera_load_default_setting(&camera_setting_data);
 	camera_setting_data.preview_width  = pictureW;
 	camera_setting_data.preview_height = pictureH;
@@ -1455,31 +1499,17 @@ static MMI_BOOL msgcmd_CapturePreview(U16 pictureW, U16 pictureH)
 	camera_setting_data.iso            = MDI_CAMERA_ISO_AUTO;
 	camera_setting_data.ae_meter       = MDI_CAMERA_AE_METER_AUTO;
 	camera_setting_data.dsc_mode       = MDI_CAMERA_DSC_MODE_AUTO;	
-#if defined(__MDI_CAMERA_FD_SUPPORT__)
-	camera_setting_data.fd_enable = MMI_FALSE;
-#endif	
-#if MDI_CAMERA_MT6238_SERIES
-	camera_setting_data.zoom          = 0; /* 1x */
-	camera_setting_data.af_operation_mode = CAM_AF_OFF;
-	camera_setting_data.af_range      = CAM_AF_RANGE_AUTO;
-	camera_setting_data.sharpness     = CAM_ADJUST_MED_LEVEL;
-	camera_setting_data.is_binning_mode = FALSE;
-	camera_setting_data.brightness    = CAM_ADJUST_MED_LEVEL;
-	camera_setting_data.saturation    = CAM_ADJUST_MED_LEVEL;
-	camera_setting_data.contrast      = CAM_ADJUST_MED_LEVEL;  
-#else
-	camera_setting_data.zoom          = 10; /* 1x */
-	camera_setting_data.af_mode       = MDI_CAMERA_AUTOFOCUS_MODE_AUTO;
+	camera_setting_data.zoom           = 10; /* 1x */
+	camera_setting_data.af_mode        = MDI_CAMERA_AUTOFOCUS_MODE_AUTO;
 	camera_setting_data.af_metering_mode = MDI_CAMERA_AUTOFOCUS_1_ZONE;
-	camera_setting_data.brightness    = 128;
-	camera_setting_data.saturation    = 128;
-	camera_setting_data.contrast      = 128;
-#endif
-	camera_setting_data.shutter_pri   = 0;
-	camera_setting_data.aperture_pri  = 0;
+	camera_setting_data.brightness     = 128;
+	camera_setting_data.saturation     = 128;
+	camera_setting_data.contrast       = 128;
+	camera_setting_data.shutter_pri    = 0;
+	camera_setting_data.aperture_pri   = 0;
 
-    gdi_layer_get_base_handle(&camera_preview_data.preview_layer_handle);
-	//camera_preview_data.preview_layer_handle = NULL;
+    //gdi_layer_get_base_handle(&camera_preview_data.preview_layer_handle);
+	camera_preview_data.preview_layer_handle = NULL;
 	camera_preview_data.preview_wnd_offset_x = 0;
 	camera_preview_data.preview_wnd_offset_y = 0;
 	camera_preview_data.preview_wnd_width    = pictureW;
