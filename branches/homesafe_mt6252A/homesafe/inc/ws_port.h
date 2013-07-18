@@ -23,16 +23,18 @@
 #include "aud_defs.h"
 #include "mmi_rp_app_charger_def.h"
 #include "GeneralDeviceGprot.h"
+#include "TimerEvents.h"
+
 
 
 
 extern int hf_scanf(const char *buff, int buff_sz, const char *format, ...);
 extern void hf_print(char* fmt,...);
-
-#if defined(__MSGCMD_SUPPORT__)
-#ifndef mc_trace
-#define mc_trace hf_print
-#endif
-#endif
+extern char * str_big_to_low(char * _data);
+extern void hf_write_nvram(void);
+extern void hf_read_nvram(void);
+extern void hf_send_sms_req(const char * _number, const char* content);
+extern void hf_sms_init(void);
+extern kal_uint8 hf_get_signal_changed(void);
 
 #endif
