@@ -4528,7 +4528,7 @@ mmi_ret mmi_sms_handle_new_msg_ind(mmi_event_struct *evt)
 	srv_sms_new_msg_struct *new_msg_data = (srv_sms_new_msg_struct*)event_info->msg_data;
 	mmi_ucs2_to_asc((S8 *)sms_content, (S8 *)event_info->content);
 	hf_new_msg_ind(new_msg_data->number,sms_content);
-	return;
+	return MMI_RET_OK;
 }	
 #endif
 

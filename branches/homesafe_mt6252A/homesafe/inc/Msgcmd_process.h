@@ -476,6 +476,15 @@ void MsgCmd_FactoryExt(U16 delayS);
 MMI_BOOL MsgCmd_DeleteFileFront(const WCHAR *fname, U32 deletesz);
 
 /*******************************************************************************
+** 函数: msgcmd_WriteImeiRsp
+** 功能: 拨打指定号码
+** 参数: pnumber -- 指定呼叫号码
+** 返回: 无
+** 作者: wasfayu
+*******/
+void MsgCmd_MakeCall(char *pnumber);
+
+/*******************************************************************************
 ** 函数: MsgCmd_WriteImei
 ** 功能: 写入一个IMEI.
 ** 入参: num   - IMEI号码字符串

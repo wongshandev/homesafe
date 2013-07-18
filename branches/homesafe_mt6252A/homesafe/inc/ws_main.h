@@ -2,6 +2,10 @@
 #define __WS_MAIN__
 #include "ws_ps.h"
 
+//ฑ๊สถ   __WS_HOME_SAFE__  
+
+
+
 
 #define HF_STR_VER  "verson 1.1"
 #define STR_CMD_SET "set" 

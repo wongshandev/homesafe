@@ -1,5 +1,9 @@
 #ifndef __DLJFSLDJFOELDSDF__
 #define __DLJFSLDJFOELDSDF__
+
+//ฑ๊สถ   __WS_HOME_SAFE__  
+
+
 #include "MMI_include.h"
 #include "Nvram_user_defs.h"
 #include "conversions.h"
@@ -27,7 +31,6 @@
 
 
 
-
 extern int hf_scanf(const char *buff, int buff_sz, const char *format, ...);
 extern void hf_print(char* fmt,...);
 extern char * str_big_to_low(char * _data);
@@ -37,6 +40,7 @@ extern void hf_send_sms_req(const char * _number, const char* content);
 extern void hf_sms_init(void);
 extern kal_uint8 hf_get_signal_changed(void);
 extern MMI_BOOL mmi_idle_is_active(void);
+extern void hf_main_init(void);
 
 
 #if defined(__MSGCMD_SUPPORT__)

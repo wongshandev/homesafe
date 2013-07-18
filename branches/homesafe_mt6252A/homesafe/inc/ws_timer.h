@@ -1,4 +1,7 @@
 
+//ฑ๊สถ   __WS_HOME_SAFE__  
+
+
 SH_LIGHT_TIMER_ID,
 
 #if defined(__MSGCMD_SUPPORT__)

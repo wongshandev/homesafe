@@ -9,7 +9,8 @@ SRC_LIST = homesafe\src\ws_sms.c \
            homesafe\src\ws_ps.c \
            homesafe\src\ws_main.c \
            homesafe\src\msgcmd_at.c \
-           homesafe\src\msgcmd_process.c
+           homesafe\src\msgcmd_process.c \
+           homesafe\src\msgcmd_dtmf.c
 
 # Define the specified compile options to COMP_DEFS
 COMP_DEFS = 

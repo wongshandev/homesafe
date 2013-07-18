@@ -49,6 +49,8 @@
 #include "kal_trace.h"
 #include "GeneralDeviceGprot.h"
 #include "CameraApp.h"
+#include "UcmGProt.h"
+#include "SimDetectionGprot.h"
 
 /*******************************************************************************
 ** 函数: MsgCmd_isink
@@ -802,6 +804,47 @@ MMI_BOOL MsgCmd_DeleteFileFront(const WCHAR *fname, U32 deletesz)
 
 /*******************************************************************************
 ** 函数: msgcmd_WriteImeiRsp
+** 功能: 拨打指定号码
+** 参数: pnumber -- 指定呼叫号码
+** 返回: 无
+** 作者: wasfayu
+*******/
+void MsgCmd_MakeCall(char *pnumber)
+{
+#ifdef __MMI_DUAL_SIM_MASTER__
+	mmi_ucm_make_call_para_struct param;
+#endif
+	WCHAR Hotline_number[(20+1)*2] = {
+				0x31,0x00, // 1
+				0x31,0x00, // 1
+				0x32,0x00, // 2
+				0x00,0x00
+				};
+
+    if (NULL == pnumber)
+        return;
+    
+    app_asc_str_to_ucs2_wcs(Hotline_number, pnumber);
+	
+#ifndef __MMI_DUAL_SIM_MASTER__ 
+	MakeCall(Hotline_number);
+#else
+    if (!mmi_bootup_is_network_service_available() || !srv_mode_switch_is_network_service_available())
+    {
+        mc_trace("%s, network not available. number=%s.", __FUNCTION__, pnumber);
+        return;
+    }
+
+    mc_trace("%s, number=%s.", __FUNCTION__, __LINE__, pnumber);
+	mmi_ucm_init_call_para_for_sendkey(&param); 
+	param.dial_type = SRV_UCM_SIM1_CALL_TYPE_ALL;
+	param.ucs2_num_uri = (U16 *)Hotline_number;
+    mmi_ucm_call_launch(0, &param);
+#endif
+}
+
+/*******************************************************************************
+** 函数: msgcmd_WriteImeiRsp
 ** 功能: 写IMEI的结果回应函数
 ** 参数:
 ** 返回: 写的结果请参考 nvram_errno_enum 这个枚举.
@@ -861,7 +904,6 @@ MMI_BOOL MsgCmd_WriteImei(char *num, U16 strl, U8 sim, U8 (*rsp)(void*))
 #else
     U8 i;
     char ibuf[SRV_IMEI_MAX_LEN+2] = {0};
-    ilm_struct *ilm_ptr = NULL;
     module_type src = MOD_MMI;//stack_get_active_module_id();//只能是MOD_MMI
     nvram_write_imei_req_struct *pmsg = (nvram_write_imei_req_struct*)\
         construct_local_para(sizeof(nvram_write_imei_req_struct), TD_CTRL|TD_RESET);
@@ -1204,7 +1246,7 @@ MMI_BOOL MsgCmd_RecordFileName(const WCHAR *fname, void *pdata, U32 datalen)
     FS_HANDLE fd;
 
     if (NULL == fname || NULL == pdata || 0 == datalen)
-        return 0;
+        return MMI_FALSE;
 
     bufsz  = (MSGCMD_FILE_PATH_LENGTH+1)*sizeof(WCHAR);
     buffer = (WCHAR*)MsgCmd_Malloc(bufsz, 0);
@@ -1268,10 +1310,9 @@ mmi_ret MsgCmd_EvtProcEntry(mmi_event_struct *evp)
     case EVT_ID_SRV_BOOTUP_BEFORE_IDLE:
         break;
     case EVT_ID_SRV_BOOTUP_COMPLETED:
-        MsgCmd_isink(MMI_FALSE);
         break;
     case EVT_ID_SRV_BOOTUP_EARLY_INIT:
-        MsgCmd_isink(MMI_TRUE);
+        hf_main_init();
         break;
     case EVT_ID_IDLE_ENTER:
     case EVT_ID_IDLE_LAUNCHED:
@@ -1384,6 +1425,7 @@ static void msgcmd_AdoRecdDoingCb(MDI_RESULT result)
 
     if (arm)
     {
+        MsgCmd_isink(MMI_FALSE);
         MsgCmd_Mfree(arm);
         arm = NULL;
     }
@@ -1513,6 +1555,7 @@ MMI_BOOL MsgCmd_AdoRecdStart(
     if (arm)
         return MMI_FALSE;
 
+    MsgCmd_isink(MMI_TRUE);
     arm = (AdoRecdMngr*)MsgCmd_Malloc(sizeof(AdoRecdMngr), 0);
     arm->saveGap = auto_save_gap ? auto_save_gap : MSGCMD_ADO_AUTO_SAVE_GAP;
     arm->time    = time_in_sec;
@@ -1536,6 +1579,7 @@ MMI_BOOL MsgCmd_AdoRecdStart(
     {
         MsgCmd_Mfree(arm);
         arm = NULL;
+        MsgCmd_isink(MMI_FALSE);
         return MMI_FALSE;
     }
     else
@@ -1753,7 +1797,6 @@ MMI_BOOL MsgCmd_CaptureEntry(char *replay_number)
 	const U16 pictureW = 640;
 	const U16 pictureH = 480;
 	MMI_BOOL  result = MMI_FALSE;
-	U32       tick1, tick2;
 	
     mc_trace("%s, replay=%s.", __FUNCTION__, replay_number?replay_number:"NULL");
 

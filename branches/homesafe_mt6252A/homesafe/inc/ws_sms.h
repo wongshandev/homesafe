@@ -3,6 +3,9 @@
 #include "ws_port.h"
 #include "ws_main.h"
 
+//ฑ๊สถ   __WS_HOME_SAFE__  
+
+
 #define HF_MAX_SMS_CONTENT       200
 #define HF_MAX_SMS_QUEUE_COUNT	 10
 

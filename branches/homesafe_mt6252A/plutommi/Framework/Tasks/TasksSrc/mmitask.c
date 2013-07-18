@@ -2347,7 +2347,6 @@ void mmi_frm_fetch_msg_from_extQ_to_circularQ(void)
 }
 
 
-
 /*****************************************************************************
  * FUNCTION
  *  mmi_frm_power_on_init_procedure
