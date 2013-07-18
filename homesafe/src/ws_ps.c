@@ -1,7 +1,11 @@
 #if defined(__WS_HOME_SAFE__)
 #include "ws_ps.h"
+#include "MMIDataType.h"
+#include "ws_main.h"
+
 
 #define SF_WRITE_FS
+extern hf_nvram	  hf_nv;
 
 
 
@@ -14,14 +18,32 @@
 
 
 
+void hf_write_nvram(void)
+{
+	S16 error;
+	WriteRecord(NVRAM_HF_DATA_LID, 1, &hf_nv, NVRAM_EF_HF_DATA_SIZE, &error);
+}
+void hf_read_nvram(void)
+{
+	S16 error;
+	ReadRecord(NVRAM_HF_DATA_LID,1, &hf_nv, NVRAM_EF_HF_DATA_SIZE, &error);
+}
 
-
-
-
-
-
-
-
+/* 大写转换小写*/
+char * str_big_to_low(char * _data)
+{
+	int _count = 0;
+	
+	if(_data == NULL) return NULL;
+	for(_count=0;_count<strlen(_data);_count++)
+	{
+		if((*(_data+_count) >= 'A')&&((*(_data+_count))<= 'Z'))
+		{
+			*(_data+_count) += 32;
+		}
+	}
+	return _data;
+}
 
 #define NMEA_TOKS_COMPARE   (1)
 #define NMEA_TOKS_PERCENT   (2)
@@ -275,7 +297,7 @@ void hf_print(char* fmt,...)
 	printf("%s\r\n",buf);
 #else
 	DTGetRTCTime(&time);
-	sprintf(time_str, "\t[%d日%d:%d:%d]\n",
+	sprintf(time_str, "\t[%d-%d:%d:%d]\n",
 		time.nDay,
 		time.nHour,
 		time.nMin,
