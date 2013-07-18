@@ -514,9 +514,6 @@ MMI_BOOTUP_INIT_REG_BEGIN(EVT_ID_SRV_BOOTUP_NORMAL_INIT)
 #ifndef __DISABLE_SHORTCUTS_IMPL__
     MMI_BOOTUP_INIT_REG(mmi_shct_init)
 #endif
-#if defined(__MSGCMD_SUPPORT__)
-    MMI_BOOTUP_INIT_REG(MsgCmd_EvtProcEntry)
-#endif
 MMI_BOOTUP_INIT_REG_END(EVT_ID_SRV_BOOTUP_NORMAL_INIT)
 
 
@@ -620,9 +617,7 @@ MMI_BOOTUP_INIT_REG_BEGIN(EVT_ID_SRV_BOOTUP_BEFORE_IDLE)
     /* should place mmi_syncml_int behind initalize_main_menu_application */
     MMI_BOOTUP_INIT_ADP(mmi_syncml_init)
 #endif
-#if defined(__MSGCMD_SUPPORT__)
-    MMI_BOOTUP_INIT_REG(MsgCmd_EvtProcEntry)
-#endif
+
 #ifdef __MMI_SRV_TODOLIST__
     MMI_BOOTUP_INIT_ADP(srv_tdl_init)
 #endif
@@ -653,9 +648,7 @@ MMI_BOOTUP_INIT_REG_BEGIN(EVT_ID_SRV_BOOTUP_COMPLETED)
 #ifdef __MMI_NETSET_3G_ENHANCE__
     MMI_BOOTUP_INIT_REG(mmi_netset_3g_nocell_check_hdlr)
 #endif /* __MMI_NETSET_3G_ENHANCE__ */
-#if defined(__MSGCMD_SUPPORT__)
-    MMI_BOOTUP_INIT_REG(MsgCmd_EvtProcEntry)
-#endif
+
 #ifndef __DISABLE_SHORTCUTS_IMPL__
     MMI_BOOTUP_INIT_REG(mmi_shct_init)
 #endif
@@ -884,12 +877,12 @@ MMI_BOOTUP_INIT_REG(srv_sensor_init)
     MMI_BOOTUP_INIT_REG(srv_eons_main_evt_hdlr)
     MMI_BOOTUP_INIT_REG(mmi_nw_info_on_early_init)
     MMI_BOOTUP_INIT_REG(mmi_nw_info_signal_on_early_init)
+#if defined(__WS_HOME_SAFE__)
+    MMI_BOOTUP_INIT_ADP(hf_main_init)
+#endif    
 #ifdef SYNCML_DM_SUPPORT
     MMI_BOOTUP_INIT_REG(mmi_dmui_init)
 #endif /* SYNCML_DM_SUPPORT */
     MMI_BOOTUP_INIT_REG(mmi_ssv_main_evt_hdlr)
     MMI_BOOTUP_INIT_REG(mmi_slk_main_evt_hdlr)
-#if defined(__MSGCMD_SUPPORT__)
-    MMI_BOOTUP_INIT_REG(MsgCmd_EvtProcEntry)
-#endif
 MMI_BOOTUP_INIT_REG_END(EVT_ID_SRV_BOOTUP_EARLY_INIT)
