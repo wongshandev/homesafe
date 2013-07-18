@@ -36,6 +36,7 @@ extern void hf_read_nvram(void);
 extern void hf_send_sms_req(const char * _number, const char* content);
 extern void hf_sms_init(void);
 extern kal_uint8 hf_get_signal_changed(void);
+extern MMI_BOOL mmi_idle_is_active(void);
 
 
 #if defined(__MSGCMD_SUPPORT__)
