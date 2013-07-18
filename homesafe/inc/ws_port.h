@@ -37,4 +37,11 @@ extern void hf_send_sms_req(const char * _number, const char* content);
 extern void hf_sms_init(void);
 extern kal_uint8 hf_get_signal_changed(void);
 
+
+#if defined(__MSGCMD_SUPPORT__)
+#ifndef mc_trace
+#define mc_trace hf_print
+#endif
+#endif
+
 #endif
