@@ -105,7 +105,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			{
 				hf_print("password  error.");
 				hf_send_sms_req(_phone,"Set error,password error!");
-				return;
+				return 0xff;
 			}
 			for(_count=0;_count<MAX_ADMIN_NUMBER;_count++)
 			{
@@ -142,7 +142,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 		{
 			hf_print("set advance number error.");
 			hf_send_sms_req(_phone,"Set error!");
-			return;
+			return 0xff;
 		}
 		
 	}
@@ -163,7 +163,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			{
 				hf_print("password  error.");
 				hf_send_sms_req(_phone,"Set error,password error!");
-				return;
+				return 0xff;
 			}
 			for(_count=0;_count<MAX_ADMIN_NUMBER;_count++)
 			{
@@ -188,7 +188,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 		{
 			hf_print("clear advance number error.");
 			hf_send_sms_req(_phone,"Clear error!");
-			return;
+			return 0xff;
 		}
 	}
 	if((_addr_set = strstr(_content,STR_CMD_ADO)) != NULL)
@@ -205,7 +205,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			{
 				hf_print("password  error.");
 				hf_send_sms_req(_phone,"set error,password error!");
-				return;
+				return 0xff;
 			}
 			hf_send_sms_req(_phone,"Video recording!");
 			hf_mmi_task_send(HF_MSG_ID_ADO, p);
@@ -229,7 +229,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			{
 				hf_print("password  error.");
 				hf_send_sms_req(_phone,"Set error,password error!");
-				return;
+				return 0xff;
 			}
 			hf_send_sms_req(_phone,"voice recording!");
 			hf_mmi_task_send(HF_MSG_ID_VDO, p);
@@ -253,7 +253,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			{
 				hf_print("password  error.");
 				hf_send_sms_req(_phone,"Set error,password error!");
-				return;
+				return 0xff;
 			}
 			//hf_send_sms_req(_phone,"voice recording!");
 			hf_mmi_task_send(HF_MSG_ID_MMS, p);
@@ -277,7 +277,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			{
 				hf_print("password  error.");
 				hf_send_sms_req(_phone,"Set error,password error!");
-				return;
+				return 0xff;
 			}
 			//hf_send_sms_req(_phone,"voice recording!");
 			if(strlen(_psw_v) == 6 )
@@ -310,7 +310,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			{
 				hf_print("password  error.");
 				hf_send_sms_req(_phone,"Set error,password error!");
-				return;
+				return 0xff;
 			}
 			hf_send_sms_req(_phone,"Restore factory mode successfully!");
 			hf_mmi_task_send(HF_MSG_ID_FACT, NULL);
@@ -334,7 +334,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			{
 				hf_print("password  error.");
 				hf_send_sms_req(_phone,"Set error,password error!");
-				return;
+				return 0xff;
 			}
 			//hf_send_sms_req(_phone,"Restore factory mode OK!");
 			hf_mmi_task_send(HF_MSG_ID_CALL, p);
@@ -358,7 +358,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			{
 				hf_print("password  error.");
 				hf_send_sms_req(_phone,"Set error,password error!");
-				return;
+				return 0xff;
 			}
 			hf_send_sms_req(_phone,"set monitor successfully!");
 			hf_mmi_task_send(HF_MSG_ID_MOS, p);
@@ -382,7 +382,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			{
 				hf_print("password  error.");
 				hf_send_sms_req(_phone,"Set error,password error!");
-				return;
+				return 0xff;
 			}
 			hf_send_sms_req(_phone,"set language successfully!");
 			hf_mmi_task_send(HF_MSG_ID_LANG, p);
@@ -406,7 +406,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			{
 				hf_print("password  error.");
 				hf_send_sms_req(_phone,"Set error,password error!");
-				return;
+				return 0xff;
 			}
 			hf_send_sms_req(_phone,"set time successfully!");
 			hf_mmi_task_send(HF_MSG_ID_TIME, p);
@@ -428,7 +428,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			{
 				hf_print("password  error.");
 				hf_send_sms_req(_phone,"Set error,password error!");
-				return;
+				return 0xff;
 			}
 			hf_send_sms_req(_phone,HF_STR_VER);
 		}
@@ -449,7 +449,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			{
 				hf_print("password  error.");
 				hf_send_sms_req(_phone,"Set error,password error!");
-				return;
+				return 0xff;
 			}
 			hf_send_sms_req(_phone,"Set quit successfully!");
 			hf_mmi_task_send(HF_MSG_ID_QUIT, NULL);
@@ -471,7 +471,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			{
 				hf_print("password  error.");
 				hf_send_sms_req(_phone,"Set error,password error!");
-				return;
+				return 0xff;
 			}
 			hf_info.hf_loc.cb = hf_get_loc_cb_ex;
 			hf_get_base_loc_req();
@@ -494,7 +494,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			{
 				hf_print("password  error.");
 				hf_send_sms_req(_phone,"Set error,password error!");
-				return;
+				return 0xff;
 			}
 			memset(hf_nv.admin_number,0,sizeof(hf_nv.admin_number));
 			memset(hf_nv.admin_passwd,0,sizeof(hf_nv.admin_passwd));
@@ -512,12 +512,13 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 		return 0xfe;
 	}
 	else
-	return 1;
+		return 0xff;
 }
  MMI_BOOL hf_get_loc_cb_ex(rr_em_lai_info_struct *pInData)
  {
 	hf_print("get loc success");
 	hf_mmi_task_send(HF_MSG_ID_LOCA,NULL);
+	return TRUE;
  }
  BOOL hf_is_admin_number(char *_number)
 {

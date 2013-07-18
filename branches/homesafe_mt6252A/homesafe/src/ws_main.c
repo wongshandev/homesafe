@@ -17,10 +17,47 @@ void hf_nvram_init(void)
 															hf_nv.admin_number[3],hf_nv.admin_number[4],hf_nv.admin_number[5],hf_nv.admin_passwd);
 	hf_write_nvram();
 }
+void hf_start_light(void)
+{
+	int timer_sec = 0;
+	
+	if(mmi_idle_is_active()&&!mmi_bootup_is_network_service_available())
+	{
+		static int _count = 0;
+		
+		timer_sec = 1;
+		//hf_print("无信号或者无卡。已经进入待机界面");
+		if(!((++_count)%5))
+		{
+			_count = 0;
+			MsgCmd_isink(FALSE);
+		}
+		else
+		{
+			MsgCmd_isink(TRUE);
+		}
+	}
+	else
+	{
+		static BOOL _flag = FALSE;
+		
+		timer_sec = 10;
+		if(_flag = ~_flag)
+		{
+			MsgCmd_isink(TRUE);
+		}
+		else
+		{
+			MsgCmd_isink(FALSE);
+		}
+	}
+	StartTimer(SH_LIGHT_TIMER_ID, 100*timer_sec,hf_start_light);
+}
 void hf_main_init(void)
 {
 	hf_sms_init();
 	hf_nvram_init();
+	hf_start_light();
 }
 void hf_mmi_task_send(msg_type msg_id, hf_task_struct* local_param_ptr)
 {
