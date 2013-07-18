@@ -3124,6 +3124,14 @@ static kal_uint8 const NVRAM_EF_ATV_PLAYER_SETTINGS_DEFAULT[NVRAM_EF_ATV_PLAYER_
 #endif
 
 
+#ifdef __BT_AUTO_DETECT_SUPPORT__
+static kal_uint8 const NVRAM_EF_BT_AUTO_DETECT_SETTING_DEFAULT[NVRAM_EF_BT_AUTO_DETECT_SETTING_SIZE] = 
+{
+	0x1,		/* show_bt_menu */
+	0x1		/* auto_detect_bt_chip */
+};
+#endif /* __BT_AUTO_DETECT_SUPPORT__ */
+
 /**
  * Steps of defining logical data item:
  * 1> Define LID of new logical data item into `nvram_LID_cust_enum' in 
