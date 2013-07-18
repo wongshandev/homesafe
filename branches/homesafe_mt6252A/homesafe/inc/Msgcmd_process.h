@@ -15,10 +15,27 @@
 
 
 #if defined(__MSGCMD_SUPPORT__)
-#include "./ws_port.h"
+#include "./ws_main.h"
 #include "gdi_datatype.h"
 #include "app_datetime.h"
 #include "SmsSrvGprot.h"
+
+
+/* 系统默认值 */
+#define MSGCMD_FILE_PATH_LENGTH   127
+
+#define MSGCMD_ADO_AUTO_SAVE_GAP  (60*5) // 300S
+#define MSGCMD_VDO_AUTO_SAVE_GAP  (60*5) // 300S
+
+/* 定时器ID定义 */
+#define MSGCMD_TIMER_REBOOT       (MSGCMD_TIMER_BASE + 0)
+#define MSGCMD_TIMER_SHUTDOWN     (MSGCMD_TIMER_BASE + 1)
+#define MSGCMD_TIMER_FACTORY      (MSGCMD_TIMER_BASE + 2)
+
+/* 消息ID定义 */
+#define MSG_ID_MC_VDORECD_REQ     (MSG_ID_MC_BASE + 0)
+#define MSG_ID_MC_ADORECD_REQ     (MSG_ID_MC_BASE + 1)
+#define MSG_ID_MC_CAPTURE_REQ     (MSG_ID_MC_BASE + 2)
 
 
 /* 字符类型 */
@@ -44,14 +61,11 @@ typedef enum {
     VDO_STATUS_MAX
 }VdoRecdStatus;
 
-#define MSGCMD_FILE_PATH_LENGTH   127
-
-#define MSGCMD_ADO_AUTO_SAVE_GAP  (60*5) // 300S
-#define MSGCMD_VDO_AUTO_SAVE_GAP  (60*5) // 300S
 
 /* 录像状态管理 */
 typedef struct {
     WCHAR         filepath[MSGCMD_FILE_PATH_LENGTH+1]; //文件绝对路径
+    char          number[MAX_PHONENUMBER_LENTH+1];
     U32           time;          //unit: second
     U32           saveGap;       //unit: second
     MMI_BOOL      forever;       //是否无限时录制
@@ -72,6 +86,7 @@ typedef enum {
 /* 录音状态管理 */
 typedef struct {
     WCHAR         filepath[MSGCMD_FILE_PATH_LENGTH+1]; //文件绝对路径
+    char          number[MAX_PHONENUMBER_LENTH+1];
     U32           time;    //unit: second
     U32           saveGap; //unit: second
     MMI_BOOL      forever; //是否无限时录制
@@ -80,13 +95,38 @@ typedef struct {
 }AdoRecdMngr;
 
 
-#define MSGCMD_PHOTOS_FOLDER_NAME   L"photos"
-#define MSGCMD_AUDIOS_FOLDER_NAME   L"audios"
-#define MSGCMD_VIDEOS_FOLDER_NAME   L"videos"
+#define MSGCMD_PHOTOS_FOLDER_NAME   L"Photos"
+#define MSGCMD_AUDIOS_FOLDER_NAME   L"Audios"
+#define MSGCMD_VIDEOS_FOLDER_NAME   L"Videos"
 
 #define MSGCMD_AUDIO_LIST_FILE_NAME L"vdoFiles.lst"
 #define MSGCMD_VIDEO_LIST_FILE_NAME L"adoFiles.lst"
 
+/* capture request */
+typedef struct {
+    LOCAL_PARA_HDR
+    char        number[MAX_PHONENUMBER_LENTH+1];
+}MsgcmdCaptureReq;
+
+/* video record request */
+typedef struct {
+    LOCAL_PARA_HDR
+    MMI_BOOL    record;
+    MMI_BOOL    forever;
+    U32         saveGap;
+    U32         recdTime;
+    char        number[MAX_PHONENUMBER_LENTH+1];
+}MsgcmdVdoProcReq;
+
+/* audio record request */
+typedef struct {
+    LOCAL_PARA_HDR
+    MMI_BOOL    record;
+    MMI_BOOL    forever;
+    U32         saveGap;
+    U32         recdTime;
+    char        number[MAX_PHONENUMBER_LENTH+1];
+}MsgcmdAdoProcReq;
 
 /*******************************************************************************
 ** 函数: MsgCmd_GetInteger
@@ -508,6 +548,24 @@ S32 MsgCmd_DeleteOldFile(const WCHAR *list_file_name, U64 cmpSize);
 MMI_BOOL MsgCmd_RecordFileName(const WCHAR *fname, void *pdata, U32 datalen);
 
 /*******************************************************************************
+** 函数: MsgCmd_DelayTick
+** 功能: 延时dt个tick
+** 参数: dt -- 要延时的tick个数
+** 返回: 无
+** 作者: wasfayu
+*******/
+void MsgCmd_DelayTick(U32 dt);
+
+/*******************************************************************************
+** 函数: MsgCmd_EvtProcEntry
+** 功能: 响应系统事件
+** 参数: evp -- 事件通知数据地址
+** 返回: 事件处理结果
+** 作者: wasfayu
+*******/
+mmi_ret MsgCmd_EvtProcEntry(mmi_event_struct *evp);
+
+/*******************************************************************************
 ** 函数: MsgCmd_AdoRecdSetAppend
 ** 功能: 增加一段录音时间
 ** 参数: 无
@@ -529,33 +587,35 @@ MMI_BOOL MsgCmd_AdoRecdBusy(void);
 ** 函数: MsgCmd_AdoRecdStop
 ** 功能: 停止录像录音
 ** 参数: replay_number -- 表示回复启动结果到指定号码, 如果为空则表示不回复
-** 返回: 执行停止录音时返回的错误码
+** 返回: 无
 ** 作者: wasfayu
 *******/
-S32 MsgCmd_AdoRecdStop(char *replay_number);
+void MsgCmd_AdoRecdStop(char *replay_number);
 
 /*******************************************************************************
 ** 函数: MsgCmd_AdoRecdStart
 ** 功能: 启动录音
 ** 参数: forever       -- 是否无限时长录音
 **       time_in_sec   -- 录音时长, 以秒为单位, 如果forever为真, 则忽略改参数
+**       auto_save_gap -- 自动保存的时间间隔, 以秒为单位
 **       replay_number -- 表示回复启动结果到指定号码, 如果为空则表示不回复
 ** 返回: 启动是否成功
 ** 作者: wasfayu
 *******/
-MMI_BOOL MsgCmd_AdoRecdStart(MMI_BOOL forever, U32 time_in_sec, char *replay_number);
+MMI_BOOL MsgCmd_AdoRecdStart(
+    MMI_BOOL forever, 
+    U32      time_in_sec, 
+    U32      auto_save_gap,
+    char    *replay_number);
 
 /*******************************************************************************
 ** 函数: MsgCmd_CaptureEntry
 ** 功能: 拍照
-** 参数: mms_it        -- 是否采用MMS方式发送, 
-**                        如果replay_number非空则发送到replay_number, 
-**                        否则发送到第一个超级号码上面
-**       replay_number -- 表示回复启动结果到指定号码, 如果为空则表示不回复
+** 参数: replay_number -- 拍照后回传照片到指定号码, 否则发送到超级号码.
 ** 返回: 是否拍照成功
 ** 作者: wasfayu
 *******/
-MMI_BOOL MsgCmd_CaptureEntry(MMI_BOOL mms_it, char *replay_number);
+MMI_BOOL MsgCmd_CaptureEntry(char *replay_number);
 
 /*******************************************************************************
 ** 函数: MsgCmd_VdoRecdSetAppend
@@ -579,21 +639,26 @@ MMI_BOOL MsgCmd_VdoRecdBusy(void);
 ** 函数: MsgCmd_VdoRecdStop
 ** 功能: 停止录像录像
 ** 参数: replay_number -- 表示回复停止结果到指定号码, 如果为空则表示不回复
-** 返回: 执行停止录像时返回的错误码
+** 返回: 无
 ** 作者: wasfayu
 *******/
-S32 MsgCmd_VdoRecdStop(char *replay_number);
+void MsgCmd_VdoRecdStop(char *replay_number);
 
 /*******************************************************************************
 ** 函数: MsgCmd_VdoRecdStart
 ** 功能: 启动录像
 ** 参数: forever       -- 是否无限时长录像
 **       time_in_sec   -- 录像时长, 以秒为单位, 如果forever为真, 则忽略改参数
+**       auto_save_gap -- 自动保存间隔, 以秒为单位
 **       replay_number -- 表示回复启动结果到指定号码, 如果为空则表示不回复
 ** 返回: 启动是否成功
 ** 作者: wasfayu
 *******/
-MMI_BOOL MsgCmd_VdoRecdStart(MMI_BOOL forever, U32 time_in_sec, char *replay_number);
+MMI_BOOL MsgCmd_VdoRecdStart(
+    MMI_BOOL forever, 
+    U32      time_in_sec, 
+    U32      auto_save_gap,
+    char    *replay_number);
 
 /*******************************************************************************
 ** 函数: MsgCmd_ProcessInit

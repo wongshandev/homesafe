@@ -20,6 +20,14 @@
 #include "mdi_video.h"
 #include "mmi_frm_mem_gprot.h"
 #include "mmi_frm_timer_gprot.h"
+#include "mmi_rp_srv_sms_def.h"
+#include "mmi_rp_app_umms_mms_def.h"
+#include "mmi_rp_app_idle_def.h"
+#include "mmi_rp_srv_reminder_def.h"
+#include "phbsrvgprot.h"
+#include "simctrlsrvgprot.h"
+#include "nwinfosrvgprot.h"
+#include "charbatsrvgprot.h"
 #include "filemgrsrvgprot.h"
 #include "shutdownsrvgprot.h"
 #include "bootupsrvgprot.h"
@@ -39,11 +47,18 @@
 #include "app_asyncfile.h"
 #include "ucmsrvgprot.h"
 #include "kal_trace.h"
+#include "GeneralDeviceGprot.h"
+#include "CameraApp.h"
 
+/*******************************************************************************
+** 函数: MsgCmd_isink
+** 功能: 控制LCD背光开关
+** 入参: open -- 开关
+** 返回: 无
+** 作者: wasfayu
+*******/
+extern void MsgCmd_isink(kal_bool open);
 
-#define MSGCMD_TIMER_REBOOT      (MSGCMD_TIMER_BASE + 0)
-#define MSGCMD_TIMER_SHUTDOWN    (MSGCMD_TIMER_BASE + 1)
-#define MSGCMD_TIMER_FACTORY     (MSGCMD_TIMER_BASE + 2)
 
 /*******************************************************************************
 ** 函数: MsgCmd_GetInteger
@@ -442,7 +457,6 @@ WCHAR *MsgCmd_CombineFilePath(
     const WCHAR *folder,
     const WCHAR *ext_name)
 {	
-	MDI_RESULT ret;
 	applib_time_struct mt;
 	
 	applib_dt_get_date_time(&mt);
@@ -450,7 +464,7 @@ WCHAR *MsgCmd_CombineFilePath(
 	
 	kal_wsprintf(
 		(WCHAR*)out, 
-		"%c:\\%w\\%04d%02d%02d%02d%02d %08X%w", 
+		"%c:\\%w\\%04d%02d%02d%02d%02d%08X%w", 
 		MsgCmd_GetUsableDrive(),
 		folder,
 		mt.nYear,
@@ -1216,19 +1230,154 @@ MMI_BOOL MsgCmd_RecordFileName(const WCHAR *fname, void *pdata, U32 datalen)
     return result;
 }
 
+/*******************************************************************************
+** 函数: MsgCmd_DelayTick
+** 功能: 延时dt个tick
+** 参数: dt -- 要延时的tick个数
+** 返回: 无
+** 作者: wasfayu
+*******/
+void MsgCmd_DelayTick(U32 dt)
+{
+    U32 tick1, tick2;
+    
+	kal_get_time(&tick1);
+	do {
+		kal_get_time(&tick2);
+	}while(tick2 - tick1 < 50);
+}
+
+/*******************************************************************************
+** 函数: MsgCmd_EvtProcEntry
+** 功能: 响应系统事件
+** 参数: evp -- 事件通知数据地址
+** 返回: 事件处理结果
+** 作者: wasfayu
+*******/
+mmi_ret MsgCmd_EvtProcEntry(mmi_event_struct *evp)
+{
+    mmi_ret ret = MMI_RET_OK;
+
+    MMI_ASSERT(evp);
+
+    switch (evp->evt_id)
+    {
+    case EVT_ID_SRV_BOOTUP_NORMAL_INIT:
+        MsgCmd_ProcessInit();
+        break;
+    case EVT_ID_SRV_BOOTUP_BEFORE_IDLE:
+        break;
+    case EVT_ID_SRV_BOOTUP_COMPLETED:
+        MsgCmd_isink(MMI_FALSE);
+        break;
+    case EVT_ID_SRV_BOOTUP_EARLY_INIT:
+        MsgCmd_isink(MMI_TRUE);
+        break;
+    case EVT_ID_IDLE_ENTER:
+    case EVT_ID_IDLE_LAUNCHED:
+    case EVT_ID_IDLE_EXIT:
+        mc_trace("%s, L:%d, id=%d.", __FUNCTION__, __LINE__, evp->evt_id);
+        break;
+    case EVT_ID_SRV_SHUTDOWN_DEINIT:
+    case EVT_ID_SRV_SHUTDOWN_NORMAL_START:
+    case EVT_ID_SRV_SHUTDOWN_FINAL_DEINIT:
+        mc_trace("%s, L:%d, id=%d.", __FUNCTION__, __LINE__, evp->evt_id);
+        break;
+    case EVT_ID_SRV_BOOTUP_SIM_STATUS_CHANGED://SIM usable
+    case EVT_ID_SRV_SIM_CTRL_IMSI_CHANGED://copy IMSI
+        mc_trace("%s, L:%d, id=%d.", __FUNCTION__, __LINE__, evp->evt_id);
+        break;
+    case EVT_ID_SRV_NW_INFO_SIGNAL_STRENGTH_CHANGED:
+    case EVT_ID_SRV_NW_INFO_STATUS_CHANGED:
+        mc_trace("%s, L:%d, id=%d.", __FUNCTION__, __LINE__, evp->evt_id);
+        break;
+    case EVT_ID_SRV_NW_INFO_SIM_DN_STATUS_CHANGED:
+        //reference: srv_nw_info_update_sim_dn_status
+        //PDP active or deactive
+        //GPRS attached or detached
+        break;
+    case EVT_ID_SRV_NW_INFO_SERVICE_AVAILABILITY_CHANGED:
+        break;
+    case EVT_ID_SRV_SIM_CTRL_VERIFY_RESULT:
+        break;
+    case EVT_ID_SRV_CHARBAT_NOTIFY: //charge, batttery
+        break;
+    case EVT_ID_SRV_SMS_MEM_EXCEED:
+    case EVT_ID_SRV_SMS_MEM_FULL:
+        break;
+    case EVT_ID_SRV_SMS_READY:
+    case EVT_ID_SRV_MMS_READY:
+    case EVT_ID_SRV_SMS_MEM_AVAILABLE:
+        mc_trace("%s, L:%d, id=%d.", __FUNCTION__, __LINE__, evp->evt_id);
+        break;
+    case EVT_ID_PHB_READY:
+        break;
+    case EVT_ID_SRV_REMINDER_NOTIFY:
+        break;
+#if defined(MMS_SUPPORT)
+    case EVT_ID_SRV_NW_INFO_ROAMING_STATUS_CHANGED:
+        break;
+#endif
+    default:
+        break;
+    }
+
+    return ret;
+}
+
 #if 1//audio record
 static AdoRecdMngr *arm;
 
+/*******************************************************************************
+** 函数: msgcmd_AdoRecdDoingCb
+** 功能: 保存录音
+** 参数: result  -- 结果, 如果是自动结束的话, result为0, 其他都是非0值
+** 返回: 无
+** 作者: wasfayu
+*******/
 static void msgcmd_AdoRecdDoingCb(MDI_RESULT result)
 {
     mc_trace("%s, result=%d.", __FUNCTION__, result);
     if (MDI_AUDIO_SUCCESS == result)
     {
-        arm->time -= arm->saveGap;
-        
         if (arm->forever)
         {
+            MsgcmdAdoProcReq *req = (MsgcmdAdoProcReq*)\
+                MsgCmd_ConstructPara(sizeof(MsgcmdAdoProcReq));
             
+            req->forever = MMI_TRUE;
+            req->record  = MMI_TRUE;
+            req->saveGap = MSGCMD_ADO_AUTO_SAVE_GAP;
+            strcpy(req->number, arm->number);
+            MsgCmd_SendIlm2Mmi(MSG_ID_MC_ADORECD_REQ, (void *)req);
+        }
+        else
+        {
+            arm->time -= arm->saveGap;
+            
+            //如果有追加, 则增加一段时间, 时长为默认的保存间隔时长
+            if (arm->append)
+            {
+                arm->append = MMI_FALSE;
+                arm->time  += MSGCMD_ADO_AUTO_SAVE_GAP;
+            }
+
+            if (arm->time)
+            {
+                MsgcmdAdoProcReq *req = (MsgcmdAdoProcReq*)\
+                    MsgCmd_ConstructPara(sizeof(MsgcmdAdoProcReq));
+                
+                req->forever = MMI_FALSE;
+                req->record  = MMI_TRUE;
+                req->saveGap = arm->saveGap;
+                req->recdTime= arm->time;
+                strcpy(req->number, arm->number);
+                MsgCmd_SendIlm2Mmi(MSG_ID_MC_ADORECD_REQ, (void *)req);
+            }
+            else
+            {
+                //notify user by SMS
+            }
         }
         
     }
@@ -1266,6 +1415,31 @@ static MMI_BOOL msgcmd_AdoRecdDoing(WCHAR *filename, U32 time)
 }
 
 /*******************************************************************************
+** 函数: msgcmd_AdoRecdResponse
+** 功能: 录音启动/停止请求响应函数
+** 参数: p -- MsgcmdAdoProcReq
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void msgcmd_AdoRecdResponse(void *p)
+{
+    MsgcmdAdoProcReq *rsp = (MsgcmdAdoProcReq*)p;
+
+    if (rsp->record)
+    {
+        MsgCmd_AdoRecdStart(
+            rsp->forever, 
+            rsp->recdTime, 
+            MSGCMD_ADO_AUTO_SAVE_GAP,
+            strlen(rsp->number) ? rsp->number : NULL);
+    }
+    else
+    {
+        MsgCmd_AdoRecdStop(strlen(rsp->number) ? rsp->number : NULL);
+    }
+}
+
+/*******************************************************************************
 ** 函数: MsgCmd_AdoRecdSetAppend
 ** 功能: 增加一段录音时间
 ** 参数: 无
@@ -1299,22 +1473,18 @@ MMI_BOOL MsgCmd_AdoRecdBusy(void)
 ** 函数: MsgCmd_AdoRecdStop
 ** 功能: 停止录像录音
 ** 参数: replay_number -- 表示回复启动结果到指定号码, 如果为空则表示不回复
-** 返回: 执行停止录音时返回的错误码
+** 返回: 无
 ** 作者: wasfayu
 *******/
-S32 MsgCmd_AdoRecdStop(char *replay_number)
+void MsgCmd_AdoRecdStop(char *replay_number)
 {
-    MDI_RESULT result;
-
-    result = mdi_audio_stop_record();
-    mc_trace("%s, result=%d. replay=%s.", __FUNCTION__, result, replay_number?replay_number:"NULL");
-
+    mc_trace("%s, replay=%s.", __FUNCTION__, replay_number?replay_number:"NULL");
+    
     if (arm)
     {
-        MsgCmd_Mfree(arm);
-        arm = NULL;
-    }
-    return 0;
+        //这里调用stop函数, 里面会立即调用DoingCb函数
+        mdi_audio_stop_record();
+    }    
 }
 
 /*******************************************************************************
@@ -1322,11 +1492,16 @@ S32 MsgCmd_AdoRecdStop(char *replay_number)
 ** 功能: 启动录音
 ** 参数: forever       -- 是否无限时长录音
 **       time_in_sec   -- 录音时长, 以秒为单位, 如果forever为真, 则忽略改参数
+**       auto_save_gap -- 自动保存的时间间隔, 以秒为单位
 **       replay_number -- 表示回复启动结果到指定号码, 如果为空则表示不回复
 ** 返回: 启动是否成功
 ** 作者: wasfayu
 *******/
-MMI_BOOL MsgCmd_AdoRecdStart(MMI_BOOL forever, U32 time_in_sec, char *replay_number)
+MMI_BOOL MsgCmd_AdoRecdStart(
+    MMI_BOOL forever, 
+    U32      time_in_sec, 
+    U32      auto_save_gap,
+    char    *replay_number)
 {
     mc_trace(
         "%s, forever=%d, time=%d, replay=%s.",
@@ -1339,11 +1514,17 @@ MMI_BOOL MsgCmd_AdoRecdStart(MMI_BOOL forever, U32 time_in_sec, char *replay_num
         return MMI_FALSE;
 
     arm = (AdoRecdMngr*)MsgCmd_Malloc(sizeof(AdoRecdMngr), 0);
-    arm->saveGap = 30;
+    arm->saveGap = auto_save_gap ? auto_save_gap : MSGCMD_ADO_AUTO_SAVE_GAP;
     arm->time    = time_in_sec;
     arm->forever = forever;
     if (!arm->forever && arm->time < arm->saveGap)
         arm->saveGap = arm->time;
+    
+    if (replay_number)
+        strcpy(arm->number, replay_number);
+    else
+        arm->number[0] = '\0';
+
     
     MsgCmd_CombineFilePath(
         (char *)arm->filepath, 
@@ -1406,6 +1587,9 @@ static MMI_BOOL msgcmd_CaptureFinish(void)
 	mmi_camera_turn_off_led_highlight();
 #endif
 
+    /* close LED */
+    MsgCmd_isink(MMI_FALSE);
+
 	return MMI_TRUE;
 }
 
@@ -1462,11 +1646,14 @@ static MMI_BOOL msgcmd_CapturePreview(U16 pictureW, U16 pictureH)
 	mmi_camera_turn_on_preview_led_highlight();
 #endif	  
 
+    /* open LED */
+    MsgCmd_isink(MMI_TRUE);
+
 	/* stop bg music */
 	mdi_audio_suspend_background_play();
 
 	/* stop MMI sleep */
-	TurnOnBacklight(0);
+	TurnOnBacklight(GPIO_BACKLIGHT_PERMANENT);
 	
 	/* force all playing keypad tone off */
 	srv_profiles_stop_tone((srv_prof_tone_enum)GetCurKeypadTone());
@@ -1479,6 +1666,7 @@ static MMI_BOOL msgcmd_CapturePreview(U16 pictureW, U16 pictureH)
 	
 	/* stop LED patten */
 	StopLEDPatternBackGround();
+
 
 	mdi_camera_load_default_setting(&camera_setting_data);
 	camera_setting_data.preview_width  = pictureW;
@@ -1499,17 +1687,17 @@ static MMI_BOOL msgcmd_CapturePreview(U16 pictureW, U16 pictureH)
 	camera_setting_data.iso            = MDI_CAMERA_ISO_AUTO;
 	camera_setting_data.ae_meter       = MDI_CAMERA_AE_METER_AUTO;
 	camera_setting_data.dsc_mode       = MDI_CAMERA_DSC_MODE_AUTO;	
-	camera_setting_data.zoom           = 10; /* 1x */
-	camera_setting_data.af_mode        = MDI_CAMERA_AUTOFOCUS_MODE_AUTO;
+	camera_setting_data.zoom          = 10; /* 1x */
+	camera_setting_data.af_mode       = MDI_CAMERA_AUTOFOCUS_MODE_AUTO;
 	camera_setting_data.af_metering_mode = MDI_CAMERA_AUTOFOCUS_1_ZONE;
-	camera_setting_data.brightness     = 128;
-	camera_setting_data.saturation     = 128;
-	camera_setting_data.contrast       = 128;
-	camera_setting_data.shutter_pri    = 0;
-	camera_setting_data.aperture_pri   = 0;
+	camera_setting_data.brightness    = 128;
+	camera_setting_data.saturation    = 128;
+	camera_setting_data.contrast      = 128;
+	camera_setting_data.shutter_pri   = 0;
+	camera_setting_data.aperture_pri  = 0;
 
     //gdi_layer_get_base_handle(&camera_preview_data.preview_layer_handle);
-	camera_preview_data.preview_layer_handle = NULL;
+	camera_preview_data.preview_layer_handle = GDI_NULL_HANDLE;
 	camera_preview_data.preview_wnd_offset_x = 0;
 	camera_preview_data.preview_wnd_offset_y = 0;
 	camera_preview_data.preview_wnd_width    = pictureW;
@@ -1537,39 +1725,49 @@ static MMI_BOOL msgcmd_CapturePreview(U16 pictureW, U16 pictureH)
 }
 
 /*******************************************************************************
+** 函数: msgcmd_CaptureResponse
+** 功能: 拍照请求响应函数
+** 参数: p -- MsgcmdCaptureReq
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void msgcmd_CaptureResponse(void *p)
+{
+    MsgcmdCaptureReq *rsp = (MsgcmdCaptureReq*)p;
+    
+    if (strlen(rsp->number))
+        MsgCmd_CaptureEntry(rsp->number);
+    else
+        MsgCmd_CaptureEntry(NULL);
+}
+
+/*******************************************************************************
 ** 函数: MsgCmd_CaptureEntry
 ** 功能: 拍照
-** 参数: mms_it        -- 是否采用MMS方式发送, 
-**                        如果replay_number非空则发送到replay_number, 
-**                        否则发送到第一个超级号码上面
-**       replay_number -- 表示回复启动结果到指定号码, 如果为空则表示不回复
+** 参数: replay_number -- 拍照后回传照片到指定号码, 否则发送到超级号码.
 ** 返回: 是否拍照成功
 ** 作者: wasfayu
 *******/
-MMI_BOOL MsgCmd_CaptureEntry(MMI_BOOL mms_it, char *replay_number)
+MMI_BOOL MsgCmd_CaptureEntry(char *replay_number)
 {
 	const U16 pictureW = 640;
 	const U16 pictureH = 480;
 	MMI_BOOL  result = MMI_FALSE;
 	U32       tick1, tick2;
 	
-    mc_trace(
-        "%s, mms_it=%d, replay=%s.",
-        __FUNCTION__, 
-        mms_it, 
-        replay_number?replay_number:"NULL");
+    mc_trace("%s, replay=%s.", __FUNCTION__, replay_number?replay_number:"NULL");
 
 	if (msgcmd_CapturePreview(pictureW, pictureH))
 	{
-		WCHAR filename[128] = {0};
+		WCHAR filename[MSGCMD_FILE_PATH_LENGTH+1] = {0};
 
-		MsgCmd_CombineFilePath((char *)filename, 128*sizeof(WCHAR), L"photos", L".jpg");
+		MsgCmd_CombineFilePath(
+            (char *)filename, 
+            MSGCMD_FILE_PATH_LENGTH*sizeof(WCHAR), 
+            MSGCMD_PHOTOS_FOLDER_NAME, 
+            L".jpg");
 		
-		//wait a moment
-		kal_get_time(&tick1);
-		do {
-    		kal_get_time(&tick2);
-    	}while (tick2 - tick1 < 50);
+		MsgCmd_DelayTick(30);
 		
 		result = msgcmd_CaptureDoing((S8 *) filename);
 		if (result)
@@ -1578,18 +1776,10 @@ MMI_BOOL MsgCmd_CaptureEntry(MMI_BOOL mms_it, char *replay_number)
 			{
 				//send MMS
 			}
-			else if (mms_it)
-			{
-				//find supper number thern send MMS
-			}
 		}
 	}
 
-	kal_get_time(&tick1);
-    do {
-		kal_get_time(&tick2);
-	}while (tick2 - tick1 < 50);
-	
+	MsgCmd_DelayTick(30);
 	msgcmd_CaptureFinish();
 	
     return result;
@@ -1600,57 +1790,92 @@ MMI_BOOL MsgCmd_CaptureEntry(MMI_BOOL mms_it, char *replay_number)
 static VdoRecdMngr *vrm;
 
 /*******************************************************************************
-** 函数: msgcmd_VdoRecdRecoding
+** 函数: msgcmd_VdoRecdSaveCb
+** 功能: 录像保存的回调函数
+** 参数: result  -- 保存结果
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void msgcmd_VdoRecdSaveCb(MDI_RESULT result)
+{
+    mc_trace("%s,L:%d. result=%d.", __FUNCTION__, __LINE__, result);
+}
+
+/*******************************************************************************
+** 函数: msgcmd_VdoRecdDoingCb
+** 功能: 录像启动后的回调函数
+** 参数: result  -- 录像启动结果
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void msgcmd_VdoRecdDoingCb(MDI_RESULT result)
+{
+    mc_trace("%s,L:%d. result=%d.", __FUNCTION__, __LINE__, result);
+}
+
+/*******************************************************************************
+** 函数: msgcmd_VdoRecdDoing
 ** 功能: 开始录像
 ** 参数: vrm  -- 录像管理变量
 ** 返回: 执行录像时返回的错误码
 ** 作者: wasfayu
 *******/
-static S32 msgcmd_VdoRecdRecoding(VdoRecdMngr *vrm)
+static MMI_BOOL msgcmd_VdoRecdDoing(VdoRecdMngr *vrm)
 {
-    MDI_RESULT ret;
+    MDI_RESULT error;
+    MMI_BOOL   recdOk;
     
     ASSERT(NULL != vrm);
     
-    if (vrm->status != VDO_STATUS_PREVIEW ||
-        vrm->status != VDO_STATUS_PAUSE)
+    if (vrm->status != VDO_STATUS_PREVIEW && vrm->status != VDO_STATUS_PAUSE)
     {
-        return MDI_RES_VDOREC_ERR_RECORD_FAILED;
+        mc_trace("%s,L:%d. status=%d. return.", __FUNCTION__, __LINE__, vrm->status);
+        return MMI_FALSE;
+    }
+
+    recdOk = MMI_FALSE;
+    error = mdi_video_rec_record_start((S8*)vrm->filepath, msgcmd_VdoRecdDoingCb);
+    mc_trace("%s,L:%d. error=%d.", __FUNCTION__, __LINE__, error);
+
+    if (MDI_RES_VDOREC_SUCCEED == error)
+    {
+        recdOk = MMI_TRUE;
     }
     
-    return -1;
+    return recdOk;
 }
 
 /*******************************************************************************
 ** 函数: msgcmd_VdoRecdPreview
 ** 功能: 进入录像预览
-** 参数: vrm  -- 录像管理变量
-** 返回: 执行预览时返回的错误码
+** 参数: 无
+** 返回: 执行预览成功否
+** 参考: mmi_fm_camera_test_entry_preview_screen [FactoryModeSrc.c]
+**       mmi_fm_camera_test_start_avr_preview [FactoryModeSrc.c]
 ** 作者: wasfayu
 *******/
-static S32 msgcmd_VdoRecdPreview(VdoRecdMngr *vrm)
+static MMI_BOOL msgcmd_VdoRecdPreview(void)
 {
-    MDI_RESULT ret = 0;
+    MDI_RESULT error;
+    MMI_BOOL   previewOk;
 
     ASSERT(NULL != vrm);
 
-    if (vrm->status != VDO_STATUS_IDLE)
-    {
-        return MDI_RES_VDOREC_ERR_POWER_ON_FAILED;
-    }
-    
-    ret = mdi_video_rec_power_on();
-    mc_trace("%s,L:%d, ret=%d.", __FUNCTION__, __LINE__, ret);
+    /* stop MMI sleep */
+    //TurnOnBacklight(GPIO_BACKLIGHT_PERMANENT);
 
-    
-    if (MDI_RES_VDOREC_SUCCEED == ret)
+    /* stop LCD patten */
+    //StopLEDPatternBackGround();
+
+    previewOk = MMI_FALSE;
+    error = mdi_video_rec_power_on();
+    mc_trace("%s,L:%d, error=%d.", __FUNCTION__, __LINE__, error);
+
+    if (MDI_RES_VDOREC_SUCCEED == error)
     {
         mdi_video_setting_struct video_preview_data;		
-        gdi_handle basehandle;
-        PU8 base_layer_ptr;
 
         mdi_video_rec_load_default_setting(&video_preview_data);
-
         video_preview_data.wb					= MDI_VIDEO_WB_AUTO;
         video_preview_data.ev					= MDI_VIDEO_EV_0;
         video_preview_data.banding				= MDI_VIDEO_BANDING_50HZ;
@@ -1681,36 +1906,55 @@ static S32 msgcmd_VdoRecdPreview(VdoRecdMngr *vrm)
         video_preview_data.size_limit			= 0;
         video_preview_data.record_aud			= TRUE;
 
-        gdi_layer_get_base_handle(&basehandle);
-        gdi_layer_push_and_set_active(basehandle);
-        gdi_layer_get_buffer_ptr(&base_layer_ptr);
-        gdi_layer_create_using_outside_memory(0,0,240,320,&vrm->dispHandle,base_layer_ptr,240*320*2);
+        error = mdi_video_rec_preview_start(
+                    GDI_NULL_HANDLE,
+                    GDI_LAYER_ENABLE_LAYER_0,
+                    GDI_LAYER_ENABLE_LAYER_0,
+                    MMI_FALSE,
+                    &video_preview_data);
+        mc_trace("%s,L:%d, error=%d.", __FUNCTION__, __LINE__, error);
 
-        gdi_layer_set_active(vrm->dispHandle);
-        gdi_layer_clear(GDI_COLOR_BLACK);
-
-        ret = mdi_video_rec_preview_start(
-                vrm->dispHandle,
-                GDI_LAYER_ENABLE_LAYER_0 | GDI_LAYER_ENABLE_LAYER_1,
-                GDI_LAYER_ENABLE_LAYER_1,
-                MMI_TRUE,
-                &video_preview_data);
-        mc_trace("%s,L:%d, ret=%d,base_layer_ptr=0x%x.", __FUNCTION__, __LINE__, ret, base_layer_ptr);
-
-        if (MDI_RES_VDOREC_SUCCEED != ret)
+        if (MDI_RES_VDOREC_SUCCEED != error)
         {
             mdi_video_rec_preview_stop();
             mdi_video_rec_power_off();
-    		gdi_layer_free(vrm->dispHandle);
-    		vrm->dispHandle = GDI_NULL_HANDLE;
         }
         else
         {
-            vrm->status = VDO_STATUS_PREVIEW;
+            previewOk = MMI_TRUE;
         }
     }
+    else
+    {
+        error = mdi_video_rec_power_off();
+    }
     
-    return ret;
+    return previewOk;
+}
+
+/*******************************************************************************
+** 函数: msgcmd_VdoRecdResponse
+** 功能: 录像启动/停止请求响应函数
+** 参数: p -- MsgcmdVdoProcReq
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void msgcmd_VdoRecdResponse(void *p)
+{
+    MsgcmdVdoProcReq *rsp = (MsgcmdVdoProcReq*)p;
+
+    if (rsp->record)
+    {
+        MsgCmd_VdoRecdStart(
+            rsp->forever, 
+            rsp->recdTime, 
+            MSGCMD_VDO_AUTO_SAVE_GAP,
+            strlen(rsp->number) ? rsp->number : NULL);
+    }
+    else
+    {
+        MsgCmd_VdoRecdStop(strlen(rsp->number) ? rsp->number : NULL);
+    }
 }
 
 /*******************************************************************************
@@ -1747,19 +1991,22 @@ MMI_BOOL MsgCmd_VdoRecdBusy(void)
 ** 函数: MsgCmd_VdoRecdStop
 ** 功能: 停止录像录像
 ** 参数: replay_number -- 表示回复停止结果到指定号码, 如果为空则表示不回复
-** 返回: 执行停止录像时返回的错误码
+** 返回: 无
 ** 作者: wasfayu
 *******/
-S32 MsgCmd_VdoRecdStop(char *replay_number)
-{
+void MsgCmd_VdoRecdStop(char *replay_number)
+{    
     mc_trace("%s, replay=%s.", __FUNCTION__, replay_number?replay_number:"NULL");
 
-    mdi_video_rec_preview_stop();
-    mdi_video_rec_power_off();
-	gdi_layer_free(vrm->dispHandle);
-	vrm->dispHandle = GDI_NULL_HANDLE;
-    
-    return 0;
+    if (vrm)
+    {
+        mdi_video_rec_record_stop();
+        mdi_video_rec_save_file((S8*)vrm->filepath, msgcmd_VdoRecdSaveCb);
+        mdi_video_rec_preview_stop();
+        mdi_video_rec_power_off();
+    }
+
+    MsgCmd_DelayTick(50);
 }
 
 /*******************************************************************************
@@ -1767,11 +2014,16 @@ S32 MsgCmd_VdoRecdStop(char *replay_number)
 ** 功能: 启动录像
 ** 参数: forever       -- 是否无限时长录像
 **       time_in_sec   -- 录像时长, 以秒为单位, 如果forever为真, 则忽略改参数
+**       auto_save_gap -- 自动保存间隔, 以秒为单位
 **       replay_number -- 表示回复启动结果到指定号码, 如果为空则表示不回复
 ** 返回: 启动是否成功
 ** 作者: wasfayu
 *******/
-MMI_BOOL MsgCmd_VdoRecdStart(MMI_BOOL forever, U32 time_in_sec, char *replay_number)
+MMI_BOOL MsgCmd_VdoRecdStart(
+    MMI_BOOL forever, 
+    U32      time_in_sec, 
+    U32      auto_save_gap,
+    char    *replay_number)
 {
     mc_trace(
         "%s, forever=%d, time=%d, replay=%s.",
@@ -1786,10 +2038,37 @@ MMI_BOOL MsgCmd_VdoRecdStart(MMI_BOOL forever, U32 time_in_sec, char *replay_num
     vrm = (VdoRecdMngr*)MsgCmd_Malloc(sizeof(VdoRecdMngr), 0);
     vrm->forever = forever;
     vrm->time    = time_in_sec;
-    vrm->saveGap = 60*5;
-    if (MDI_RES_VDOREC_SUCCEED == msgcmd_VdoRecdPreview(vrm))
+    vrm->saveGap = auto_save_gap ? auto_save_gap : MSGCMD_VDO_AUTO_SAVE_GAP;
+    if (!vrm->forever && vrm->time < vrm->saveGap)
+        vrm->saveGap = vrm->time;
+    
+    if (replay_number)
+        strcpy(vrm->number, replay_number);
+    else
+        vrm->number[0] = '\0';
+
+    
+    MsgCmd_CombineFilePath(
+        (char *)vrm->filepath, 
+        MSGCMD_FILE_PATH_LENGTH*sizeof(WCHAR),
+        MSGCMD_VIDEOS_FOLDER_NAME,
+        L".avi");
+    
+    if (msgcmd_VdoRecdPreview())
     {
-        msgcmd_VdoRecdRecoding(vrm);
+        vrm->status = VDO_STATUS_PREVIEW;
+        
+        MsgCmd_DelayTick(50);
+        
+        if (!msgcmd_VdoRecdDoing(vrm))
+        {
+            mdi_video_rec_preview_stop();
+            mdi_video_rec_power_off();
+            MsgCmd_Mfree(vrm);
+            vrm = NULL;
+
+            MsgCmd_DelayTick(50);
+        }
     }
     else
     {
@@ -1812,7 +2091,7 @@ void MsgCmd_ProcessInit(void)
 {
     do {
         S32 h, i;
-        S8  buffer[128];
+        WCHAR  buffer[MSGCMD_FILE_PATH_LENGTH+1];
         WCHAR *folder[] = {
             MSGCMD_AUDIOS_FOLDER_NAME,
             MSGCMD_PHOTOS_FOLDER_NAME,
@@ -1822,8 +2101,8 @@ void MsgCmd_ProcessInit(void)
     	//用户盘路径
     	for (i=0; i<sizeof(folder)/sizeof(folder[0]); i++)
         {   
-        	memset(buffer, 0, 128);
-            kal_wsprintf((WCHAR*)buffer, "%c:\\%s\\", MsgCmd_GetUsableDrive(), folder[i]);
+        	memset(buffer, 0, sizeof(WCHAR));
+            kal_wsprintf(buffer, "%c:\\%w\\", MsgCmd_GetUsableDrive(), folder[i]);
         	if ((h = FS_Open((const WCHAR*)buffer, FS_OPEN_DIR|FS_READ_ONLY)) >= FS_NO_ERROR)
                 FS_Close(h);
         	else
@@ -1832,7 +2111,22 @@ void MsgCmd_ProcessInit(void)
     
     }while(0);
 
-	//检测磁盘空间
+
+    //注册消息响应
+    mmi_frm_set_protocol_event_handler(
+        MSG_ID_MC_CAPTURE_REQ,
+        (PsIntFuncPtr)msgcmd_CaptureResponse,
+        MMI_FALSE);
+
+    mmi_frm_set_protocol_event_handler(
+        MSG_ID_MC_ADORECD_REQ,
+        (PsIntFuncPtr)msgcmd_AdoRecdResponse,
+        MMI_FALSE);
+
+    mmi_frm_set_protocol_event_handler(
+        MSG_ID_MC_VDORECD_REQ,
+        (PsIntFuncPtr)msgcmd_VdoRecdResponse,
+        MMI_FALSE);
 }
 
 #endif/*__MSGCMD_SUPPORT__*/

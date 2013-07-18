@@ -3568,9 +3568,6 @@ MSG_ID_MSGCMD_COMMAND_18,
 MSG_ID_MSGCMD_COMMAND_19,
 MSG_ID_MSGCMD_COMMAND_20,
 #endif
-#if defined(MSG_CMD_TASK_SUPPORT)
-MSG_ID_MSGCMD_COMMAND,
-#endif
 
 __TEMPLATE
 
@@ -3770,9 +3767,6 @@ typedef enum {
 #if defined (__FLAVOR_VENDOR_SDK__) || defined(__MAUI_SDK_TEST__)
    INDX_VS,
 #endif
-#if defined(MSG_CMD_TASK_SUPPORT)
-   INDX_MSGCMD,
-#endif
    RPS_CUSTOM_TASKS_END
 } custom_task_indx_type;
 
@@ -3787,9 +3781,6 @@ typedef enum {
    MOD_CUSTOM2,
 #if defined (__FLAVOR_VENDOR_SDK__) || defined(__MAUI_SDK_TEST__)
    MOD_VS,
-#endif
-#if defined(MSG_CMD_TASK_SUPPORT)
-   MOD_MSGCMD,
 #endif
    MOD_CUSTOM_END
 } custom_module_type;
@@ -3843,9 +3834,6 @@ extern kal_bool custom2_create(comptask_handler_struct **handle);
 #if defined (__FLAVOR_VENDOR_SDK__) || defined(__MAUI_SDK_TEST__)
 extern kal_bool vs_sys_task_001_create(comptask_handler_struct **handle);
 #endif
-#if defined(MSG_CMD_TASK_SUPPORT)
-extern kal_bool MsgCmd_TaskCreate(comptask_handler_struct **handle);
-#endif
 /*************************************************************************
 * Global
 *  custom_mod_task_g
@@ -3868,9 +3856,6 @@ custom_task_indx_type custom_mod_task_g[ MAX_CUSTOM_MODS ] =
    INDX_CUSTOM2,        /* MOD_CUSTOM2 */
 #if defined (__FLAVOR_VENDOR_SDK__) || defined(__MAUI_SDK_TEST__)
    INDX_VS,
-#endif
-#if defined(MSG_CMD_TASK_SUPPORT)
-   INDX_MSGCMD,
 #endif
    INDX_NIL             /* Please end with INDX_NIL element */
 };
@@ -3911,12 +3896,6 @@ const comptask_info_struct custom_comp_config_tbl[ MAX_CUSTOM_TASKS ] =
    /* INDX_VS */
    {"VS", "VS Q", 212, 1024, 
    vs_sys_task_001_create, KAL_FALSE, 10, 0
-   },
-#endif
-#if defined(MSG_CMD_TASK_SUPPORT)
-   /*INDX_MSGCMD*/
-   {"MSGCMD", "MSGCMD Q", 213, 1024, 
-   MsgCmd_TaskCreate, KAL_FALSE, 10, 0
    },
 #endif
 };

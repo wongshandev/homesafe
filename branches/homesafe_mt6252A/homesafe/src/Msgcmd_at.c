@@ -464,16 +464,6 @@ static void at_isink(AtParam_t *vp)
     }
 }
 
-static void do_adorecd(void)
-{
-    MsgCmd_AdoRecdStart(MMI_FALSE, 60, NULL);
-}
-
-static void do_adostop(void)
-{
-    MsgCmd_AdoRecdStop(NULL);
-}
-
 /*******************************************************************************
 ** 函数: at_adorecd
 ** 功能: AT命令, 控制录像
@@ -486,24 +476,60 @@ static void at_adorecd(AtParam_t *vp)
     switch(vp->mode)
     {
     case AT_EM_SET_OR_EXEC:
-        if (2 > vp->argc || 3 < vp->argc)
+        if (vp->argc > 3)
             vp->result = AT_RST_PARAM_ERR;
         else
         {
-            if (MsgCmd_AdoRecdBusy())
-                StartTimer(MSGCMD_TIMER_BASE+4, 50, do_adostop);
-            else
-                StartTimer(MSGCMD_TIMER_BASE+4, 50, do_adorecd);
+            MsgcmdAdoProcReq *req = (MsgcmdAdoProcReq*)\
+                MsgCmd_ConstructPara(sizeof(MsgcmdAdoProcReq));
+
+            req->record   = MsgCmd_Atoi((const char *)vp->argv[0].pos) ? MMI_TRUE : MMI_FALSE;
+
+            if (1 < vp->argc)
+            {
+                req->saveGap = MSGCMD_ADO_AUTO_SAVE_GAP;
+                req->recdTime = MsgCmd_Atoi((const char *)vp->argv[1].pos) * 60;
+            }
+            
+            if (3 == vp->argc)
+            {
+                strcpy(req->number, vp->argv[0].pos);
+            }
+            
+            MsgCmd_SendIlm2Mmi(MSG_ID_MC_ADORECD_REQ, (void *)req);
         }
         break;
         
     case AT_EM_HELP:
-        at_replay(MMI_TRUE, "%s: (0,1),time,number", vp->name);
+        at_replay(MMI_TRUE, "%s: [<(0,1)>,<time>,<number>]", vp->name);
         break;
         
     case AT_EM_READ:
-    case AT_EM_ACTIVE:        
         vp->result = AT_RST_PARAM_ERR;
+        break;
+        
+    case AT_EM_ACTIVE:
+        {
+            MsgcmdAdoProcReq *req = (MsgcmdAdoProcReq*)\
+                MsgCmd_ConstructPara(sizeof(MsgcmdAdoProcReq));
+
+            req->saveGap = MSGCMD_ADO_AUTO_SAVE_GAP;
+            req->number[0] = '\0';
+            
+            if (MsgCmd_AdoRecdBusy())
+            {
+                req->record  = MMI_FALSE;
+                at_replay(MMI_TRUE, "Stop audio record.");
+            }
+            else
+            {
+                req->record  = MMI_TRUE;
+                req->forever = MMI_TRUE;
+                at_replay(MMI_TRUE, "Start audio record.");
+            }
+            
+            MsgCmd_SendIlm2Mmi(MSG_ID_MC_ADORECD_REQ, (void *)req);
+        }
         break;
         
     default:
@@ -524,32 +550,66 @@ static void at_vdorecd(AtParam_t *vp)
     switch(vp->mode)
     {
     case AT_EM_SET_OR_EXEC:
-        if (2 > vp->argc || 3 < vp->argc)
+        if (vp->argc > 3)
             vp->result = AT_RST_PARAM_ERR;
         else
         {
+            MsgcmdVdoProcReq *req = (MsgcmdVdoProcReq*)\
+                MsgCmd_ConstructPara(sizeof(MsgcmdVdoProcReq));
 
+            req->record   = MsgCmd_Atoi((const char *)vp->argv[0].pos) ? MMI_TRUE : MMI_FALSE;
+
+            if (1 < vp->argc)
+            {
+                req->saveGap = MSGCMD_VDO_AUTO_SAVE_GAP;
+                req->recdTime = MsgCmd_Atoi((const char *)vp->argv[1].pos) * 60;
+            }
+                        
+            if (3 == vp->argc)
+            {
+                strcpy(req->number, vp->argv[0].pos);
+            }
+            
+            MsgCmd_SendIlm2Mmi(MSG_ID_MC_VDORECD_REQ, (void *)req);
         }
         break;
         
     case AT_EM_HELP:
-        at_replay(MMI_TRUE, "%s: (0,1),time,number", vp->name);
+        at_replay(MMI_TRUE, "%s: [<(0,1)>,<time>,<number>]", vp->name);
         break;
         
     case AT_EM_READ:
-    case AT_EM_ACTIVE:        
         vp->result = AT_RST_PARAM_ERR;
+        break;
+        
+    case AT_EM_ACTIVE:  
+        {
+            MsgcmdVdoProcReq *req = (MsgcmdVdoProcReq*)\
+                MsgCmd_ConstructPara(sizeof(MsgcmdVdoProcReq));
+
+            req->saveGap = MSGCMD_VDO_AUTO_SAVE_GAP;
+            req->number[0] = '\0';
+            
+            if (MsgCmd_VdoRecdBusy())
+            {
+                req->record  = MMI_FALSE;
+                at_replay(MMI_TRUE, "Stop video record.");
+            }
+            else
+            {
+                req->record  = MMI_TRUE;
+                req->forever = MMI_TRUE;
+                at_replay(MMI_TRUE, "Start video record.");
+            }
+            
+            MsgCmd_SendIlm2Mmi(MSG_ID_MC_VDORECD_REQ, (void *)req);
+        }
         break;
         
     default:
         vp->result = AT_RST_UNKOWN_ERR;
         break;
     }
-}
-
-static void do_capture(void)
-{
-	MsgCmd_CaptureEntry(MMI_FALSE, NULL);
 }
 
 /*******************************************************************************
@@ -564,22 +624,39 @@ static void at_capture(AtParam_t *vp)
     switch(vp->mode)
     {
     case AT_EM_SET_OR_EXEC:
-        if (1 != vp->argc)
+        if (vp->argc > 1 || 
+            !(vp->argc == 1 && 
+              vp->argv[0].len < MAX_PHONENUMBER_LENTH && 
+              MsgCmd_IsDigStr((const char*)vp->argv[0].pos, vp->argv[0].len)))
+        {
             vp->result = AT_RST_PARAM_ERR;
+        }
         else
         {
-            //post message to MOD_MMI to execute capture
-            StartTimer(MSGCMD_TIMER_BASE+4, 100, do_capture);
+            MsgcmdCaptureReq *req = (MsgcmdCaptureReq*)MsgCmd_ConstructPara(sizeof(MsgcmdCaptureReq));
+
+            if (vp->argc)
+            {
+                strcpy(req->number, vp->argv[0].pos);
+            }
+            MsgCmd_SendIlm2Mmi(MSG_ID_MC_CAPTURE_REQ, (void *)req);
         }
         break;
         
     case AT_EM_HELP:
-        at_replay(MMI_TRUE, "%s: (mms number)", vp->name);
+        at_replay(MMI_TRUE, "%s: [number]", vp->name);
         break;
         
     case AT_EM_READ:
-    case AT_EM_ACTIVE:        
         vp->result = AT_RST_PARAM_ERR;
+        break;
+    case AT_EM_ACTIVE:        
+        {
+            MsgcmdCaptureReq *req = (MsgcmdCaptureReq*)MsgCmd_ConstructPara(sizeof(MsgcmdCaptureReq));
+
+            req->number[0] = '\0';
+            MsgCmd_SendIlm2Mmi(MSG_ID_MC_CAPTURE_REQ, (void *)req);
+        }
         break;
         
     default:
