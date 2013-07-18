@@ -14,7 +14,6 @@
 #define __MSGCMD_AT_H__
 
 #if defined(__MSGCMD_SUPPORT__)
-
 #include "./msgcmd_process.h"
 
 /* AT ÃüÁîË÷ÒıÃ¶¾Ù */
