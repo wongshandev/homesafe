@@ -835,7 +835,7 @@ void MsgCmd_MakeCall(char *pnumber)
         return;
     }
 
-    mc_trace("%s, number=%s.", __FUNCTION__, __LINE__, pnumber);
+    mc_trace("%s, number=%s.", __FUNCTION__, pnumber);
 	mmi_ucm_init_call_para_for_sendkey(&param); 
 	param.dial_type = SRV_UCM_SIM1_CALL_TYPE_ALL;
 	param.ucs2_num_uri = (U16 *)Hotline_number;
@@ -1254,9 +1254,7 @@ MMI_BOOL MsgCmd_RecordFileName(const WCHAR *fname, void *pdata, U32 datalen)
     kal_wsprintf(buffer, "%c:\\%w", MsgCmd_GetUsableDrive(), fname);
     result = MMI_FALSE;
     
-    fd = FS_Open(buffer, FS_READ_WRITE|FS_CREATE);
-    mc_trace("%s,L:%d, fd=%d.", __FUNCTION__, __LINE__, fd);
-    
+    fd = FS_Open(buffer, FS_READ_WRITE|FS_CREATE);    
     if(fd >= FS_NO_ERROR)
     {
         FS_Seek(fd, 0, FS_FILE_END);
@@ -1277,16 +1275,18 @@ MMI_BOOL MsgCmd_RecordFileName(const WCHAR *fname, void *pdata, U32 datalen)
 ** 功能: 延时dt个tick
 ** 参数: dt -- 要延时的tick个数
 ** 返回: 无
+** 说明: 一个tick大概有10ms
 ** 作者: wasfayu
 *******/
 void MsgCmd_DelayTick(U32 dt)
 {
     U32 tick1, tick2;
-    
+
 	kal_get_time(&tick1);
+	dt = dt ? dt : 2;
 	do {
 		kal_get_time(&tick2);
-	}while(tick2 - tick1 < 50);
+	}while(tick2 - tick1 < dt);
 }
 
 /*******************************************************************************
@@ -1317,20 +1317,20 @@ mmi_ret MsgCmd_EvtProcEntry(mmi_event_struct *evp)
     case EVT_ID_IDLE_ENTER:
     case EVT_ID_IDLE_LAUNCHED:
     case EVT_ID_IDLE_EXIT:
-        mc_trace("%s, L:%d, id=%d.", __FUNCTION__, __LINE__, evp->evt_id);
+        //mc_trace("%s, L:%d, id=%d.", __FUNCTION__, __LINE__, evp->evt_id);
         break;
     case EVT_ID_SRV_SHUTDOWN_DEINIT:
     case EVT_ID_SRV_SHUTDOWN_NORMAL_START:
     case EVT_ID_SRV_SHUTDOWN_FINAL_DEINIT:
-        mc_trace("%s, L:%d, id=%d.", __FUNCTION__, __LINE__, evp->evt_id);
+        //mc_trace("%s, L:%d, id=%d.", __FUNCTION__, __LINE__, evp->evt_id);
         break;
     case EVT_ID_SRV_BOOTUP_SIM_STATUS_CHANGED://SIM usable
     case EVT_ID_SRV_SIM_CTRL_IMSI_CHANGED://copy IMSI
-        mc_trace("%s, L:%d, id=%d.", __FUNCTION__, __LINE__, evp->evt_id);
+        //mc_trace("%s, L:%d, id=%d.", __FUNCTION__, __LINE__, evp->evt_id);
         break;
     case EVT_ID_SRV_NW_INFO_SIGNAL_STRENGTH_CHANGED:
     case EVT_ID_SRV_NW_INFO_STATUS_CHANGED:
-        mc_trace("%s, L:%d, id=%d.", __FUNCTION__, __LINE__, evp->evt_id);
+        //mc_trace("%s, L:%d, id=%d.", __FUNCTION__, __LINE__, evp->evt_id);
         break;
     case EVT_ID_SRV_NW_INFO_SIM_DN_STATUS_CHANGED:
         //reference: srv_nw_info_update_sim_dn_status
@@ -1349,7 +1349,7 @@ mmi_ret MsgCmd_EvtProcEntry(mmi_event_struct *evp)
     case EVT_ID_SRV_SMS_READY:
     case EVT_ID_SRV_MMS_READY:
     case EVT_ID_SRV_SMS_MEM_AVAILABLE:
-        mc_trace("%s, L:%d, id=%d.", __FUNCTION__, __LINE__, evp->evt_id);
+        //mc_trace("%s, L:%d, id=%d.", __FUNCTION__, __LINE__, evp->evt_id);
         break;
     case EVT_ID_PHB_READY:
         break;
@@ -1379,6 +1379,12 @@ static AdoRecdMngr *arm;
 static void msgcmd_AdoRecdDoingCb(MDI_RESULT result)
 {
     mc_trace("%s, result=%d.", __FUNCTION__, result);
+	
+	MsgCmd_RecordFileName(
+		MSGCMD_AUDIO_LIST_FILE_NAME,
+		(void*)arm->filepath, 
+		app_ucs2_strlen((const S8 *)arm->filepath) * sizeof(WCHAR));
+	
     if (MDI_AUDIO_SUCCESS == result)
     {
         if (arm->forever)
@@ -1399,6 +1405,7 @@ static void msgcmd_AdoRecdDoingCb(MDI_RESULT result)
             //如果有追加, 则增加一段时间, 时长为默认的保存间隔时长
             if (arm->append)
             {
+				mc_trace("%s, time=%dS, add time(%dS).", __FUNCTION__, arm->time, MSGCMD_ADO_AUTO_SAVE_GAP);
                 arm->append = MMI_FALSE;
                 arm->time  += MSGCMD_ADO_AUTO_SAVE_GAP;
             }
@@ -1418,6 +1425,7 @@ static void msgcmd_AdoRecdDoingCb(MDI_RESULT result)
             else
             {
                 //notify user by SMS
+                mc_trace("%s, record finish.", __FUNCTION__);
             }
         }
         
@@ -1425,6 +1433,7 @@ static void msgcmd_AdoRecdDoingCb(MDI_RESULT result)
 
     if (arm)
     {
+    	mc_trace("%s, free resource, stop record.", __FUNCTION__);
         MsgCmd_isink(MMI_FALSE);
         MsgCmd_Mfree(arm);
         arm = NULL;
@@ -1441,9 +1450,9 @@ static void msgcmd_AdoRecdDoingCb(MDI_RESULT result)
 *******/
 static MMI_BOOL msgcmd_AdoRecdDoing(WCHAR *filename, U32 time)
 {
-    MDI_RESULT result;
+    MDI_RESULT error;
 
-    result = mdi_audio_start_record_with_limit(
+    error = mdi_audio_start_record_with_limit(
                 (void*)filename,
                 MEDIA_WAV_DVI_ADPCM,
                 0,
@@ -1451,9 +1460,9 @@ static MMI_BOOL msgcmd_AdoRecdDoing(WCHAR *filename, U32 time)
                 msgcmd_AdoRecdDoingCb,
                 0,
                 time);
-    mc_trace("%s, result=%d. time=%dS.", __FUNCTION__, result, time);
+    mc_trace("%s, error=%d. time=%dS.", __FUNCTION__, error, time);
     
-    return (MMI_BOOL)(MDI_AUDIO_SUCCESS == result);
+    return (MMI_BOOL)(MDI_AUDIO_SUCCESS == error);
 }
 
 /*******************************************************************************
@@ -1492,6 +1501,7 @@ MMI_BOOL MsgCmd_AdoRecdSetAppend(void)
 {
     if (arm)
     {
+    	mc_trace("%s, set append flag TRUE.", __FUNCTION__);
         arm->append = MMI_TRUE;
         return MMI_TRUE;
     }
@@ -1601,13 +1611,13 @@ MMI_BOOL MsgCmd_AdoRecdStart(
 *******/
 static MMI_BOOL msgcmd_CaptureFinish(void)
 {
-	MDI_RESULT result;
+	MDI_RESULT error;
 
-	result = mdi_camera_preview_stop();
-	mc_trace("%s, L:%d, result=%d.", __FUNCTION__, __LINE__, result);
+	error = mdi_camera_preview_stop();
+	mc_trace("%s, L:%d, error=%d.", __FUNCTION__, __LINE__, error);
 	
-	result = mdi_camera_power_off();
-	mc_trace("%s, L:%d, result=%d.", __FUNCTION__, __LINE__, result);
+	error = mdi_camera_power_off();
+	mc_trace("%s, L:%d, error=%d.", __FUNCTION__, __LINE__, error);
 
 	/* resume alignment timer */
 	UI_enable_alignment_timers();
@@ -1646,19 +1656,19 @@ static MMI_BOOL msgcmd_CaptureFinish(void)
 *******/
 static MMI_BOOL msgcmd_CaptureDoing(S8 *filename)
 {
-	MDI_RESULT result;
+	MDI_RESULT error;
 	
-	result = mdi_camera_capture_to_file(filename, MMI_FALSE);
-	mc_trace("%s, L:%d, result=%d.", __FUNCTION__, __LINE__, result);
-	if (MDI_RES_CAMERA_SUCCEED != result)
+	error = mdi_camera_capture_to_file(filename, MMI_FALSE);
+	mc_trace("%s, L:%d, error=%d.", __FUNCTION__, __LINE__, error);
+	if (MDI_RES_CAMERA_SUCCEED != error)
 	{		
 		FS_Delete((U16*)filename);
 		return MMI_FALSE;
 	}
 	
-	result = mdi_camera_save_captured_image();
-	mc_trace("%s, L:%d, result=%d.", __FUNCTION__, __LINE__, result);
-	if (MDI_RES_CAMERA_SUCCEED != result)
+	error = mdi_camera_save_captured_image();
+	mc_trace("%s, L:%d, error=%d.", __FUNCTION__, __LINE__, error);
+	if (MDI_RES_CAMERA_SUCCEED != error)
 	{
 		FS_Delete((U16*)filename);
 		return MMI_FALSE;
@@ -1677,13 +1687,13 @@ static MMI_BOOL msgcmd_CaptureDoing(S8 *filename)
 *******/
 static MMI_BOOL msgcmd_CapturePreview(U16 pictureW, U16 pictureH)
 {
-	MDI_RESULT result;
+	MDI_RESULT error;
 	mdi_camera_setting_struct camera_setting_data;
 	mdi_camera_preview_struct camera_preview_data;
 
-	result = mdi_camera_power_on();
-	mc_trace("%s, L:%d, result=%d.", __FUNCTION__, __LINE__, result);
-	if (MDI_RES_CAMERA_SUCCEED != result)
+	error = mdi_camera_power_on();
+	mc_trace("%s, L:%d, error=%d.", __FUNCTION__, __LINE__, error);
+	if (MDI_RES_CAMERA_SUCCEED != error)
 		return MMI_FALSE;
 
 #if defined(MSGCMD_USE_FLASH_LED_4_CAPTURE) 	
@@ -1752,15 +1762,15 @@ static MMI_BOOL msgcmd_CapturePreview(U16 pictureW, U16 pictureH)
 	camera_preview_data.src_key_color        = GDI_COLOR_TRANSPARENT;
 	camera_preview_data.is_tvout             = MMI_FALSE;
 
-	result = mdi_camera_preview_start(&camera_preview_data, &camera_setting_data);
-	mc_trace("%s, L:%d, result=%d.", __FUNCTION__, __LINE__, result);
-	if (MDI_RES_CAMERA_SUCCEED != result)
+	error = mdi_camera_preview_start(&camera_preview_data, &camera_setting_data);
+	mc_trace("%s, L:%d, error=%d.", __FUNCTION__, __LINE__, error);
+	if (MDI_RES_CAMERA_SUCCEED != error)
 	{
-		result = mdi_camera_preview_stop();
-		mc_trace("%s, L:%d, result=%d.", __FUNCTION__, __LINE__, result);
+		error = mdi_camera_preview_stop();
+		mc_trace("%s, L:%d, error=%d.", __FUNCTION__, __LINE__, error);
 		
-		result = mdi_camera_power_off();
-		mc_trace("%s, L:%d, result=%d.", __FUNCTION__, __LINE__, result);
+		error = mdi_camera_power_off();
+		mc_trace("%s, L:%d, error=%d.", __FUNCTION__, __LINE__, error);
 		
 		return MMI_FALSE;
 	}
@@ -1810,7 +1820,7 @@ MMI_BOOL MsgCmd_CaptureEntry(char *replay_number)
             MSGCMD_PHOTOS_FOLDER_NAME, 
             L".jpg");
 		
-		MsgCmd_DelayTick(30);
+		MsgCmd_DelayTick(MSGCMD_CAPTURE_DLY_TICK);
 		
 		result = msgcmd_CaptureDoing((S8 *) filename);
 		if (result)
@@ -1822,7 +1832,7 @@ MMI_BOOL MsgCmd_CaptureEntry(char *replay_number)
 		}
 	}
 
-	MsgCmd_DelayTick(30);
+	MsgCmd_DelayTick(MSGCMD_CAPTURE_DLY_TICK);
 	msgcmd_CaptureFinish();
 	
     return result;
@@ -1842,6 +1852,31 @@ static VdoRecdMngr *vrm;
 static void msgcmd_VdoRecdSaveCb(MDI_RESULT result)
 {
     mc_trace("%s,L:%d. result=%d.", __FUNCTION__, __LINE__, result);
+	
+	/* resume alignment timer */
+	UI_enable_alignment_timers();
+
+	/* resume LED patten */
+	StartLEDPatternBackGround();
+
+	/* let MMI can sleep */
+	TurnOffBacklight();
+
+	/* re-enable keypad tone */
+	mmi_frm_kbd_set_tone_state(MMI_KEY_TONE_ENABLED);
+
+	/* store camera setting back to NVRAM */
+	mmi_camera_store_setting();
+
+	/* resume background audio */
+	mdi_audio_resume_background_play();
+	
+#if defined(MSGCMD_USE_FLASH_LED_4_CAPTURE)	
+	mmi_camera_turn_off_led_highlight();
+#endif
+
+	/* close LED */
+	MsgCmd_isink(MMI_FALSE);
 }
 
 /*******************************************************************************
@@ -1904,11 +1939,23 @@ static MMI_BOOL msgcmd_VdoRecdPreview(void)
 
     ASSERT(NULL != vrm);
 
-    /* stop MMI sleep */
-    //TurnOnBacklight(GPIO_BACKLIGHT_PERMANENT);
+	/* stop bg music */
+	mdi_audio_suspend_background_play();
 
-    /* stop LCD patten */
-    //StopLEDPatternBackGround();
+	/* stop MMI sleep */
+	TurnOnBacklight(GPIO_BACKLIGHT_PERMANENT);
+	
+	/* force all playing keypad tone off */
+	srv_profiles_stop_tone((srv_prof_tone_enum)GetCurKeypadTone());
+	
+	/* disable key pad tone */
+	mmi_frm_kbd_set_tone_state(MMI_KEY_TONE_DISABLED);
+	
+	/* disalbe align timer	*/
+	UI_disable_alignment_timers();
+	
+	/* stop LED patten */
+	StopLEDPatternBackGround();
 
     previewOk = MMI_FALSE;
     error = mdi_video_rec_power_on();
@@ -1950,7 +1997,7 @@ static MMI_BOOL msgcmd_VdoRecdPreview(void)
         video_preview_data.record_aud			= TRUE;
 
         error = mdi_video_rec_preview_start(
-                    GDI_NULL_HANDLE,
+                    GDI_LAYER_EMPTY_HANDLE,
                     GDI_LAYER_ENABLE_LAYER_0,
                     GDI_LAYER_ENABLE_LAYER_0,
                     MMI_FALSE,
@@ -2011,6 +2058,7 @@ MMI_BOOL MsgCmd_VdoRecdSetAppend(void)
 {
     if (vrm)
     {
+    	mc_trace("%s, set append flag TRUE.", __FUNCTION__);
         vrm->append = MMI_TRUE;
         return MMI_TRUE;
     }
@@ -2049,7 +2097,7 @@ void MsgCmd_VdoRecdStop(char *replay_number)
         mdi_video_rec_power_off();
     }
 
-    MsgCmd_DelayTick(50);
+    MsgCmd_DelayTick(MSGCMD_VDORECD_DLY_TICK);
 }
 
 /*******************************************************************************
@@ -2101,7 +2149,7 @@ MMI_BOOL MsgCmd_VdoRecdStart(
     {
         vrm->status = VDO_STATUS_PREVIEW;
         
-        MsgCmd_DelayTick(50);
+        MsgCmd_DelayTick(MSGCMD_VDORECD_DLY_TICK);
         
         if (!msgcmd_VdoRecdDoing(vrm))
         {
@@ -2110,7 +2158,7 @@ MMI_BOOL MsgCmd_VdoRecdStart(
             MsgCmd_Mfree(vrm);
             vrm = NULL;
 
-            MsgCmd_DelayTick(50);
+            MsgCmd_DelayTick(MSGCMD_VDORECD_DLY_TICK);
         }
     }
     else

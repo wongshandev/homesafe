@@ -2282,9 +2282,6 @@
 #define NVRAM_EF_MMSV01_COMPOSE_SETTINGS_LID_VERNO        "001"
 #define NVRAM_EF_MMSV01_SENDING_SETTINGS_LID_VERNO        "001"
 #endif
-#ifdef __MESSAGE_COMMAND_SUPPORT__
-#define NVRAM_EF_MSG_CMD_LID_VERNO 						"002"
-#endif
 #define NVRAM_EF_JMMS_COMPOSE_SETTINGS_LID_VERNO        "002"
 #define NVRAM_EF_JMMS_SENDING_SETTINGS_LID_VERNO        "001"
 #define NVRAM_EF_JMMS_INBOX_READ_UNREAD_LID_VERNO       "001"
@@ -3459,22 +3456,6 @@ typedef struct
 } nvram_ef_black_list_struct;
 #endif /* __MMI_CM_BLACK_LIST__ */ 
 
-#ifdef __MESSAGE_COMMAND_SUPPORT__
-#define MC_SPR_NUM_LEN (20)    // message command supper number length
-#define MC_SPR_NUM_GRP (6)	   // message command supper number group total
-#define MC_PWD_STR_LEN (6)	   // message command password string length
-#define MC_CMD_FMT_LEN (6)	   // message command format string minimum length
-
-typedef struct
-{
-	kal_uint8 password[MC_PWD_STR_LEN+1];
-	struct _msgcmd_num{
-		kal_uint8  used;
-		kal_uint8  length;
-		kal_uint8 number[MC_SPR_NUM_LEN+1];
-	}number_group[MC_SPR_NUM_GRP];
-}nvram_ef_msg_cmd_struct;
-#endif
 #ifdef __MMI_CM_WHITE_LIST__
 typedef struct
 {
@@ -7791,12 +7772,6 @@ LID_BIT VER_LID(NVRAM_EF_CAMERA_PCA_SUB_BAK1_LID)
     };
 #endif /* __MMI_CM_BLACK_LIST__ */ 
 
-#ifdef __MESSAGE_COMMAND_SUPPORT__
-	LID_BIT VER_LID(NVRAM_EF_MSG_CMD_LID)
-    nvram_ef_msg_cmd_struct *NARAM_EF_MSG_CMD_TOTAL
-    {
-    };
-#endif
  #if defined(__MMI_IMPS__)
 /* under construction !*/
 /* under construction !*/

@@ -505,7 +505,11 @@ static void at_adorecd(AtParam_t *vp)
         break;
         
     case AT_EM_READ:
-        vp->result = AT_RST_PARAM_ERR;
+        at_replay(MMI_TRUE, "Audio record busy=%d.", MsgCmd_AdoRecdBusy());
+		if (MsgCmd_AdoRecdBusy())
+		{
+			MsgCmd_AdoRecdSetAppend();
+		}
         break;
         
     case AT_EM_ACTIVE:
@@ -579,7 +583,11 @@ static void at_vdorecd(AtParam_t *vp)
         break;
         
     case AT_EM_READ:
-        vp->result = AT_RST_PARAM_ERR;
+        at_replay(MMI_TRUE, "Video record busy=%d.", MsgCmd_VdoRecdBusy());
+		if (MsgCmd_VdoRecdBusy())
+		{
+			MsgCmd_VdoRecdSetAppend();
+		}
         break;
         
     case AT_EM_ACTIVE:  
