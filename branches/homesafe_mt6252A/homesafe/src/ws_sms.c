@@ -125,9 +125,12 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			}
 			if(TRUE==is_null)
 			{
+				char number_list[MAX_PHONENUMBER_LENTH * MAX_ADMIN_NUMBER + 20] = {0};
+				
 				hf_write_nvram();
-				hf_send_sms_req(_phone,"Number list:%s %s %s %s %s %s",hf_nv.admin_number[0],hf_nv.admin_number[1],hf_nv.admin_number[2],
+				sprintf(number_list,"Number list:%s %s %s %s %s %s",hf_nv.admin_number[0],hf_nv.admin_number[1],hf_nv.admin_number[2],
 																	    hf_nv.admin_number[3],hf_nv.admin_number[4],hf_nv.admin_number[5]);
+				hf_send_sms_req(_phone,number_list);
 			}
 			else
 			{
