@@ -26,6 +26,10 @@
 
 #define MSGCMD_ADO_AUTO_SAVE_GAP  (60*5) // 300S
 #define MSGCMD_VDO_AUTO_SAVE_GAP  (60*5) // 300S
+/* 延迟时间TICK，一个TICK大约10ms */
+#define MSGCMD_CAPTURE_DLY_TICK  (2)
+#define MSGCMD_ADORECD_DLY_TICK  (2)
+#define MSGCMD_VDORECD_DLY_TICK  (10)
 
 /* 定时器ID定义 */
 #define MSGCMD_TIMER_REBOOT       (MSGCMD_TIMER_BASE + 0)
@@ -99,8 +103,8 @@ typedef struct {
 #define MSGCMD_AUDIOS_FOLDER_NAME   L"Audios"
 #define MSGCMD_VIDEOS_FOLDER_NAME   L"Videos"
 
-#define MSGCMD_AUDIO_LIST_FILE_NAME L"vdoFiles.lst"
-#define MSGCMD_VIDEO_LIST_FILE_NAME L"adoFiles.lst"
+#define MSGCMD_AUDIO_LIST_FILE_NAME L"AdoFiles.lst"
+#define MSGCMD_VIDEO_LIST_FILE_NAME L"VdoFiles.lst"
 
 /* capture request */
 typedef struct {
@@ -561,6 +565,7 @@ MMI_BOOL MsgCmd_RecordFileName(const WCHAR *fname, void *pdata, U32 datalen);
 ** 功能: 延时dt个tick
 ** 参数: dt -- 要延时的tick个数
 ** 返回: 无
+** 说明: 一个tick大概有10ms
 ** 作者: wasfayu
 *******/
 void MsgCmd_DelayTick(U32 dt);
