@@ -51,6 +51,11 @@
 #include "CameraApp.h"
 #include "UcmGProt.h"
 #include "SimDetectionGprot.h"
+#include "mmssrvgprot.h"
+#include "SimDetectionStruct.h"
+#include "mms_sap_struct.h"
+#include "mma_api.h"
+
 
 /*******************************************************************************
 ** 函数: MsgCmd_isink
@@ -1041,107 +1046,106 @@ MMI_BOOL MsgCmd_SendSms(
     return MMI_TRUE;
 }
 
-#if defined(__MSGCMD_MMS_TEST__)
-static mma_mms_addr_list_struct send_to_adr = {NULL, MMA_ADDR_TYPE_PHONE_NUMBER, MMA_ADDRESS_GROUP_TYPE_TO, NULL, NULL};
-static mma_mms_description_struct descrp_main = {0};
-static mma_mms_description_header_struct dscrp_head = {0};
+/*
+wap_mma_set_profile_req_struct
+srv_nw_usab_is_any_network_available
+srv_ucm_is_any_call
+要好好研究下这个函数, 用来制作XML文件, 然后发送彩信 [srv_uc_create_mms_xml_description_file]
 
-static MsgCmd_send_mms_cb_cb(srv_mms_result_enum result, void *rsp_data, void *user_data)
+mms.xml文件内容如下(当前测试已经可以发送MMS, 有待后期进一步优化): 
+<mms>
+<header>
+<to type="P">13760106412</to>
+<subject>ZgA=</subject>
+<rr>0</rr>
+<dr>0</dr>
+<prio>2</prio>
+<expiry>0</expiry>
+<delivery>0</delivery>
+<visible>1</visible>
+</header>
+<body bgColor="0xffffff" fgColor="0x000000" slideNum="1" objNum="2" layout="2" imgFit="1" txtFit="2">
+<slide index="1" dur="5">
+<text bgColor="0xffffff" fgColor="0x000000" id="1" begin="0" end="5"/>
+<img id="2" begin="0" end="5"/>
+</slide>
+<obj id="1" attach="0" vf="0" drm="0" size="64" offset="0" encoding="106">
+<name>mms.txt</name>
+<filepath>E:\mms.txt</filepath>
+</obj>
+<obj id="2" attach="0" vf="0" drm="0" size="27313" offset="0" encoding="0">
+<name>20110101001600E37AB4.jpg</name>
+<filepath>E:\Photos\20110101001600E37AB4.jpg</filepath>
+</obj>
+</body>
+</mms>
+*/
+/*******************************************************************************
+** 函数: MsgCmd_CreateAndSendMMSCb
+** 功能: 创建并且发送MMS的回调函数
+** 入参: result   -- 
+**       rsp_data -- srv_mms_create_rsp_struct
+**       user_data-- 
+** 返回: 是否成功
+** 作者: wasfayu
+*******/
+static void msgcmd_CreateAndSendMMSCb(
+    srv_mms_result_enum result,
+    void *rsp_data,
+    S32 user_data)
 {
-	/*----------------------------------------------------------------*/
-    /* Local Variables                                                */
-    /*----------------------------------------------------------------*/
-	srv_mms_create_rsp_struct *msg_rsp = (srv_mms_create_rsp_struct*) rsp_data;	
-	srv_mms_send_req_struct req;
-	
-	/*----------------------------------------------------------------*/
-	/* Code Body													  */
-	/*----------------------------------------------------------------*/
-    mc_trace("MsgCmd_send_mms_cb_cb, rsp_data=0x%x. user_data=0x%x.", rsp_data, user_data);
-    
-	req.msg_id = msg_rsp->msg_id;
-	req.send_setting = SRV_MMS_SETTING_SAVE_AND_SEND;
-	req.sim_id = MMI_SIM1;
-	req.storage_type = MMA_MSG_STORAGE_PHONE;
-	req.is_rr = MMI_TRUE;
-	srv_mms_send(&req);
-    MsgCmd_Mfree(user_data);
-}
+	srv_mms_create_rsp_struct *rsp = (srv_mms_create_rsp_struct*)rsp_data;
 
-static void MsgCmd_send_mms_cb(srv_mms_result_enum result, void *rsp_data, void * user_data)
-{
-	
-	srv_mms_create_rsp_struct *msg_rsp = (srv_mms_create_rsp_struct*) rsp_data;	
-	srv_mms_save_req_struct param_mms_1;
-
-    mc_trace("MsgCmd_send_mms_cb, required=%d. rsp_data=0x%x. user_data=0x%x.", msg_rsp->min_fs_space_required,rsp_data, user_data);
-	if(msg_rsp->min_fs_space_required <= 0)
+	if (SRV_MMS_RESULT_OK == result)
 	{
-		param_mms_1.app_id = msg_rsp->app_id;
-		param_mms_1.call_back = MsgCmd_send_mms_cb_cb;//avk_msg_mms_0091_cb;
-		param_mms_1.msg_id[0] = msg_rsp->msg_id;
-		param_mms_1.no_of_msg = 1;
-		param_mms_1.user_data = user_data;
-		param_mms_1.box = MMA_FOLDER_OUTBOX;
-		if(SRV_MMS_RESULT_OK != srv_mms_save(&param_mms_1))
-        {
-            MsgCmd_Mfree(user_data);
-        }      
+		srv_mms_send_req_struct    req;
+
+		req.msg_id       = rsp->msg_id;
+		req.send_setting = SRV_MMS_SETTING_SEND_ONLY;
+		req.sim_id       = MMI_SIM_ID_SIM1;
+		req.storage_type = MMA_MSG_STORAGE_CARD1;
+		req.is_rr        = MMI_TRUE;
+		srv_mms_send(&req);
 	}
+	
+	mc_trace("%s, result=%d, msg_id=%d. rsp->result=%d.",
+		__FUNCTION__, result, rsp->msg_id, rsp->result);
 }
 
-void MsgCmd_send_mms(WCHAR *file_path, char *tonum, char *tittle)
+/*******************************************************************************
+** 函数: MsgCmd_CreateAndSendMMS
+** 功能: 创建并且发送MMS
+** 入参: number   -- 指定发送到某个号码
+**       filepath -- 待发送的文件(图片或者录音或者文本等)
+**       sim      -- 使用哪张SIM卡来发送, 1-SIM1;2-SIM2; 默认为SIM1.
+** 返回: 是否成功
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_CreateAndSendMMS(char *number, const WCHAR *filepath, mma_sim_id_enum sim)
 {
-	S32 result_mms = 0;
-	srv_mms_create_req_struct param_mms;
-    mma_mms_header_struct *head_p = NULL;
+	MMI_BOOL result = MMI_FALSE;
 
-    
-    if(!mms_is_ready())
-        return;
-    
-    send_to_adr.address = tonum;
-    head_p = (mma_mms_header_struct*)MsgCmd_Malloc(sizeof(mma_mms_header_struct), 0);
-    mc_trace("MsgCmd_send_mms, head_p=0x%x.", head_p);
-    
-    memset(&param_mms, 0, sizeof(srv_mms_create_req_struct));
-	param_mms.app_id = MMA_APP_ID_MMS_APP;
-	param_mms.call_back = MsgCmd_send_mms_cb;//avk_msg_mms_009_cb;
-	param_mms.mode = MMA_MODE_SEND;
-	param_mms.msg_id = 0;
-	param_mms.sim_id = MMA_SIM_ID_SIM1;
-	param_mms.user_data = (void*)head_p;
-	param_mms.op_type = SRV_MMS_CREATE_MMS;
-    param_mms.content_info = &descrp_main;
-    param_mms.content_info->header = &dscrp_head;
-    param_mms.content_info->header->header = head_p;
-    param_mms.content_info->header->header->to = &send_to_adr;//srv_uc_convert_uc_addr_to_mms_addr();
-    param_mms.content_info->header->header->subject.text = tittle;
-    param_mms.content_info->header->header->subject.charset = MMA_CHARSET_ASCII;
-	mmi_wcscpy((WCHAR *)param_mms.xml_filepath, (const WCHAR *)file_path);
-	param_mms.xml_size =  applib_get_file_size(param_mms.xml_filepath);
-	if(SRV_MMS_RESULT_OK != srv_mms_create(&param_mms))
+    if (mms_is_ready() && srv_nw_usab_is_any_network_available())
     {
-        MsgCmd_Mfree(head_p);
-    }   
-    head_p = NULL;
-}
+        srv_mms_create_req_struct createReq;
 
-/* 实际测试发现可以发送图片出去, 但是标题确实依然显示为"无". */
-void MsgCmd_send_mms_test(void)
-{
-    WCHAR filepath[64] = {0};
-
-    mc_trace("%s, ready=%d.", __FUNCTION__, mms_is_ready());
-    
-    if(mms_is_ready())
-    {
-        kal_wsprintf(filepath, "%c:\\wmmp.jpg", MsgCmd_GetUsableDrive());
-        MsgCmd_send_mms(filepath, "13712345678", "my mms");
+        memset(&createReq, 0, sizeof(srv_mms_create_req_struct));
+        //createReq.msg_file_path[MMA_MAX_INTERNAL_FILENAME_LENGTH];
+        app_ucs2_strcpy((S8*)createReq.xml_filepath, (const S8*)filepath);
+        createReq.user_data = 0xAABB;
+        createReq.msg_id    = 0;
+        createReq.app_id    = MMA_APP_ID_BGSR;
+        createReq.mode      = MMA_MODE_EDIT;
+        createReq.sim_id    = sim;
+        createReq.xml_size  = applib_get_file_size(createReq.xml_filepath);
+        createReq.call_back = msgcmd_CreateAndSendMMSCb;
+        
+        result = (MMI_BOOL)(SRV_MMS_RESULT_OK == srv_mms_create(&createReq));
     }
+	
+	mc_trace("%s, num=%s. result=%d.", __FUNCTION__, number, result);
+    return result;
 }
-
-#endif
 
 /*******************************************************************************
 ** 函数: MsgCmd_DeleteOldFile
@@ -1788,7 +1792,7 @@ static MMI_BOOL msgcmd_CapturePreview(U16 pictureW, U16 pictureH)
 static void msgcmd_CaptureResponse(void *p)
 {
     MsgcmdCaptureReq *rsp = (MsgcmdCaptureReq*)p;
-    
+	
     if (strlen(rsp->number))
         MsgCmd_CaptureEntry(rsp->number);
     else
@@ -1812,7 +1816,7 @@ MMI_BOOL MsgCmd_CaptureEntry(char *replay_number)
 
 	if (msgcmd_CapturePreview(pictureW, pictureH))
 	{
-		WCHAR filename[MSGCMD_FILE_PATH_LENGTH+1] = {0};
+		WCHAR *filename = MsgCmd_Malloc(sizeof(WCHAR)*(MSGCMD_FILE_PATH_LENGTH+1), 0);
 
 		MsgCmd_CombineFilePath(
             (char *)filename, 
@@ -1821,15 +1825,17 @@ MMI_BOOL MsgCmd_CaptureEntry(char *replay_number)
             L".jpg");
 		
 		MsgCmd_DelayTick(MSGCMD_CAPTURE_DLY_TICK);
-		
-		result = msgcmd_CaptureDoing((S8 *) filename);
+		result = msgcmd_CaptureDoing((S8 *)filename);
 		if (result)
 		{
+			//send MMS
 			if (replay_number)
 			{
-				//send MMS
+				MsgCmd_CreateAndSendMMS(replay_number, L"E:\\mms.xml", MMA_SIM_ID_SIM1);
 			}
 		}
+
+		MsgCmd_Mfree(filename);
 	}
 
 	MsgCmd_DelayTick(MSGCMD_CAPTURE_DLY_TICK);
