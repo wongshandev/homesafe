@@ -231,7 +231,6 @@ fail:
 #if defined(SF_WRITE_FS)
 #include "DateTimeType.h"
 #define FILE_BUF_SIZE	5*1024
-#define LOGFILE_NAME    L"c:\\lm_log.txt"
 static S8 log_is_enable = 0;
 static U32 max_file_size = 50;
 static kal_uint8 file_buffer[FILE_BUF_SIZE]={0};
@@ -243,6 +242,7 @@ void WriteLogFile(kal_uint8* buf)
 	UINT str_len=0;
 	UINT str_len2=0;
 	FS_HANDLE file_handle;//нд╪Ч╬Д╠З
+	UI_character_type path[20];
 
 	if(buf == NULL) return;
 	str_len2 = strlen(buf);
@@ -252,7 +252,8 @@ void WriteLogFile(kal_uint8* buf)
 		strcat(file_buffer, buf);
 		str_len += str_len2;
 	}
-	file_handle = FS_Open(LOGFILE_NAME,FS_CREATE|FS_READ_WRITE);
+	kal_wsprintf((kal_wchar*)path, "%c:\\hf_log.txt", (S8)MsgCmd_GetUsableDrive());
+	file_handle = FS_Open(path,FS_CREATE|FS_READ_WRITE);
 	if (file_handle >= FS_NO_ERROR)
 	{
 		if(FS_GetFileSize(file_handle, &filesize) == FS_NO_ERROR)
@@ -260,7 +261,7 @@ void WriteLogFile(kal_uint8* buf)
 			if(filesize > max_file_size*1024)
 			{
 				FS_Close(file_handle);
-				FS_Delete(LOGFILE_NAME);
+				FS_Delete(path);
 				WriteLogFile(buf);
 				return;
 			}
