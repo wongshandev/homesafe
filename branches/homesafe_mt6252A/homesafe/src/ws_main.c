@@ -20,7 +20,13 @@ void hf_nvram_init(void)
 void hf_start_light(void)
 {
 	int timer_sec = 0;
-	
+	static int count = 0;
+
+	if(++count > 20)
+	{
+		count = 0;
+		StopTimer(SH_LIGHT_TIMER_ID);
+	}
 	if(mmi_idle_is_active()&&!mmi_bootup_is_network_service_available())
 	{
 		static int _count = 0;
@@ -30,11 +36,11 @@ void hf_start_light(void)
 		if(!((++_count)%5))
 		{
 			_count = 0;
-			MsgCmd_isink(FALSE);
+			MsgCmd_isink(TRUE);
 		}
 		else
 		{
-			MsgCmd_isink(TRUE);
+			MsgCmd_isink(FALSE);
 		}
 	}
 	else
