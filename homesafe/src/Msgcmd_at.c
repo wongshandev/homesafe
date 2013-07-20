@@ -21,6 +21,8 @@
 #include "nvram_interface.h"
 #include "app_str.h"
 #include "TimerEvents.h"
+#include "DateTimeGprot.h"
+#include "custom_mmi_default_value.h"
 
 
 /*****************************************************************************
@@ -496,7 +498,7 @@ static void at_adorecd(AtParam_t *vp)
                 strcpy(req->number, vp->argv[0].pos);
             }
             
-            MsgCmd_SendIlm2Mmi(MSG_ID_MC_ADORECD_REQ, (void *)req);
+            MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_ADORECD_REQ, (void *)req);
         }
         break;
         
@@ -532,7 +534,7 @@ static void at_adorecd(AtParam_t *vp)
                 at_replay(MMI_TRUE, "Start audio record.");
             }
             
-            MsgCmd_SendIlm2Mmi(MSG_ID_MC_ADORECD_REQ, (void *)req);
+            MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_ADORECD_REQ, (void *)req);
         }
         break;
         
@@ -574,7 +576,7 @@ static void at_vdorecd(AtParam_t *vp)
                 strcpy(req->number, vp->argv[0].pos);
             }
             
-            MsgCmd_SendIlm2Mmi(MSG_ID_MC_VDORECD_REQ, (void *)req);
+            MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_VDORECD_REQ, (void *)req);
         }
         break;
         
@@ -610,7 +612,7 @@ static void at_vdorecd(AtParam_t *vp)
                 at_replay(MMI_TRUE, "Start video record.");
             }
             
-            MsgCmd_SendIlm2Mmi(MSG_ID_MC_VDORECD_REQ, (void *)req);
+            MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_VDORECD_REQ, (void *)req);
         }
         break;
         
@@ -647,7 +649,7 @@ static void at_capture(AtParam_t *vp)
             {
                 strcpy(req->number, vp->argv[0].pos);
             }
-            MsgCmd_SendIlm2Mmi(MSG_ID_MC_CAPTURE_REQ, (void *)req);
+            MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_CAPTURE_REQ, (void *)req);
         }
         break;
         
@@ -663,7 +665,7 @@ static void at_capture(AtParam_t *vp)
             MsgcmdCaptureReq *req = (MsgcmdCaptureReq*)MsgCmd_ConstructPara(sizeof(MsgcmdCaptureReq));
 
             req->number[0] = '\0';
-            MsgCmd_SendIlm2Mmi(MSG_ID_MC_CAPTURE_REQ, (void *)req);
+            MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_CAPTURE_REQ, (void *)req);
         }
         break;
         
@@ -671,6 +673,20 @@ static void at_capture(AtParam_t *vp)
         vp->result = AT_RST_UNKOWN_ERR;
         break;
     }
+}
+
+/*******************************************************************************
+** 函数: at_time_cb
+** 功能: 设置系统时间的回调函数
+** 入参: info -- mmi_eq_set_rtc_time_rsp_struct
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void at_time_cb(void *info)
+{
+    mmi_eq_set_rtc_time_rsp_struct *resp = (mmi_eq_set_rtc_time_rsp_struct*)info;
+
+    at_replay(MMI_TRUE, "set date and time result=%d.",resp->result);
 }
 
 /*******************************************************************************
@@ -685,16 +701,35 @@ static void at_time(AtParam_t *vp)
     switch(vp->mode)
     {
     case AT_EM_SET_OR_EXEC:
-        if (2 != vp->argc)
+        if (1 != vp->argc)
             vp->result = AT_RST_PARAM_ERR;
         else
         {
-            
+            MYTIME mt;
+            U32 year,month,day,hour,minute,second;
+
+            if (6 != scanf(vp->argv[0].pos, 
+                        "%d-%d-%d,%d:%d:%d",
+                        &year, &month, &day, &hour, &minute, &second))
+            {
+                vp->result = AT_RST_PARAM_ERR;
+                break;
+            }
+
+            mt.nYear  = year;
+            mt.nMonth = month;
+            mt.nDay   = day;
+            mt.nHour  = hour;
+            mt.nMin   = minute;
+            mt.nSec   = second;
+
+            SetProtocolEventHandler(at_time_cb, MSG_ID_MMI_EQ_SET_RTC_TIME_RSP);
+            mmi_dt_set_rtc_dt(&mt);
         }
         break;
         
     case AT_EM_HELP:
-        at_replay(MMI_TRUE, "%s: yyyy-mm-dd,hh:mm:ss", vp->name);
+        at_replay(MMI_TRUE, "%s: \"yyyy-mm-dd,hh:mm:ss\"", vp->name);
         break;
         
     case AT_EM_READ:

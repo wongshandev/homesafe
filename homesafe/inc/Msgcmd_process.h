@@ -19,16 +19,20 @@
 #include "gdi_datatype.h"
 #include "app_datetime.h"
 #include "SmsSrvGprot.h"
-
+#include "mma_struct.h"
+#include "ucsrvgprot.h"
+#include "umsrvdefs.h"
 
 /* 系统默认值 */
 #define MSGCMD_FILE_PATH_LENGTH   127
+#define MSGCMD_FILE_NAME_LENGTH   63
 
 #define MSGCMD_ADO_AUTO_SAVE_GAP  (60*5) // 300S
 #define MSGCMD_VDO_AUTO_SAVE_GAP  (60*5) // 300S
+
 /* 延迟时间TICK，一个TICK大约10ms */
-#define MSGCMD_CAPTURE_DLY_TICK  (2)
-#define MSGCMD_ADORECD_DLY_TICK  (2)
+#define MSGCMD_CAPTURE_DLY_TICK  (1)
+#define MSGCMD_ADORECD_DLY_TICK  (1)
 #define MSGCMD_VDORECD_DLY_TICK  (10)
 
 /* 定时器ID定义 */
@@ -40,6 +44,7 @@
 #define MSG_ID_MC_VDORECD_REQ     (MSG_ID_MC_BASE + 0)
 #define MSG_ID_MC_ADORECD_REQ     (MSG_ID_MC_BASE + 1)
 #define MSG_ID_MC_CAPTURE_REQ     (MSG_ID_MC_BASE + 2)
+#define MSG_ID_MC_SEND_MMS_REQ    (MSG_ID_MC_BASE + 3)
 
 
 /* 字符类型 */
@@ -131,6 +136,37 @@ typedef struct {
     U32         recdTime;
     char        number[MAX_PHONENUMBER_LENTH+1];
 }MsgcmdAdoProcReq;
+
+/* 自定义彩信发送请求结构 */
+typedef struct {
+	char     sendto[MMI_PHB_NUMBER_LENGTH+1];
+	WCHAR    xmlpath[MSGCMD_FILE_PATH_LENGTH+1];
+	WCHAR    subject[SRV_UC_MAX_SUBJECT_LEN+1];
+	WCHAR    picname[MSGCMD_FILE_NAME_LENGTH+1];
+	WCHAR    picpath[MSGCMD_FILE_PATH_LENGTH+1];
+	
+	U8    priority;          /* mma_priority_enum */
+	U8    expiry_time;       /* srv_uc_expiry_time_enum */
+    U8    delivery_time;     /* srv_uc_delivery_time_enum */
+    BOOL  read_report;       /* Read report flag */
+    BOOL  delivery_report;   /* Delivery report flag */
+    BOOL  hide_sender;       /* Hide sender flag */
+}MsgCmdMMSXmlData;
+
+typedef struct {
+    WCHAR    xmlpath[MSGCMD_FILE_PATH_LENGTH+1];
+    mma_sim_id_enum  sim;
+}MsgCmdMMSUserData;
+
+typedef struct {
+	LOCAL_PARA_HDR
+	char     sendto[MMI_PHB_NUMBER_LENGTH+1];
+	WCHAR    subject[SRV_UC_MAX_SUBJECT_LEN+1];
+	WCHAR    picpath[MSGCMD_FILE_PATH_LENGTH+1];
+    WCHAR   *picname; //这个指针其实就是指向picpath里面的某个元素    
+    mma_sim_id_enum  sim;
+}MsgCmdMMSReq;
+
 
 /*******************************************************************************
 ** 函数: MsgCmd_GetInteger
@@ -298,16 +334,16 @@ U32 MsgCmd_GetFileSize(WCHAR *path);
 /*******************************************************************************
 ** 函数: MsgCmd_CombineFilePath
 ** 功能: 组成文件的绝对路径, 目录深度为一级
-** 参数: out       -- 装载输出路径的buffer
-**       length    -- out的长度, 以字节为单位, 长度应该大于32个字节以上
-**       folder    -- 文件夹的名字, 如 L"audio"
-**       ext_name  -- 扩展名的名字, 如 L".mp3"
-** 返回: 返回out的地址
+** 参数: pathbuffer     -- 装载输出路径的buffer
+**       length_in_byte -- out的长度, 以字节为单位, 长度应该大于32个字节以上
+**       folder         -- 文件夹的名字, 如 L"audio"
+**       ext_name       -- 扩展名的名字, 如 L".mp3"
+** 返回: 返回文件名地址, 即没有前面的path, 指向pathbuffer中某个元素的地址
 ** 作者: wasfayu
 *******/
 WCHAR *MsgCmd_CombineFilePath(
-    char *out,
-    U16 length,
+    WCHAR *pathbuffer,
+    U16   length_in_byte,
     const WCHAR *folder,
     const WCHAR *ext_name);
 
@@ -538,6 +574,18 @@ MMI_BOOL MsgCmd_SendSms(
     void   *user_data_ptr,
     srv_sms_sim_enum sim,
     SrvSmsCallbackFunc cb);
+
+/*******************************************************************************
+** 函数: MsgCmd_CreateAndSendMMS
+** 功能: 创建并且发送MMS
+** 入参: xml_path  -- MMS布局文件, 里面已经包含有电话号码这些了
+**       sim       -- mma_sim_id_enum
+** 返回: 是否成功
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_CreateAndSendMMS(
+    mma_sim_id_enum sim,
+    WCHAR          *xml_path);
 
 /*******************************************************************************
 ** 函数: MsgCmd_DeleteOldFile

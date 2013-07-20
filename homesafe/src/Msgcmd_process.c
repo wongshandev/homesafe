@@ -55,6 +55,88 @@
 #include "SimDetectionStruct.h"
 #include "mms_sap_struct.h"
 #include "mma_api.h"
+#include "ucsrv.h"
+
+
+
+/*****************************************************************************
+ * FUNCTION
+ *  srv_uc_create_xml_element_start
+ * DESCRIPTION
+ *  Create the xml start element
+ * PARAMETERS
+ *  fh                  [IN]        
+ *  element_name        [?]         
+ *  attr_list           [IN]        
+ * RETURNS
+ *  void
+ *****************************************************************************/
+extern S32 srv_uc_create_xml_element_start(FS_HANDLE fh, U8 *element_name, U8 **attr_list);
+
+/*****************************************************************************
+ * FUNCTION
+ *  srv_uc_create_xml_element_end
+ * DESCRIPTION
+ *  Create the xml end element
+ * PARAMETERS
+ *  fh                  [IN]        
+ *  element_name        [?]         
+ * RETURNS
+ *  void
+ *****************************************************************************/
+extern S32 srv_uc_create_xml_element_end(FS_HANDLE fh, U8 *element_name);
+
+/*****************************************************************************
+ * FUNCTION
+ *  srv_uc_create_xml_new_line
+ * DESCRIPTION
+ *  Insert new line
+ * PARAMETERS
+ *  fh      [IN]        
+ * RETURNS
+ *  void
+ *****************************************************************************/
+extern S32 srv_uc_create_xml_new_line(FS_HANDLE fh);
+
+/*****************************************************************************
+ * FUNCTION
+ *  srv_uc_create_xml_data
+ * DESCRIPTION
+ *  Add data
+ * PARAMETERS
+ *  fh          [IN]        
+ *  data        [?]         
+ * RETURNS
+ *  void
+ *****************************************************************************/
+extern S32 srv_uc_create_xml_data(FS_HANDLE fh, U8 *data);
+
+/*****************************************************************************
+ * FUNCTION
+ *  srv_uc_create_xml_data_numeric_to_char
+ * DESCRIPTION
+ *  Add numeric data
+ * PARAMETERS
+ *  fh          [IN]        
+ *  value       [IN]        
+ * RETURNS
+ *  void
+ *****************************************************************************/
+extern S32 srv_uc_create_xml_data_numeric_to_char(FS_HANDLE fh, U32 value);
+
+/*****************************************************************************
+ * FUNCTION
+ *  srv_uc_create_xml_element_single
+ * DESCRIPTION
+ *  Create the xml single element
+ * PARAMETERS
+ *  fh                  [IN]        
+ *  element_name        [?]         
+ *  attr_list           [IN]        
+ * RETURNS
+ *  void
+ *****************************************************************************/
+extern S32 srv_uc_create_xml_element_single(FS_HANDLE fh, U8 *element_name, U8 **attr_list);
 
 
 /*******************************************************************************
@@ -451,29 +533,53 @@ U32 MsgCmd_GetFileSize(WCHAR *path)
 /*******************************************************************************
 ** 函数: MsgCmd_CombineFilePath
 ** 功能: 组成文件的绝对路径, 目录深度为一级
-** 参数: out       -- 装载输出路径的buffer
-**       length    -- out的长度, 以字节为单位, 长度应该大于32个字节以上
-**       folder    -- 文件夹的名字, 如 L"audio"
-**       ext_name  -- 扩展名的名字, 如 L".mp3"
-** 返回: 返回out的地址
+** 参数: pathbuffer     -- 装载输出路径的buffer
+**       length_in_byte -- out的长度, 以字节为单位, 长度应该大于32个字节以上
+**       folder         -- 文件夹的名字, 如 L"audio"
+**       ext_name       -- 扩展名的名字, 如 L".mp3"
+** 返回: 返回文件名地址, 即没有前面的path, 指向pathbuffer中某个元素的地址
 ** 作者: wasfayu
 *******/
 WCHAR *MsgCmd_CombineFilePath(
-    char *out,
-    U16   length,
+    WCHAR *pathbuffer,
+    U16   length_in_byte,
     const WCHAR *folder,
     const WCHAR *ext_name)
 {	
 	applib_time_struct mt;
-	
-	applib_dt_get_date_time(&mt);
-	memset(out, 0, length);
-	
+    WCHAR *filename;
+
+    ASSERT(NULL != pathbuffer);
+    ASSERT(NULL != folder);
+    ASSERT(NULL != ext_name);
+    
+	memset(pathbuffer, 0, length_in_byte);
+
+    //先打印路径
 	kal_wsprintf(
-		(WCHAR*)out, 
-		"%c:\\%w\\%04d%02d%02d%02d%02d%08X%w", 
+		(WCHAR*)pathbuffer, 
+		"%c:\\%w\\", 
 		MsgCmd_GetUsableDrive(),
-		folder,
+		folder);
+
+    //再打印文件名
+    filename = pathbuffer + app_ucs2_strlen((const kal_int8 *)pathbuffer);
+	applib_dt_get_date_time(&mt);
+#if defined(WIN32)
+    kal_wsprintf(
+        filename,
+        "%04d-%02d-%02d %02d%02d%02d%w",
+		mt.nYear,
+		mt.nMonth,
+		mt.nDay,
+		mt.nHour,
+		mt.nMin,
+		mt.nSec,
+		ext_name);
+#else
+    kal_wsprintf(
+        filename,
+        "%04d%02d%02d%02d%02d%08X%w",
 		mt.nYear,
 		mt.nMonth,
 		mt.nDay,
@@ -481,8 +587,9 @@ WCHAR *MsgCmd_CombineFilePath(
 		mt.nMin,
 		MsgCmd_GetCurrentTime(),
 		ext_name);	
+#endif
 
-	return (WCHAR*)out;
+	return filename;
 }
 
 /*******************************************************************************
@@ -1046,40 +1153,344 @@ MMI_BOOL MsgCmd_SendSms(
     return MMI_TRUE;
 }
 
+#if 1//MMS
 /*
 wap_mma_set_profile_req_struct
 srv_nw_usab_is_any_network_available
 srv_ucm_is_any_call
-要好好研究下这个函数, 用来制作XML文件, 然后发送彩信 [srv_uc_create_mms_xml_description_file]
-
-mms.xml文件内容如下(当前测试已经可以发送MMS, 有待后期进一步优化): 
-<mms>
-<header>
-<to type="P">13760106412</to>
-<subject>ZgA=</subject>
-<rr>0</rr>
-<dr>0</dr>
-<prio>2</prio>
-<expiry>0</expiry>
-<delivery>0</delivery>
-<visible>1</visible>
-</header>
-<body bgColor="0xffffff" fgColor="0x000000" slideNum="1" objNum="2" layout="2" imgFit="1" txtFit="2">
-<slide index="1" dur="5">
-<text bgColor="0xffffff" fgColor="0x000000" id="1" begin="0" end="5"/>
-<img id="2" begin="0" end="5"/>
-</slide>
-<obj id="1" attach="0" vf="0" drm="0" size="64" offset="0" encoding="106">
-<name>mms.txt</name>
-<filepath>E:\mms.txt</filepath>
-</obj>
-<obj id="2" attach="0" vf="0" drm="0" size="27313" offset="0" encoding="0">
-<name>20110101001600E37AB4.jpg</name>
-<filepath>E:\Photos\20110101001600E37AB4.jpg</filepath>
-</obj>
-</body>
-</mms>
+[srv_uc_create_mms_xml_description_file]
 */
+/*******************************************************************************
+** 函数: msgcmd_CreateMMSXMLFile
+** 功能: 创建MMS发送时需要的XML文件
+** 入参: MsgCmdMMSXmlData -- 创建XML文件的依据
+** 返回: 是否成功
+** 说明: 调用srv_uc_create_mms_xml_description_file函数中类似的功能来完成布局
+** 作者: wasfayu
+*******/
+static MMI_BOOL msgcmd_CreateMMSXMLFile(MsgCmdMMSXmlData *param)
+{
+#define FUNC_FAIL_RETURN(exp) if ((exp) < FS_NO_ERROR) { FS_Close(fh); return MMI_FALSE;}
+#define MMS_BACKGROUND_COLOR  0xFFFFFF
+#define MMS_FOREGROUND_COLOR  0x000000
+
+    FS_HANDLE fh;
+    
+    if (NULL == param)
+        return MMI_FALSE;
+
+    if (0 == strlen(param->sendto))
+        return MMI_FALSE;
+    
+    if (0 == app_ucs2_strlen((const kal_int8 *)param->xmlpath))
+        return MMI_FALSE;
+    
+    if (0 == app_ucs2_strlen((const kal_int8 *)param->picname))
+        return MMI_FALSE;
+
+    if (0 == app_ucs2_strlen((const kal_int8 *)param->picpath))
+        return MMI_FALSE;
+
+    // ready, go!
+    if ((fh = FS_Open(param->xmlpath, FS_READ_WRITE|FS_CREATE_ALWAYS)) < FS_NO_ERROR)
+        return MMI_FALSE;
+
+    /* <mms> */
+    FUNC_FAIL_RETURN(srv_uc_create_xml_element_start(fh, (U8*) SRV_UC_XML_ELEMENT_MMS, NULL));
+    FUNC_FAIL_RETURN(srv_uc_create_xml_new_line(fh));
+
+    /* <header> */
+    FUNC_FAIL_RETURN(srv_uc_create_xml_element_start(fh, (U8*) SRV_UC_XML_ELEMENT_HEADER, NULL));
+    FUNC_FAIL_RETURN(srv_uc_create_xml_new_line(fh));
+    
+    /* To address */
+    if (MMI_TRUE)
+    {
+    U8 *attr_list[3] = {SRV_UC_XML_ATTR_TYPE, SRV_UC_XML_ATTR_POHNE_NUMBER, NULL};
+    
+    FUNC_FAIL_RETURN(srv_uc_create_xml_element_start(fh, SRV_UC_XML_ELEMENT_TO, attr_list));
+    FUNC_FAIL_RETURN(srv_uc_create_xml_data(fh, (U8*)param->sendto));
+    FUNC_FAIL_RETURN(srv_uc_create_xml_element_end(fh, SRV_UC_XML_ELEMENT_TO));
+    FUNC_FAIL_RETURN(srv_uc_create_xml_new_line(fh));
+    }
+    
+    /* subject */
+    if (mmi_ucs2strlen((S8*)param->subject))
+    {
+        FUNC_FAIL_RETURN(srv_uc_create_xml_element_start(fh, (U8*) SRV_UC_XML_ELEMENT_SUBJECT, NULL));
+        FUNC_FAIL_RETURN(srv_uc_create_xml_data_usc2_to_utf8_to_base64(fh,(U8*)param->subject));
+        FUNC_FAIL_RETURN(srv_uc_create_xml_element_end(fh, (U8*) SRV_UC_XML_ELEMENT_SUBJECT));
+        FUNC_FAIL_RETURN(srv_uc_create_xml_new_line(fh));
+    }
+
+    /* Read Report */
+    FUNC_FAIL_RETURN(srv_uc_create_xml_element_start(fh, (U8*) SRV_UC_XML_ELEMENT_READ_REPORT, NULL));
+    FUNC_FAIL_RETURN(srv_uc_create_xml_data_numeric_to_char(fh, param->read_report));
+    FUNC_FAIL_RETURN(srv_uc_create_xml_element_end(fh, (U8*) SRV_UC_XML_ELEMENT_READ_REPORT));
+    FUNC_FAIL_RETURN(srv_uc_create_xml_new_line(fh));
+
+    /* Delivery Report */
+    FUNC_FAIL_RETURN(srv_uc_create_xml_element_start(fh, (U8*) SRV_UC_XML_ELEMENT_DELIVERY_REPORT, NULL));
+    FUNC_FAIL_RETURN(srv_uc_create_xml_data_numeric_to_char(fh, param->delivery_report));
+    FUNC_FAIL_RETURN(srv_uc_create_xml_element_end(fh, (U8*) SRV_UC_XML_ELEMENT_DELIVERY_REPORT));
+    FUNC_FAIL_RETURN(srv_uc_create_xml_new_line(fh));
+
+    /* Priority */
+    FUNC_FAIL_RETURN(srv_uc_create_xml_element_start(fh, (U8*) SRV_UC_XML_ELEMENT_PRIORITY, NULL));
+    FUNC_FAIL_RETURN(srv_uc_create_xml_data_numeric_to_char(fh, param->priority));
+    FUNC_FAIL_RETURN(srv_uc_create_xml_element_end(fh, (U8*) SRV_UC_XML_ELEMENT_PRIORITY));
+    FUNC_FAIL_RETURN(srv_uc_create_xml_new_line(fh));
+    
+    /* Expiry time */
+    FUNC_FAIL_RETURN(srv_uc_create_xml_element_start(fh, (U8*) SRV_UC_XML_ELEMENT_EXPIRY, NULL));
+    FUNC_FAIL_RETURN(srv_uc_create_xml_data_numeric_to_char(fh,srv_uc_convert_to_mms_expiry_time(param->expiry_time)));
+    FUNC_FAIL_RETURN(srv_uc_create_xml_element_end(fh, (U8*) SRV_UC_XML_ELEMENT_EXPIRY));
+    FUNC_FAIL_RETURN(srv_uc_create_xml_new_line(fh));
+    
+    /* Delivery time */
+    FUNC_FAIL_RETURN(srv_uc_create_xml_element_start(fh, (U8*) SRV_UC_XML_ELEMENT_DELIVERY_TIME, NULL));
+    FUNC_FAIL_RETURN(srv_uc_create_xml_data_numeric_to_char(fh,srv_uc_convert_to_mms_delivery_time(param->delivery_time)));
+    FUNC_FAIL_RETURN(srv_uc_create_xml_element_end(fh, (U8*) SRV_UC_XML_ELEMENT_DELIVERY_TIME));
+    FUNC_FAIL_RETURN(srv_uc_create_xml_new_line(fh));
+
+    /* Sender visibility */
+    FUNC_FAIL_RETURN(srv_uc_create_xml_element_start(fh, (U8*) SRV_UC_XML_ELEMENT_VISIBLE, NULL));
+    FUNC_FAIL_RETURN(srv_uc_create_xml_data_numeric_to_char(fh, !param->hide_sender));
+    FUNC_FAIL_RETURN(srv_uc_create_xml_element_end(fh, (U8*) SRV_UC_XML_ELEMENT_VISIBLE));
+    FUNC_FAIL_RETURN(srv_uc_create_xml_new_line(fh));
+    
+    /* </header> */
+    FUNC_FAIL_RETURN(srv_uc_create_xml_element_end(fh, (U8*) SRV_UC_XML_ELEMENT_HEADER));
+    FUNC_FAIL_RETURN(srv_uc_create_xml_new_line(fh));
+
+    if (MMI_TRUE)
+    {
+        U16 str_len = SRV_UC_XML_STR_LEN;   /* size of slide_num, obj_num, layout, bg_color and fg_color */
+        U16 attr_num = 7;                   /* size of arrt_list would be attr_num * 2 + 1 */
+        U8 bg_color[SRV_UC_XML_STR_LEN];
+        U8 fg_color[SRV_UC_XML_STR_LEN];
+        U8 slide_num[SRV_UC_XML_STR_LEN];
+        U8 obj_num[SRV_UC_XML_STR_LEN];
+        U8 layout[SRV_UC_XML_STR_LEN];
+        U8 txt_fit[SRV_UC_XML_STR_LEN];
+        U8 img_fit[SRV_UC_XML_STR_LEN];
+        U8 *attr_list[7 * 2 + 1];           /* 7= bg_color....img_fit */
+        U8 i = 0;
+
+        /* body */
+        i = 0;
+        /*-----background color-----------------------------------------------*/
+        memset(bg_color, 0, str_len);
+        sprintf((char*)bg_color, "0x%06x", MMS_BACKGROUND_COLOR);
+        attr_list[i++] = (U8*) SRV_UC_XML_ATTR_BGCOLOR;
+        attr_list[i++] = bg_color;
+        /*-----foregrount color----------------------------------------------*/
+        memset(fg_color, 0, str_len);
+        sprintf((char*)fg_color, "0x%06x", MMS_FOREGROUND_COLOR);
+        attr_list[i++] = (U8*) SRV_UC_XML_ATTR_FGCOLOR;
+        attr_list[i++] = fg_color;
+        /*-----slide number---------------------------------------------------*/
+        memset(slide_num, 0, str_len);
+        slide_num[0] = '1'; //只有一个slide
+        attr_list[i++] = (U8*) SRV_UC_XML_ATTR_SLIDE_NUM;
+        attr_list[i++] = slide_num;
+        /*-----object number--------------------------------------------------*/
+        memset(obj_num, 0, str_len);
+        obj_num[0] = '1'; //只有一个object
+        attr_list[i++] = (U8*) SRV_UC_XML_ATTR_OBJ_NUM;
+        attr_list[i++] = obj_num;
+        /*-----layout type----------------------------------------------------*/
+        memset(layout, 0, str_len);
+        layout[0] = '1'; //布局, 参见mma_slide_layout_enum
+        attr_list[i++] = (U8*) SRV_UC_XML_ATTR_LAYOUT;
+        attr_list[i++] = layout;
+        /*-----image fit------------------------------------------------------*/
+        memset(img_fit, 0, str_len);
+        sprintf((char*)img_fit, "%d", MMA_REGION_FIT_MEET);    /* Always set to MEET for img, because current mms can not support other type */
+        attr_list[i++] = (U8*) SRV_UC_XML_ATTR_IMGFIT;
+        attr_list[i++] = img_fit;
+        /*-----text fit-------------------------------------------------------*/
+        memset(txt_fit, 0, str_len);
+        sprintf((char*)txt_fit, "%d", MMA_REGION_FIT_SCROLL);  /* Always set to SCROLL for text, because current mms can not support other type */
+        attr_list[i++] = (U8*) SRV_UC_XML_ATTR_TXTFIT;
+        attr_list[i++] = txt_fit;
+        /*--------------------------------------------------------------------*/
+        attr_list[i++] = NULL;
+        FUNC_FAIL_RETURN(srv_uc_create_xml_element_start(fh, (U8*) SRV_UC_XML_ELEMENT_BODY, attr_list));
+        FUNC_FAIL_RETURN(srv_uc_create_xml_new_line(fh));
+
+        /* Slide */
+        i = 0;
+        /*--------------------------------------------------------------------*/
+        memset(bg_color, 0, str_len);
+        bg_color[0] = '1'; //只有一张图片, 一个slide
+        attr_list[i++] = (U8*) SRV_UC_XML_ATTR_INDEX;
+        attr_list[i++] = bg_color;
+        /*--------------------------------------------------------------------*/
+        memset(fg_color, 0, str_len);
+        fg_color[0] = '5'; //只有5秒钟
+        attr_list[i++] = (U8*) SRV_UC_XML_ATTR_DURATION;
+        attr_list[i++] = fg_color;
+        /*--------------------------------------------------------------------*/
+        attr_list[i++] = NULL;
+        FUNC_FAIL_RETURN(srv_uc_create_xml_element_start(fh, (U8*) SRV_UC_XML_ELEMENT_SLIDE, attr_list));
+        FUNC_FAIL_RETURN(srv_uc_create_xml_new_line(fh));
+        
+        /*--------------------------------------------------------------------*/
+        i = 0;
+        /*-----slide index----------------------------------------------------*/
+        memset(slide_num, 0, str_len);
+        sprintf((char*)slide_num, "1"); //只有一张图片, 因此就只有一个slide, 所以直接给定slide index为1
+        attr_list[i++] = (U8*) SRV_UC_XML_ATTR_ID;
+        attr_list[i++] = slide_num;
+        /*-----start time-----------------------------------------------------*/
+        memset(obj_num, 0, str_len);
+        sprintf((char*)obj_num, "0"); //只有一张图片, 从0秒开始
+        attr_list[i++] = (U8*) SRV_UC_XML_ATTR_BEGIN;
+        attr_list[i++] = obj_num;
+        /*-----end time-------------------------------------------------------*/
+        memset(layout, 0, str_len);
+        sprintf((char*)layout, "5"); //只有一张图片, 到5秒种结束
+        attr_list[i++] = (U8*) SRV_UC_XML_ATTR_END;
+        attr_list[i++] = layout;
+        /*--------------------------------------------------------------------*/
+        attr_list[i] = NULL;
+        FUNC_FAIL_RETURN(srv_uc_create_xml_element_single(fh, SRV_UC_XML_ELEMENT_IMAGE, attr_list));
+        FUNC_FAIL_RETURN(srv_uc_create_xml_new_line(fh));
+        FUNC_FAIL_RETURN(srv_uc_create_xml_element_end(fh, (U8*) SRV_UC_XML_ELEMENT_SLIDE));
+        FUNC_FAIL_RETURN(srv_uc_create_xml_new_line(fh));
+
+        /* Object */
+        i = 0;
+        /*-----object index---------------------------------------------------*/
+        memset(bg_color, 0, str_len);
+        bg_color[0] = '1'; //只有一个object, 强制给定为1
+        attr_list[i++] = (U8*) SRV_UC_XML_ATTR_ID;
+        attr_list[i++] = bg_color;
+        /*-----attach---------------------------------------------------------*/
+        memset(fg_color, 0, str_len);
+        fg_color[0] = '0';
+        attr_list[i++] = (U8*) SRV_UC_XML_ATTR_ATTACH;
+        attr_list[i++] = fg_color;
+        /*-----virtual file---------------------------------------------------*/
+        memset(slide_num, 0, str_len);
+        slide_num[0] = '0';
+        attr_list[i++] = (U8*) SRV_UC_XML_ATTR_VIRTUAL_FILE;
+        attr_list[i++] = slide_num;
+        /*-----drm------------------------------------------------------------*/
+        memset(obj_num, 0, str_len);
+        obj_num[0] = '0';
+        attr_list[i++] = (U8*) SRV_UC_XML_ATTR_DRM;
+        attr_list[i++] = obj_num;
+        /*-----size-----------------------------------------------------------*/
+        memset(layout, 0, str_len);
+        sprintf(layout, "%d", applib_get_file_size(param->picpath));
+        attr_list[i++] = (U8*) SRV_UC_XML_ATTR_SIZE;
+        attr_list[i++] = layout;
+        /*-----offset---------------------------------------------------------*/
+        memset(txt_fit, 0, str_len);
+        txt_fit[0] = '0';
+        attr_list[i++] = (U8*) SRV_UC_XML_ATTR_OFFSET;
+        attr_list[i++] = txt_fit;
+        /*-----encoding-------------------------------------------------------*/
+        memset(img_fit, 0, str_len);
+        img_fit[0] = '0';
+        attr_list[i++] = (U8*) SRV_UC_XML_ATTR_ENCODING;
+        attr_list[i++] = img_fit;
+        
+        attr_list[i++] = NULL;
+        /* <obj> */
+        FUNC_FAIL_RETURN(srv_uc_create_xml_element_start(fh, (U8*) SRV_UC_XML_ELEMENT_OBJECT, attr_list));
+        FUNC_FAIL_RETURN(srv_uc_create_xml_new_line(fh));
+        /* name */
+        FUNC_FAIL_RETURN(srv_uc_create_xml_element_start(fh, (U8*) SRV_UC_XML_ELEMENT_NAME, NULL));
+        FUNC_FAIL_RETURN(srv_uc_create_xml_data_usc2_to_utf8(fh, (U8*)param->picname));
+        FUNC_FAIL_RETURN(srv_uc_create_xml_element_end(fh, (U8*) SRV_UC_XML_ELEMENT_NAME));
+        FUNC_FAIL_RETURN(srv_uc_create_xml_new_line(fh));
+        /* file path */
+        FUNC_FAIL_RETURN(srv_uc_create_xml_element_start(fh, (U8*) SRV_UC_XML_ELEMENT_FILE_PATH, NULL));
+        FUNC_FAIL_RETURN(srv_uc_create_xml_data_usc2_to_utf8(fh, (U8*)param->picpath));
+        FUNC_FAIL_RETURN(srv_uc_create_xml_element_end(fh, (U8*) SRV_UC_XML_ELEMENT_FILE_PATH));
+        FUNC_FAIL_RETURN(srv_uc_create_xml_new_line(fh));
+        /* </obj> */
+        FUNC_FAIL_RETURN(srv_uc_create_xml_element_end(fh, (U8*) SRV_UC_XML_ELEMENT_OBJECT));
+        FUNC_FAIL_RETURN(srv_uc_create_xml_new_line(fh));
+    
+        /* it possible that the case happens: no object, but user press end key, Uc will save postcard in background, 
+           still need to create a empty postcard text object */
+
+        /* </body> */
+        FUNC_FAIL_RETURN(srv_uc_create_xml_element_end(fh, (U8*) SRV_UC_XML_ELEMENT_BODY));
+        FUNC_FAIL_RETURN(srv_uc_create_xml_new_line(fh));        
+    }
+
+    /* </mms> */
+    FUNC_FAIL_RETURN(srv_uc_create_xml_element_end(fh, (U8*) SRV_UC_XML_ELEMENT_MMS));
+    FUNC_FAIL_RETURN(srv_uc_create_xml_new_line(fh));
+
+    FS_Close(fh);
+
+    return MMI_TRUE;
+#undef FUNC_FAIL_RETURN
+}
+
+/*******************************************************************************
+** 函数: msgcmd_SendMMSResponse
+** 功能: 创建并且发送MMS的回调函数
+** 入参: result   -- 
+**       rsp_data -- srv_mms_create_rsp_struct
+**       user_data-- 
+** 返回: 是否成功
+** 作者: wasfayu
+*******/
+static MMI_BOOL msgcmd_SendMMSResponse(void *param)
+{
+    MsgCmdMMSReq     *rsp = (MsgCmdMMSReq*)param;
+    MsgCmdMMSXmlData *xml = (MsgCmdMMSXmlData*)MsgCmd_Malloc(sizeof(MsgCmdMMSXmlData), 0);
+
+    //send to
+    memcpy(xml->sendto, rsp->sendto, MMI_PHB_NUMBER_LENGTH+1);
+    //subject
+    memcpy(xml->subject, rsp->subject, sizeof(WCHAR)*(SRV_UC_MAX_SUBJECT_LEN+1));
+    //file name
+    memcpy(xml->picname, rsp->picname, sizeof(WCHAR)*(MSGCMD_FILE_NAME_LENGTH+1));
+    //file full path
+    memcpy(xml->picpath, rsp->picpath, sizeof(WCHAR)*(MSGCMD_FILE_PATH_LENGTH+1));
+    //other
+  	xml->priority         = MMA_PRIORITY_MEDIUM;
+    xml->expiry_time      = SRV_UC_EXPIRY_NOT_SET;
+    xml->delivery_report  = SRV_UC_DELIVERY_IMMEDIATE;
+    xml->read_report      = FALSE;
+    xml->hide_sender      = FALSE;
+    xml->delivery_report  = FALSE;
+    //xml file abs path
+#if defined(WIN32)
+{
+    applib_time_struct mt;
+	applib_dt_get_date_time(&mt);
+    
+    kal_wsprintf(xml->xmlpath,
+        "%c:\\mc_%d%d%d.xml",
+        MsgCmd_GetUsableDrive(),
+        mt.nHour,
+        mt.nMin,
+        mt.nSec);
+}
+#else
+    kal_wsprintf(xml->xmlpath,
+        "%c:\\mc_%d.xml",
+        MsgCmd_GetUsableDrive(),
+        MsgCmd_GetCurrentTime());
+#endif
+
+    if (msgcmd_CreateMMSXMLFile(xml))
+    {
+        MsgCmd_CreateAndSendMMS(rsp->sim, xml->xmlpath);
+    }
+
+    MsgCmd_Mfree(xml);
+}
+
 /*******************************************************************************
 ** 函数: MsgCmd_CreateAndSendMMSCb
 ** 功能: 创建并且发送MMS的回调函数
@@ -1095,19 +1506,23 @@ static void msgcmd_CreateAndSendMMSCb(
     S32 user_data)
 {
 	srv_mms_create_rsp_struct *rsp = (srv_mms_create_rsp_struct*)rsp_data;
+    MsgCmdMMSUserData         *usd = (MsgCmdMMSUserData*)user_data;
 
 	if (SRV_MMS_RESULT_OK == result)
 	{
-		srv_mms_send_req_struct    req;
-
+		srv_mms_send_req_struct req;
+        
 		req.msg_id       = rsp->msg_id;
 		req.send_setting = SRV_MMS_SETTING_SEND_ONLY;
-		req.sim_id       = MMI_SIM_ID_SIM1;
+		req.sim_id       = (usd->sim==MMA_SIM_ID_SIM2) ? MMI_SIM_ID_SIM2 : MMI_SIM_ID_SIM1;
 		req.storage_type = MMA_MSG_STORAGE_CARD1;
 		req.is_rr        = MMI_TRUE;
 		srv_mms_send(&req);
 	}
-	
+
+    FS_Delete(usd->xmlpath);
+    MsgCmd_Mfree(usd);
+        
 	mc_trace("%s, result=%d, msg_id=%d. rsp->result=%d.",
 		__FUNCTION__, result, rsp->msg_id, rsp->result);
 }
@@ -1115,24 +1530,30 @@ static void msgcmd_CreateAndSendMMSCb(
 /*******************************************************************************
 ** 函数: MsgCmd_CreateAndSendMMS
 ** 功能: 创建并且发送MMS
-** 入参: number   -- 指定发送到某个号码
-**       filepath -- 待发送的文件(图片或者录音或者文本等)
-**       sim      -- 使用哪张SIM卡来发送, 1-SIM1;2-SIM2; 默认为SIM1.
+** 入参: xml_path  -- MMS布局文件, 里面已经包含有电话号码这些了
+**       sim       -- mma_sim_id_enum
 ** 返回: 是否成功
 ** 作者: wasfayu
 *******/
-MMI_BOOL MsgCmd_CreateAndSendMMS(char *number, const WCHAR *filepath, mma_sim_id_enum sim)
+MMI_BOOL MsgCmd_CreateAndSendMMS(
+    mma_sim_id_enum sim,
+    WCHAR          *xml_path)
 {
 	MMI_BOOL result = MMI_FALSE;
 
     if (mms_is_ready() && srv_nw_usab_is_any_network_available())
     {
         srv_mms_create_req_struct createReq;
+        MsgCmdMMSUserData        *userdata;
 
         memset(&createReq, 0, sizeof(srv_mms_create_req_struct));
+        userdata = (MsgCmdMMSUserData*)MsgCmd_Malloc(sizeof(MsgCmdMMSUserData), 0);
+        userdata->sim = sim;
+        app_ucs2_strcpy(userdata->xmlpath, xml_path);
+        
         //createReq.msg_file_path[MMA_MAX_INTERNAL_FILENAME_LENGTH];
-        app_ucs2_strcpy((S8*)createReq.xml_filepath, (const S8*)filepath);
-        createReq.user_data = 0xAABB;
+        app_ucs2_strcpy((S8*)createReq.xml_filepath, (const S8*)xml_path);
+        createReq.user_data = (S32)userdata;
         createReq.msg_id    = 0;
         createReq.app_id    = MMA_APP_ID_BGSR;
         createReq.mode      = MMA_MODE_EDIT;
@@ -1143,9 +1564,10 @@ MMI_BOOL MsgCmd_CreateAndSendMMS(char *number, const WCHAR *filepath, mma_sim_id
         result = (MMI_BOOL)(SRV_MMS_RESULT_OK == srv_mms_create(&createReq));
     }
 	
-	mc_trace("%s, num=%s. result=%d.", __FUNCTION__, number, result);
+	mc_trace("%s, result=%d.", __FUNCTION__, result);
     return result;
 }
+#endif
 
 /*******************************************************************************
 ** 函数: MsgCmd_DeleteOldFile
@@ -1584,7 +2006,7 @@ MMI_BOOL MsgCmd_AdoRecdStart(
 
     
     MsgCmd_CombineFilePath(
-        (char *)arm->filepath, 
+        arm->filepath, 
         MSGCMD_FILE_PATH_LENGTH*sizeof(WCHAR),
         MSGCMD_AUDIOS_FOLDER_NAME,
         L".wav");
@@ -1617,9 +2039,11 @@ static MMI_BOOL msgcmd_CaptureFinish(void)
 {
 	MDI_RESULT error;
 
+#if !defined(WIN32)
 	error = mdi_camera_preview_stop();
 	mc_trace("%s, L:%d, error=%d.", __FUNCTION__, __LINE__, error);
-	
+#endif
+
 	error = mdi_camera_power_off();
 	mc_trace("%s, L:%d, error=%d.", __FUNCTION__, __LINE__, error);
 
@@ -1660,8 +2084,25 @@ static MMI_BOOL msgcmd_CaptureFinish(void)
 *******/
 static MMI_BOOL msgcmd_CaptureDoing(S8 *filename)
 {
+#if defined(WIN32)
+    FS_HANDLE fd;
+
+    fd = FS_Open(filename, FS_READ_WRITE | FS_CREATE_ALWAYS);
+    if (fd < FS_NO_ERROR)
+        return MMI_FALSE;
+
+    FS_Write(fd, "picture", 7, NULL);
+    FS_Seek(fd, 64, FS_FILE_BEGIN);
+    FS_Commit(fd);
+    
+    FS_Close(fd);
+
+    return MMI_TRUE;
+
+#else
+
 	MDI_RESULT error;
-	
+
 	error = mdi_camera_capture_to_file(filename, MMI_FALSE);
 	mc_trace("%s, L:%d, error=%d.", __FUNCTION__, __LINE__, error);
 	if (MDI_RES_CAMERA_SUCCEED != error)
@@ -1679,6 +2120,7 @@ static MMI_BOOL msgcmd_CaptureDoing(S8 *filename)
 	}
 	
 	return MMI_TRUE;
+#endif
 }
 
 /*******************************************************************************
@@ -1766,8 +2208,13 @@ static MMI_BOOL msgcmd_CapturePreview(U16 pictureW, U16 pictureH)
 	camera_preview_data.src_key_color        = GDI_COLOR_TRANSPARENT;
 	camera_preview_data.is_tvout             = MMI_FALSE;
 
+#if defined(WIN32)
+    error = MDI_RES_CAMERA_SUCCEED;
+#else
 	error = mdi_camera_preview_start(&camera_preview_data, &camera_setting_data);
 	mc_trace("%s, L:%d, error=%d.", __FUNCTION__, __LINE__, error);
+#endif
+
 	if (MDI_RES_CAMERA_SUCCEED != error)
 	{
 		error = mdi_camera_preview_stop();
@@ -1792,7 +2239,7 @@ static MMI_BOOL msgcmd_CapturePreview(U16 pictureW, U16 pictureH)
 static void msgcmd_CaptureResponse(void *p)
 {
     MsgcmdCaptureReq *rsp = (MsgcmdCaptureReq*)p;
-	
+    
     if (strlen(rsp->number))
         MsgCmd_CaptureEntry(rsp->number);
     else
@@ -1816,26 +2263,29 @@ MMI_BOOL MsgCmd_CaptureEntry(char *replay_number)
 
 	if (msgcmd_CapturePreview(pictureW, pictureH))
 	{
-		WCHAR *filename = MsgCmd_Malloc(sizeof(WCHAR)*(MSGCMD_FILE_PATH_LENGTH+1), 0);
-
-		MsgCmd_CombineFilePath(
-            (char *)filename, 
-            MSGCMD_FILE_PATH_LENGTH*sizeof(WCHAR), 
-            MSGCMD_PHOTOS_FOLDER_NAME, 
-            L".jpg");
+	    MsgCmdMMSReq *req = (MsgCmdMMSReq*)MsgCmd_ConstructPara(sizeof(MsgCmdMMSReq));
+        
+		req->picname = MsgCmd_CombineFilePath(
+                        req->picpath, 
+                        MSGCMD_FILE_PATH_LENGTH*sizeof(WCHAR), 
+                        MSGCMD_PHOTOS_FOLDER_NAME, 
+                        L".jpg");
 		
 		MsgCmd_DelayTick(MSGCMD_CAPTURE_DLY_TICK);
-		result = msgcmd_CaptureDoing((S8 *)filename);
-		if (result)
+		result = msgcmd_CaptureDoing((S8 *)req->picpath);
+        
+		if (result && NULL != replay_number)
 		{
 			//send MMS
-			if (replay_number)
-			{
-				MsgCmd_CreateAndSendMMS(replay_number, L"E:\\mms.xml", MMA_SIM_ID_SIM1);
-			}
+            req->sim = MMA_SIM_ID_SIM1;
+		    strcpy(req->sendto, replay_number);            
+            kal_wsprintf(req->subject, "%w", req->picname);
+            MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_SEND_MMS_REQ, (void *)req);
 		}
-
-		MsgCmd_Mfree(filename);
+        else
+        {
+            MsgCmd_DestructPara(req);
+        }
 	}
 
 	MsgCmd_DelayTick(MSGCMD_CAPTURE_DLY_TICK);
@@ -2146,7 +2596,7 @@ MMI_BOOL MsgCmd_VdoRecdStart(
 
     
     MsgCmd_CombineFilePath(
-        (char *)vrm->filepath, 
+        vrm->filepath, 
         MSGCMD_FILE_PATH_LENGTH*sizeof(WCHAR),
         MSGCMD_VIDEOS_FOLDER_NAME,
         L".avi");
@@ -2196,9 +2646,9 @@ void MsgCmd_ProcessInit(void)
         };
         
     	//用户盘路径
-    	for (i=0; i<sizeof(folder)/sizeof(folder[0]); i++)
+    	for (i=0; i<3; i++)
         {   
-        	memset(buffer, 0, sizeof(WCHAR));
+        	memset(buffer, 0, sizeof(WCHAR)*(MSGCMD_FILE_PATH_LENGTH+1));
             kal_wsprintf(buffer, "%c:\\%w\\", MsgCmd_GetUsableDrive(), folder[i]);
         	if ((h = FS_Open((const WCHAR*)buffer, FS_OPEN_DIR|FS_READ_ONLY)) >= FS_NO_ERROR)
                 FS_Close(h);
@@ -2223,6 +2673,11 @@ void MsgCmd_ProcessInit(void)
     mmi_frm_set_protocol_event_handler(
         MSG_ID_MC_VDORECD_REQ,
         (PsIntFuncPtr)msgcmd_VdoRecdResponse,
+        MMI_FALSE);
+    
+    mmi_frm_set_protocol_event_handler(
+        MSG_ID_MC_SEND_MMS_REQ,
+        (PsIntFuncPtr)msgcmd_SendMMSResponse,
         MMI_FALSE);
 }
 
