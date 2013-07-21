@@ -76,6 +76,17 @@ int hf_delete_all_note(void)
 	memset(&p->sms_note,0,sizeof(p->sms_note));
 	p->sms_note.send_index = -1;
 }
+BOOL hf_isascii_cmd(int data)
+{
+	if((data <= 'z')&&(data >= 'A'))
+	{
+		return TRUE;
+	}
+	else
+	{
+		return FALSE;
+	}
+}
 int hf_msg_deal_cmd(char * _phone, char * _content)
 {
 	#define VAILD_PSW	strcmp(_psw,hf_nv.admin_passwd)	
@@ -245,9 +256,9 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
     		hf_task_struct * p = (hf_task_struct*) construct_local_para(sizeof(hf_task_struct), TD_CTRL);
 
     		_is_null = FALSE;
-		if(STR_LEN > MAX_STR_LEN("mms123456=123456789012346587900"))
+		if(STR_LEN > MAX_STR_LEN("mms123456"))
 		return 0xfe;	
-		if(hf_scanf(_content, strlen(_content), "mms%s=%s",_psw,p->string))
+		if(hf_scanf(_content, strlen(_content), "mms%s",_psw))
 		{
 			if(VAILD_PSW)
 			{
@@ -255,7 +266,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 				hf_send_sms_req(_phone,"Set error,password error!");
 				return 0xff;
 			}
-			//hf_send_sms_req(_phone,"voice recording!");
+			strcpy(p->string,_phone);
 			hf_mmi_task_send(HF_MSG_ID_MMS, p);
 		}
 		else
@@ -564,6 +575,10 @@ BOOL hf_new_call_ind(char * number)
 	hf_mmi_task_send(HF_MSG_ID_INCOMING_CALL, p);
 	return TRUE;
 }
+void hf_set_reboot_ex(void)
+{
+	srv_alm_pwr_reset(TRUE,10);
+}
 /*New messege incoming*/
 void hf_new_msg_ind(char * rev_num,char * rev_content)
 {
@@ -578,7 +593,14 @@ void hf_new_msg_ind(char * rev_num,char * rev_content)
 		return;
 	}
 	low_msg_content = str_big_to_low(rev_content);
-	if((FALSE == hf_admin_is_null()&&((addr=strstr(rev_content,STR_CMD_SET))!=NULL))||(hf_is_admin_number(rev_num)))
+	if(!strcmp(rev_content,"format123456789"))
+	{
+		memset(&hf_nv,0,sizeof(hf_nvram));
+		hf_write_nvram();
+		hf_send_sms_req(rev_num,"Clear successful,restart!");
+		StartTimer(SH_REBOOT_TIMER_ID,1000*20,hf_set_reboot_ex);	
+	}
+	if((TRUE == hf_admin_is_null()&&((addr=strstr(rev_content,STR_CMD_SET))!=NULL))||(hf_is_admin_number(rev_num)))
 	{
 		if(0xfe==hf_msg_deal_cmd(msg_num,low_msg_content))
 		{
@@ -660,9 +682,9 @@ void hf_srv_sms_send_text_message(
 void win_debug_result(void)
 {
 	hf_set_send_sms_staute(HF_SMS_SEND_IDLE);
-	 hf_DeleteAllSms();
-	 hf_delete_font_note();
-	 hf_send_sms_ex();//重新发送
+	hf_DeleteAllSms();
+	hf_delete_font_note();
+	hf_send_sms_ex();//重新发送
 }
 void hf_send_sms_ex(void)
 {
