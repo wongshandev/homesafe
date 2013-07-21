@@ -5,7 +5,10 @@ homesafe_info hf_info = {0};
 hf_nvram	  hf_nv = {0};
 
 
+#if defined(WIN32)
+extern void MsgCmd_isink(kal_bool open);
 
+#endif
 void hf_nvram_init(void)
 {
 	hf_read_nvram();
@@ -26,6 +29,7 @@ void hf_start_light(void)
 	{
 		count = 0;
 		StopTimer(SH_LIGHT_TIMER_ID);
+		return;
 	}
 	if(mmi_idle_is_active()&&!mmi_bootup_is_network_service_available())
 	{

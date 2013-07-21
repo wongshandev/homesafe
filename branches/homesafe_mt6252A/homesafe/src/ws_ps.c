@@ -230,6 +230,10 @@ fail:
 
 #if defined(SF_WRITE_FS)
 #include "DateTimeType.h"
+
+#if defined(WIN32)
+extern S32 MsgCmd_GetUsableDrive(void);
+#endif
 #define FILE_BUF_SIZE	5*1024
 static S8 log_is_enable = 0;
 static U32 max_file_size = 50;
