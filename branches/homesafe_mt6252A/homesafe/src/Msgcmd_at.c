@@ -229,7 +229,7 @@ static void at_shutdown(AtParam_t *vp)
         {
             U32 dly = atoi(vp->argv[0].pos);
             
-            srv_shutdown_normal_start(SRV_BOOTUP_MODE_NORMAL);
+            MsgCmd_ShutdownExt(dly);
         }
         break;
         
@@ -243,8 +243,11 @@ static void at_shutdown(AtParam_t *vp)
         break;
         
     case AT_EM_READ:
+        at_replay(MMI_TRUE, "reboot is %sactived.", MsgCmd_RebootAcitved() ? "" : "not ");
+		break;
+		
     case AT_EM_ACTIVE:
-        vp->result = AT_RST_NOT_SUPPORT;
+		MsgCmd_ShutdownExt(1);
         break;
         
     default:
@@ -291,8 +294,11 @@ static void at_reboot(AtParam_t *vp)
         break;
         
     case AT_EM_READ:
+		at_replay(MMI_TRUE, "shutdown is %sactived.", MsgCmd_ShutdownAcitved() ? "" : "not ");
+		break;
+		
     case AT_EM_ACTIVE:
-        vp->result = AT_RST_NOT_SUPPORT;
+		MsgCmd_RebootExt(1);
         break;
         
     default:

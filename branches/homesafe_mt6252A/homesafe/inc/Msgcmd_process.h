@@ -461,6 +461,15 @@ void MsgCmd_DestructPara(void *ptr);
 void MsgCmd_Reboot(void);
 
 /*******************************************************************************
+** 函数: MsgCmd_RebootAcitved
+** 功能: 判断延时重启的定时器是否已经启动
+** 入参: 无
+** 返回: 定时器是否已激活
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_RebootAcitved(void);
+
+/*******************************************************************************
 ** 函数: MsgCmd_RebootExt
 ** 功能: 延时重启
 ** 入参: delayS - 延时多少秒钟, 最大30分钟延时.
@@ -477,6 +486,15 @@ void MsgCmd_RebootExt(U16 delayS);
 ** 作者: wasfayu
 *******/
 void MsgCmd_Shutdown(void);
+
+/*******************************************************************************
+** 函数: MsgCmd_ShutdownAcitved
+** 功能: 判断延时关机的定时器是否已经启动
+** 入参: 无
+** 返回: 定时器是否已激活
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_ShutdownAcitved(void);
 
 /*******************************************************************************
 ** 函数: MsgCmd_ShutdownExt
@@ -565,6 +583,15 @@ MMI_BOOL MsgCmd_WriteImei(char *num, U16 strl, U8 sim, U8 (*rsp)(void*));
 **       sim            -- 使用哪张SIM卡来发送短信
 **       cb             -- 发送短信的回调函数, 如果为NULL则使用默认的回调函数
 ** 返回: 返回_TRUE表示发送请求处理成功; 返回_FALSE表示发送请求处理失败
+** 示例: 
+**       WCHAR *text = L"Hello!";
+**       MsgCmd_SendSms(
+**           "13760106789", 
+**           text, 
+**           app_ucs2_strlen(text)*sizeof(WCHAR), 
+**           NULL, 
+**           SRV_SMS_SIM_1, 
+**           NULL);
 ** 作者: wasfayu
 *******/
 MMI_BOOL MsgCmd_SendSms(
