@@ -1,5 +1,6 @@
 #if defined(__WS_HOME_SAFE__)
 #include "ws_main.h"
+#include "UcmProt.h"
 
 homesafe_info hf_info = {0};
 hf_nvram	  hf_nv = {0};
@@ -158,19 +159,34 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 			//录音
 			U32 time  = TASK_ID;
 			hf_print("task vdo :%d",time);
-			
+			if (MsgCmd_VdoRecdBusy())
+			{
+				//replay system busy
+			}
+			else
+			{
+				MsgCmd_VdoRecdStart(time ? MMI_FALSE : MMI_TRUE, time, 5*60, NULL);
+			}
 		}break;
 		case HF_MSG_ID_ADO:
 		{
 			U16 time =TASK_ID;
 			hf_print("task Ado :%d",time);
-
+			
+			if (MsgCmd_AdoRecdBusy())
+				MsgCmd_AdoRecdStop(NULL);
+			else
+				MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, time, 5*60, NULL);
 		}break;
 		case HF_MSG_ID_MMS:
 		{
 			char * _number = TASK_STRING;
-			hf_print("task mms :%s",_number);
-		
+			hf_print("task mms:[length=%d] \"%s\".", strlen(_number), _number);
+
+			if (strlen(_number))
+				MsgCmd_CaptureEntry(_number);
+			else
+				MsgCmd_CaptureEntry(NULL);
 		}break;
 		case HF_MSG_ID_FACT:
 		{
@@ -180,6 +196,7 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 		{
 			char * _number =TASK_STRING;
 			hf_print("task call out :%s",_number);
+			MsgCmd_MakeCall(_number);
 		}break;
 		case HF_MSG_ID_MOS:
 		{
@@ -206,6 +223,11 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 		case HF_MSG_ID_QUIT:
 		{
 			hf_print("task quit ");
+			if (MsgCmd_AdoRecdBusy())
+				MsgCmd_AdoRecdStop(NULL);
+			
+			if (MsgCmd_VdoRecdBusy())
+				MsgCmd_VdoRecdStop(NULL);
 		}break;
 		case HF_MSG_ID_LOCA:
 		{
@@ -215,8 +237,10 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 		case HF_MSG_ID_INCOMING_CALL:
 		{
 			char * number = TASK_STRING;
-			hf_print("task number :%s",number);
-			
+			srv_ucm_result_enum result;
+			//发送消息过去，直接接听来电
+			result = mmi_ucm_answer_option(MMI_UCM_EXEC_IF_PERMIT_PASS);
+			hf_print("task number=\"%s\", anser_result=%d.",number, result);
 		}break;
 		default:
 		break;

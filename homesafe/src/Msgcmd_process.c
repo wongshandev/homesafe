@@ -768,6 +768,18 @@ void MsgCmd_Reboot(void)
 }
 
 /*******************************************************************************
+** 函数: MsgCmd_RebootAcitved
+** 功能: 判断延时重启的定时器是否已经启动
+** 入参: 无
+** 返回: 定时器是否已激活
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_RebootAcitved(void)
+{
+	return IsMyTimerExist(MSGCMD_TIMER_REBOOT);
+}
+
+/*******************************************************************************
 ** 函数: MsgCmd_RebootExt
 ** 功能: 延时重启
 ** 入参: delayS - 延时多少秒钟, 最大30分钟延时.
@@ -796,6 +808,18 @@ void MsgCmd_RebootExt(U16 delayS)
 void MsgCmd_Shutdown(void)
 {
     srv_shutdown_normal_start(SRV_BOOTUP_MODE_NORMAL);
+}
+
+/*******************************************************************************
+** 函数: MsgCmd_ShutdownAcitved
+** 功能: 判断延时关机的定时器是否已经启动
+** 入参: 无
+** 返回: 定时器是否已激活
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_ShutdownAcitved(void)
+{
+	return IsMyTimerExist(MSGCMD_TIMER_SHUTDOWN);
 }
 
 /*******************************************************************************
@@ -1101,6 +1125,15 @@ static void msgcmd_SendSmsCallback(srv_sms_callback_struct* pcbd)
 **       sim            -- 使用哪张SIM卡来发送短信
 **       cb             -- 发送短信的回调函数, 如果为NULL则使用默认的回调函数
 ** 返回: 返回_TRUE表示发送请求处理成功; 返回_FALSE表示发送请求处理失败
+** 示例: 
+**       WCHAR *text = L"Hello!";
+**       MsgCmd_SendSms(
+**           "13760106789", 
+**           text, 
+**           app_ucs2_strlen(text)*sizeof(WCHAR), 
+**           NULL, 
+**           SRV_SMS_SIM_1, 
+**           NULL);
 ** 作者: wasfayu
 *******/
 MMI_BOOL MsgCmd_SendSms(
@@ -1549,7 +1582,7 @@ MMI_BOOL MsgCmd_CreateAndSendMMS(
         memset(&createReq, 0, sizeof(srv_mms_create_req_struct));
         userdata = (MsgCmdMMSUserData*)MsgCmd_Malloc(sizeof(MsgCmdMMSUserData), 0);
         userdata->sim = sim;
-        app_ucs2_strcpy(userdata->xmlpath, xml_path);
+        app_ucs2_strcpy((S8*)userdata->xmlpath, (const S8*)xml_path);
         
         //createReq.msg_file_path[MMA_MAX_INTERNAL_FILENAME_LENGTH];
         app_ucs2_strcpy((S8*)createReq.xml_filepath, (const S8*)xml_path);
