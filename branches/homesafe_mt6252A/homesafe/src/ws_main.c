@@ -1,5 +1,6 @@
 #if defined(__WS_HOME_SAFE__)
 #include "ws_main.h"
+#include "./../inc/Msgcmd_process.h"
 #include "UcmProt.h"
 
 homesafe_info hf_info = {0};
@@ -16,6 +17,10 @@ void hf_nvram_init(void)
 	if(strlen(hf_nv.admin_passwd) == 0)
 	{
 		strcpy(hf_nv.admin_passwd,"123456");
+    #if defined(__MSGCMD_SUPPORT__)
+        MsgCmd_SetAdoRecdDefArgs(&hf_nv.ado);
+        MsgCmd_SetVdoRecdDefArgs(&hf_nv.vdo);
+    #endif	
 	}
 	hf_print("hf_nvram_init,admin[%s %s %s %s %s %s ],psw[%s]",hf_nv.admin_number[0],hf_nv.admin_number[1],hf_nv.admin_number[2],
 															hf_nv.admin_number[3],hf_nv.admin_number[4],hf_nv.admin_number[5],hf_nv.admin_passwd);
@@ -120,6 +125,64 @@ void hf_get_base_loc_rsp(void *info)
 	 free_peer_buff(msg->info);
 	 return;
 }
+#if defined(__MSGCMD_SUPPORT__)
+/*******************************************************************************
+** 函数: MsgCmd_SetAdoRecdDefArgs
+** 功能: 设置默认的录音参数
+** 参数: obj -- 被设置的目标
+** 返回: 无
+** 作者: wasfayu
+*******/
+void MsgCmd_SetAdoRecdDefArgs(MsgCmdRecdArg *obj)
+{
+    obj->ignore_time = MSGCMD_ADO_IGNORE_TIME;
+    obj->ignore_size = MSGCMD_ADO_IGNORE_SIZE;
+    obj->save_gap    = MSGCMD_ADO_AUTO_SAVE_GAP;
+    obj->min_time    = MSGCMD_ADO_RECD_TIME_MIN;
+    obj->int_check   = MSGCMD_ADO_INT_CHECK_TIME;
+}
+
+/*******************************************************************************
+** 函数: MsgCmd_SetVdoRecdDefArgs
+** 功能: 设置默认的录音参数
+** 参数: obj -- 被设置的目标
+** 返回: 无
+** 作者: wasfayu
+*******/
+void MsgCmd_SetVdoRecdDefArgs(MsgCmdRecdArg *obj)
+{
+    obj->ignore_time = MSGCMD_VDO_IGNORE_TIME;
+    obj->ignore_size = MSGCMD_VDO_IGNORE_SIZE;
+    obj->save_gap    = MSGCMD_VDO_AUTO_SAVE_GAP;
+    obj->min_time    = MSGCMD_VDO_RECD_TIME_MIN;
+    obj->int_check   = MSGCMD_VDO_INT_CHECK_TIME;
+}
+
+/*******************************************************************************
+** 函数: MsgCmd_GetAdoRecdArgs
+** 功能: 获取录音的参数地址
+** 参数: 无
+** 返回: 录音参数地址
+** 作者: wasfayu
+*******/
+MsgCmdRecdArg *MsgCmd_GetAdoRecdArgs(void)
+{
+    return &hf_nv.ado;
+}
+
+/*******************************************************************************
+** 函数: MsgCmd_GetVdoRecdArgs
+** 功能: 获取录像的参数地址
+** 参数: 无
+** 返回: 录像参数地址
+** 作者: wasfayu
+*******/
+MsgCmdRecdArg *MsgCmd_GetVdoRecdArgs(void)
+{
+    return &hf_nv.vdo;
+}
+#endif
+
 void hf_get_base_loc_req(void)
 {
 	MYQUEUE Message;
