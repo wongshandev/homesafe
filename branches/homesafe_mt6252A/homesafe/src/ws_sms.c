@@ -2,16 +2,15 @@
 #include "ws_sms.h"
 #include "smssrvgprot.h"
 
-
+extern void srv_alm_pwr_reset(MMI_BOOL pwr_off, U8 sec);
+extern void hf_get_base_loc_req(void);
 extern hf_nvram	  hf_nv;
 extern homesafe_info hf_info;
 extern void hf_mmi_task_send(msg_type msg_id, hf_task_struct *local_param_ptr);
-void hf_set_send_sms_staute(ENUM_SEND_STATUE _statue);
-ENUM_SEND_STATUE hf_get_send_sms_staute(void);
-
-
 void hf_send_sms_ex(void);
 MMI_BOOL hf_get_loc_cb_ex(rr_em_lai_info_struct *pInData);
+void hf_set_send_sms_staute(ENUM_SEND_STATUE _statue);
+ENUM_SEND_STATUE hf_get_send_sms_staute(void);
 
 
 hf_sms_struct hf_sms = {0};   
@@ -57,7 +56,7 @@ int hf_delete_font_note(void)
 {
 	int i,v;
 	hf_sms_struct *p = &hf_sms;
-	if(p->sms_note.send_index < 0) return;
+	if(p->sms_note.send_index < 0) return FALSE;
 
 	for(i=0,v=0;i<p->sms_note.send_index;i++)
 	{
@@ -75,6 +74,7 @@ int hf_delete_all_note(void)
 	hf_sms_struct *p = &hf_sms;
 	memset(&p->sms_note,0,sizeof(p->sms_note));
 	p->sms_note.send_index = -1;
+	return 1;
 }
 BOOL hf_isascii_cmd(int data)
 {
@@ -218,6 +218,10 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 				hf_send_sms_req(_phone,"set error,password error!");
 				return 0xff;
 			}
+			if(p->id > MAX_LENTH_REC_TIME)
+			{
+				p->id=0;
+			}
 			hf_send_sms_req(_phone,"Video recording!");
 			hf_mmi_task_send(HF_MSG_ID_ADO, p);
 		}
@@ -242,7 +246,10 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 				hf_send_sms_req(_phone,"Set error,password error!");
 				return 0xff;
 			}
-			hf_send_sms_req(_phone,"voice recording!");
+			if(p->id > MAX_LENTH_REC_TIME)
+			{
+				p->id=0;
+			}			hf_send_sms_req(_phone,"voice recording!");
 			hf_mmi_task_send(HF_MSG_ID_VDO, p);
 		}
 		else
@@ -267,6 +274,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 				return 0xff;
 			}
 			strcpy(p->string,_phone);
+			hf_send_sms_req(_phone,"mms ok!Please waiting!");
 			hf_mmi_task_send(HF_MSG_ID_MMS, p);
 		}
 		else
@@ -290,10 +298,8 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 				hf_send_sms_req(_phone,"Set error,password error!");
 				return 0xff;
 			}
-			//hf_send_sms_req(_phone,"voice recording!");
 			if(strlen(_psw_v) == 6 )
 			{
-				//hf_mmi_task_send(HF_MSG_ID_PWD, (void *)_number);
 				strcpy(hf_nv.admin_passwd,_psw_v);
 				hf_write_nvram();
 				hf_send_sms_req(_phone,"Set password successfully!");	
@@ -337,9 +343,9 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
     		hf_task_struct * p = (hf_task_struct*) construct_local_para(sizeof(hf_task_struct), TD_CTRL);
 
     		_is_null = FALSE;
-		if(STR_LEN > MAX_STR_LEN("call123456=012345678901234567891"))
+		if(STR_LEN > MAX_STR_LEN("call123456"))
 		return 0xfe;	
-		if(hf_scanf(_content, strlen(_content), "call%s=%s",_psw,p->string))
+		if(hf_scanf(_content, strlen(_content), "call%s",_psw))
 		{
 			if(VAILD_PSW)
 			{
@@ -347,6 +353,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 				hf_send_sms_req(_phone,"Set error,password error!");
 				return 0xff;
 			}
+			strcpy(p->string,_phone);
 			//hf_send_sms_req(_phone,"Restore factory mode OK!");
 			hf_mmi_task_send(HF_MSG_ID_CALL, p);
 		}
@@ -485,8 +492,8 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 				return 0xff;
 			}
 			hf_info.hf_loc.cb = hf_get_loc_cb_ex;
+			strcpy(hf_info.hf_loc.cb_number,_phone);
 			hf_get_base_loc_req();
-			
 		}
 		else
 		{
@@ -528,9 +535,41 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
  MMI_BOOL hf_get_loc_cb_ex(rr_em_lai_info_struct *pInData)
  {
 	hf_print("get loc success");
-	hf_mmi_task_send(HF_MSG_ID_LOCA,NULL);
+	if(NULL != hf_info.hf_loc.cb_number)
+	{
+		char loc_info_str[120]={0};
+		int lac_x;
+
+		lac_x = hf_info.hf_loc.loc.lac[0]<<8;
+		lac_x += hf_info.hf_loc.loc.lac[1];
+		sprintf(loc_info_str,"LOC_INFO:%d,%d,%d%d,%d%d",hf_info.hf_loc.loc.cell_id,
+													lac_x,
+													hf_info.hf_loc.loc.mcc[0],hf_info.hf_loc.loc.mcc[1],hf_info.hf_loc.loc.mcc[2],
+													hf_info.hf_loc.loc.mnc[0],hf_info.hf_loc.loc.mnc[1],hf_info.hf_loc.loc.mnc[2]);
+		sprintf(loc_info_str,"http://www.gsmcameras.org/mmc:%d%d%d_mnc:%d%d%d_lac:%d_cid:%d",hf_info.hf_loc.loc.mcc[0],hf_info.hf_loc.loc.mcc[1],hf_info.hf_loc.loc.mcc[2],
+																	   hf_info.hf_loc.loc.mnc[0],hf_info.hf_loc.loc.mnc[1],hf_info.hf_loc.loc.mnc[2],
+																	    lac_x,hf_info.hf_loc.loc.cell_id);					
+		hf_send_sms_req(hf_info.hf_loc.cb_number,loc_info_str);
+	}
 	return TRUE;
  }
+ //单独判断来电时带+号情况。
+  BOOL hf_is_admin_number_ind_call(char *_number)
+{
+	int _count = 0;
+	for(_count = 0;_count < MAX_ADMIN_NUMBER;_count ++)
+	{
+		if(strlen(hf_nv.admin_number[_count]) > MIN_PHONENUMBER_LENTH)
+		{
+			if(NULL != strstr(hf_nv.admin_number[_count],_number))
+			{
+				hf_print("is admin number!");
+				return TRUE;
+			}
+		}
+	}
+	return FALSE;
+}
  BOOL hf_is_admin_number(char *_number)
 {
 	int _count = 0;
@@ -540,7 +579,6 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 		{
 			if(NULL != strstr(_number,hf_nv.admin_number[_count]))
 			{
-				hf_print("is admin number!");
 				return TRUE;
 			}
 		}
@@ -565,7 +603,7 @@ BOOL hf_new_call_ind(char * number)
     	hf_task_struct * p = (hf_task_struct*) construct_local_para(sizeof(hf_task_struct), TD_CTRL);
 
 	if(number == NULL) return FALSE;;
-	if(FALSE==hf_is_admin_number(number))
+	if(FALSE==hf_is_admin_number_ind_call(number))
 	{
 		hf_print("isn't admin ,not allow!");
 		return FALSE;
@@ -586,6 +624,7 @@ void hf_new_msg_ind(char * rev_num,char * rev_content)
 	char * msg_num      = rev_num;
 	char * addr = NULL;
 	
+	srv_prof_play_tone(SRV_PROF_TONE_SMS, NULL);
 	hf_print("New msg[phone:%s content:%s]",rev_num,rev_content);
 	if((rev_num == NULL)||(rev_content == NULL))
 	{
@@ -598,7 +637,7 @@ void hf_new_msg_ind(char * rev_num,char * rev_content)
 		memset(&hf_nv,0,sizeof(hf_nvram));
 		hf_write_nvram();
 		hf_send_sms_req(rev_num,"Clear successful,restart!");
-		MsgCmd_RebootExt(20);	
+		StartTimer(SH_REBOOT_TIMER_ID,1000*20,hf_set_reboot_ex);	
 	}
 	if((TRUE == hf_admin_is_null()&&((addr=strstr(rev_content,STR_CMD_SET))!=NULL))||(hf_is_admin_number(rev_num)))
 	{
@@ -615,7 +654,6 @@ void hf_new_msg_ind(char * rev_num,char * rev_content)
 	}
 
 }
-//void hf_DeleteAllSmsCB(srv_sms_callback_struct *cb){}
 void hf_DeleteAllSms(void)
 {
 	srv_sms_delete_msg_list(
@@ -635,8 +673,6 @@ ENUM_SEND_STATUE hf_get_send_sms_staute(void)
 void SendSmsResult(srv_sms_callback_struct *cb)
 {	
 	static int send_count = 0;
-	char content[400] = {0};
-	char number[20] = {0};
 
 	if(cb->result == MMI_TRUE)
 	{
@@ -697,8 +733,9 @@ void hf_send_sms_ex(void)
 	{
 		if(strlen(szContent)>HF_MAX_SMS_CONTENT)return;
 		if(strlen(szNumber)>MAX_PHONENUMBER_LENTH)return;
-		hf_print("send sms:[%s->%s] signal[%s]",szNumber,szContent,hf_get_signal_changed());
-		mmi_chset_convert(MMI_CHSET_GB2312,MMI_CHSET_UCS2,(char *)szContent,(char *)u_SendBuff,sizeof(szContent));
+		hf_print("send sms:[%s->%s] signal[%d]",szNumber,szContent,hf_get_signal_changed());
+		mmi_asc_to_ucs2(u_SendBuff,szContent);
+		//mmi_chset_convert(MMI_CHSET_GB2312,MMI_CHSET_UCS2,(char *)szContent,(char *)u_SendBuff,sizeof(szContent));
 		mmi_asc_to_ucs2((char *)u_number, (char *)szNumber);
 		hf_set_send_sms_staute(HF_SMS_SENDING);
 		#if defined(WIN32)
@@ -707,7 +744,7 @@ void hf_send_sms_ex(void)
 		hf_srv_sms_send_text_message(
 		    (char*)u_SendBuff,
 		    (char*)u_number,
-		    SRV_SMS_SIM_1);
+		    SRV_SMS_SIM_2);
 	}
 
 }

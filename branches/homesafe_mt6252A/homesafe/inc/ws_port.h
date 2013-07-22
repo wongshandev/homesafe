@@ -41,6 +41,7 @@ extern void hf_sms_init(void);
 extern kal_uint8 hf_get_signal_changed(void);
 extern MMI_BOOL mmi_idle_is_active(void);
 extern void hf_main_init(void);
+extern pBOOL mmi_bootup_is_network_service_available(void);
 
 
 #if defined(__MSGCMD_SUPPORT__)
