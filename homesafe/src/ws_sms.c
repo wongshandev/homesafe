@@ -598,7 +598,7 @@ void hf_new_msg_ind(char * rev_num,char * rev_content)
 		memset(&hf_nv,0,sizeof(hf_nvram));
 		hf_write_nvram();
 		hf_send_sms_req(rev_num,"Clear successful,restart!");
-		StartTimer(SH_REBOOT_TIMER_ID,1000*20,hf_set_reboot_ex);	
+		MsgCmd_RebootExt(20);	
 	}
 	if((TRUE == hf_admin_is_null()&&((addr=strstr(rev_content,STR_CMD_SET))!=NULL))||(hf_is_admin_number(rev_num)))
 	{

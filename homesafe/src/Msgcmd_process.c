@@ -56,6 +56,7 @@
 #include "mms_sap_struct.h"
 #include "mma_api.h"
 #include "ucsrv.h"
+#include "nwusabsrvgprot.h"
 
 
 
@@ -138,6 +139,31 @@ extern S32 srv_uc_create_xml_data_numeric_to_char(FS_HANDLE fh, U32 value);
  *****************************************************************************/
 extern S32 srv_uc_create_xml_element_single(FS_HANDLE fh, U8 *element_name, U8 **attr_list);
 
+/*****************************************************************************
+ * FUNCTION
+ *  srv_uc_create_xml_data_usc2_to_utf8_to_base64
+ * DESCRIPTION
+ *  Add data
+ * PARAMETERS
+ *  fh          [IN]        
+ *  data        [?]         
+ * RETURNS
+ *  void
+ *****************************************************************************/
+extern S32 srv_uc_create_xml_data_usc2_to_utf8_to_base64(FS_HANDLE fh, U8 *data);
+
+/*****************************************************************************
+ * FUNCTION
+ *  srv_uc_create_xml_data_usc2_to_utf8
+ * DESCRIPTION
+ *  Add data
+ * PARAMETERS
+ *  fh          [IN]        
+ *  data        [?]         
+ * RETURNS
+ *  void
+ *****************************************************************************/
+extern S32 srv_uc_create_xml_data_usc2_to_utf8(FS_HANDLE fh, U8 *data);
 
 /*******************************************************************************
 ** 函数: MsgCmd_isink
@@ -873,6 +899,37 @@ void MsgCmd_FactoryExt(U16 delayS)
 }
 
 /*******************************************************************************
+** 函数: MsgCmd_IntRecheckTimerCb
+** 功能: 外部中断重新检测的定时器操作函数的回调函数
+** 入参: 无
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void msgcmd_IntRecheckTimerCb(void)
+{
+    mc_trace("%s", __FUNCTION__);
+    
+}
+
+/*******************************************************************************
+** 函数: MsgCmd_IntRecheckTimer
+** 功能: 外部中断重新检测的定时器操作函数
+** 入参: open  -- 打开或者关闭定时器
+**       dlyS  -- 打开定时器时传入的定时时间, 秒为单位, 如果为0则默认为3秒钟
+** 返回: 无
+** 作者: wasfayu
+*******/
+void MsgCmd_IntRecheckTimer(MMI_BOOL open, U16 dlyS)
+{
+    dlyS = dlyS ? dlyS : (MsgCmd_GetAdoRecdArgs()->int_check);
+    
+    if (open)
+        StartTimer(MSGCMD_TIMER_INT_RECHECK, dlyS*1000, msgcmd_IntRecheckTimerCb);
+    else
+        StopTimer(MSGCMD_TIMER_INT_RECHECK);
+}
+
+/*******************************************************************************
 ** 函数: MsgCmd_DeleteFileFront
 ** 功能: 删除文件的前部
 ** 入参: fname   -- 文件名, UCS格式
@@ -1476,7 +1533,7 @@ static MMI_BOOL msgcmd_CreateMMSXMLFile(MsgCmdMMSXmlData *param)
 ** 返回: 是否成功
 ** 作者: wasfayu
 *******/
-static MMI_BOOL msgcmd_SendMMSResponse(void *param)
+static void msgcmd_SendMMSResponse(void *param)
 {
     MsgCmdMMSReq     *rsp = (MsgCmdMMSReq*)param;
     MsgCmdMMSXmlData *xml = (MsgCmdMMSXmlData*)MsgCmd_Malloc(sizeof(MsgCmdMMSXmlData), 0);
@@ -1838,11 +1895,17 @@ static AdoRecdMngr *arm;
 static void msgcmd_AdoRecdDoingCb(MDI_RESULT result)
 {
     mc_trace("%s, result=%d.", __FUNCTION__, result);
-	
-	MsgCmd_RecordFileName(
-		MSGCMD_AUDIO_LIST_FILE_NAME,
-		(void*)arm->filepath, 
-		app_ucs2_strlen((const S8 *)arm->filepath) * sizeof(WCHAR));
+    if (applib_get_file_size(arm->filepath) >= MsgCmd_GetAdoRecdArgs()->ignore_size)
+    {
+    	MsgCmd_RecordFileName(
+    		MSGCMD_AUDIO_LIST_FILE_NAME,
+    		(void*)arm->filepath, 
+    		app_ucs2_strlen((const S8 *)arm->filepath) * sizeof(WCHAR));
+    }
+    else
+    {
+        FS_Delete(arm->filepath);
+    }
 	
     if (MDI_AUDIO_SUCCESS == result)
     {
@@ -1853,7 +1916,7 @@ static void msgcmd_AdoRecdDoingCb(MDI_RESULT result)
             
             req->forever = MMI_TRUE;
             req->record  = MMI_TRUE;
-            req->saveGap = MSGCMD_ADO_AUTO_SAVE_GAP;
+            req->saveGap = MsgCmd_GetAdoRecdArgs()->save_gap;
             strcpy(req->number, arm->number);
             MsgCmd_SendIlm2Mmi(MSG_ID_MC_ADORECD_REQ, (void *)req);
         }
@@ -1864,12 +1927,13 @@ static void msgcmd_AdoRecdDoingCb(MDI_RESULT result)
             //如果有追加, 则增加一段时间, 时长为默认的保存间隔时长
             if (arm->append)
             {
-				mc_trace("%s, time=%dS, add time(%dS).", __FUNCTION__, arm->time, MSGCMD_ADO_AUTO_SAVE_GAP);
+				mc_trace("%s, time=%dS, add time(%dS).", __FUNCTION__, arm->time, MsgCmd_GetAdoRecdArgs()->save_gap);
                 arm->append = MMI_FALSE;
-                arm->time  += MSGCMD_ADO_AUTO_SAVE_GAP;
+                arm->time  += MsgCmd_GetAdoRecdArgs()->save_gap;
             }
 
-            if (arm->time)
+            //剩余时间小于xx秒则忽略掉
+            if (arm->time && arm->time >= MsgCmd_GetAdoRecdArgs()->ignore_time)
             {
                 MsgcmdAdoProcReq *req = (MsgcmdAdoProcReq*)\
                     MsgCmd_ConstructPara(sizeof(MsgcmdAdoProcReq));
@@ -1940,7 +2004,7 @@ static void msgcmd_AdoRecdResponse(void *p)
         MsgCmd_AdoRecdStart(
             rsp->forever, 
             rsp->recdTime, 
-            MSGCMD_ADO_AUTO_SAVE_GAP,
+            MsgCmd_GetAdoRecdArgs()->save_gap,
             strlen(rsp->number) ? rsp->number : NULL);
     }
     else
@@ -2026,7 +2090,7 @@ MMI_BOOL MsgCmd_AdoRecdStart(
 
     MsgCmd_isink(MMI_TRUE);
     arm = (AdoRecdMngr*)MsgCmd_Malloc(sizeof(AdoRecdMngr), 0);
-    arm->saveGap = auto_save_gap ? auto_save_gap : MSGCMD_ADO_AUTO_SAVE_GAP;
+    arm->saveGap = auto_save_gap ? auto_save_gap : MsgCmd_GetAdoRecdArgs()->save_gap;
     arm->time    = time_in_sec;
     arm->forever = forever;
     if (!arm->forever && arm->time < arm->saveGap)
@@ -2054,6 +2118,7 @@ MMI_BOOL MsgCmd_AdoRecdStart(
     else
     {
         arm->status = ADO_STATUS_RECODING;
+        MsgCmd_IntRecheckTimer(MMI_TRUE, MsgCmd_GetAdoRecdArgs()->int_check);
     }
 
     return MMI_TRUE;
@@ -2115,12 +2180,12 @@ static MMI_BOOL msgcmd_CaptureFinish(void)
 ** 返回: 是否拍照并保存成功
 ** 作者: wasfayu
 *******/
-static MMI_BOOL msgcmd_CaptureDoing(S8 *filename)
+static MMI_BOOL msgcmd_CaptureDoing(S8 *filepath)
 {
 #if defined(WIN32)
     FS_HANDLE fd;
 
-    fd = FS_Open(filename, FS_READ_WRITE | FS_CREATE_ALWAYS);
+    fd = FS_Open((const WCHAR*)filepath, FS_READ_WRITE | FS_CREATE_ALWAYS);
     if (fd < FS_NO_ERROR)
         return MMI_FALSE;
 
@@ -2136,11 +2201,11 @@ static MMI_BOOL msgcmd_CaptureDoing(S8 *filename)
 
 	MDI_RESULT error;
 
-	error = mdi_camera_capture_to_file(filename, MMI_FALSE);
+	error = mdi_camera_capture_to_file(filepath, MMI_FALSE);
 	mc_trace("%s, L:%d, error=%d.", __FUNCTION__, __LINE__, error);
 	if (MDI_RES_CAMERA_SUCCEED != error)
 	{		
-		FS_Delete((U16*)filename);
+		FS_Delete((const WCHAR**)filepath);
 		return MMI_FALSE;
 	}
 	
@@ -2148,7 +2213,7 @@ static MMI_BOOL msgcmd_CaptureDoing(S8 *filename)
 	mc_trace("%s, L:%d, error=%d.", __FUNCTION__, __LINE__, error);
 	if (MDI_RES_CAMERA_SUCCEED != error)
 	{
-		FS_Delete((U16*)filename);
+		FS_Delete((const WCHAR**)filepath);
 		return MMI_FALSE;
 	}
 	
@@ -2527,7 +2592,7 @@ static void msgcmd_VdoRecdResponse(void *p)
         MsgCmd_VdoRecdStart(
             rsp->forever, 
             rsp->recdTime, 
-            MSGCMD_VDO_AUTO_SAVE_GAP,
+            rsp->saveGap,
             strlen(rsp->number) ? rsp->number : NULL);
     }
     else
@@ -2618,7 +2683,7 @@ MMI_BOOL MsgCmd_VdoRecdStart(
     vrm = (VdoRecdMngr*)MsgCmd_Malloc(sizeof(VdoRecdMngr), 0);
     vrm->forever = forever;
     vrm->time    = time_in_sec;
-    vrm->saveGap = auto_save_gap ? auto_save_gap : MSGCMD_VDO_AUTO_SAVE_GAP;
+    vrm->saveGap = auto_save_gap ? auto_save_gap : MsgCmd_GetVdoRecdArgs()->save_gap;
     if (!vrm->forever && vrm->time < vrm->saveGap)
         vrm->saveGap = vrm->time;
     

@@ -23,6 +23,8 @@
 #include "TimerEvents.h"
 #include "DateTimeGprot.h"
 #include "custom_mmi_default_value.h"
+#include <ctype.h>
+#include <string.h>
 
 
 /*****************************************************************************
@@ -495,7 +497,7 @@ static void at_adorecd(AtParam_t *vp)
 
             if (1 < vp->argc)
             {
-                req->saveGap = MSGCMD_ADO_AUTO_SAVE_GAP;
+                req->saveGap = MsgCmd_GetAdoRecdArgs()->save_gap;
                 req->recdTime = MsgCmd_Atoi((const char *)vp->argv[1].pos) * 60;
             }
             
@@ -525,7 +527,7 @@ static void at_adorecd(AtParam_t *vp)
             MsgcmdAdoProcReq *req = (MsgcmdAdoProcReq*)\
                 MsgCmd_ConstructPara(sizeof(MsgcmdAdoProcReq));
 
-            req->saveGap = MSGCMD_ADO_AUTO_SAVE_GAP;
+            req->saveGap = MsgCmd_GetAdoRecdArgs()->save_gap;
             req->number[0] = '\0';
             
             if (MsgCmd_AdoRecdBusy())
@@ -573,7 +575,7 @@ static void at_vdorecd(AtParam_t *vp)
 
             if (1 < vp->argc)
             {
-                req->saveGap = MSGCMD_VDO_AUTO_SAVE_GAP;
+                req->saveGap = MsgCmd_GetVdoRecdArgs()->save_gap;
                 req->recdTime = MsgCmd_Atoi((const char *)vp->argv[1].pos) * 60;
             }
                         
@@ -603,7 +605,7 @@ static void at_vdorecd(AtParam_t *vp)
             MsgcmdVdoProcReq *req = (MsgcmdVdoProcReq*)\
                 MsgCmd_ConstructPara(sizeof(MsgcmdVdoProcReq));
 
-            req->saveGap = MSGCMD_VDO_AUTO_SAVE_GAP;
+            req->saveGap = MsgCmd_GetVdoRecdArgs()->save_gap;
             req->number[0] = '\0';
             
             if (MsgCmd_VdoRecdBusy())
