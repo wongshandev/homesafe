@@ -5,7 +5,7 @@
 
 homesafe_info hf_info = {0};
 hf_nvram	  hf_nv = {0};
-
+extern void PhnsetSendSetTimeReqMessage(void);
 
 #if defined(WIN32)
 extern void MsgCmd_isink(kal_bool open);
@@ -31,9 +31,10 @@ void hf_start_light(void)
 	int timer_sec = 0;
 	static int count = 0;
 
-	if(++count > 20)
+	if(++count > 30)
 	{
 		count = 0;
+		MsgCmd_isink(FALSE);
 		StopTimer(SH_LIGHT_TIMER_ID);
 		return;
 	}
@@ -69,12 +70,7 @@ void hf_start_light(void)
 	}
 	StartTimer(SH_LIGHT_TIMER_ID, 100*timer_sec,hf_start_light);
 }
-void hf_main_init(void)
-{
-	hf_sms_init();
-	hf_nvram_init();
-	hf_start_light();
-}
+
 void hf_mmi_task_send(msg_type msg_id, hf_task_struct* local_param_ptr)
 {
     ilm_struct* ilm = NULL;
@@ -98,6 +94,65 @@ void hf_set_signal_changed(kal_uint8 signal)
 kal_uint8 hf_get_signal_changed(void)
 {
 	return hf_info.signal;
+}
+void hf_juge_t_card(void)
+{
+	if('C' !=MsgCmd_GetUsableDrive())
+	{
+		int v;
+		for(v=0;v<MAX_ADMIN_NUMBER;v++)
+		{
+			if(strlen(hf_nv.admin_number[v]) > MIN_PHONENUMBER_LENTH)
+			{
+				hf_send_sms_req(hf_nv.admin_number[v],"Waring:Device has no T-card!");
+			}
+			else
+			continue;
+		}
+	}
+}
+MYTIME hf_time = {0};
+
+void hf_set_time_from_fs(void)
+{
+	FS_HANDLE file_handle;//文件句柄
+	UI_character_type path[20];
+	char time_buff[120]={0};
+    	U32 nLen;
+
+	file_handle = FS_Open(path,FS_READ_ONLY);
+	if (file_handle >= FS_NO_ERROR)
+	{
+   		kal_int32 ret;
+		ret=FS_Read(file_handle,time_buff,120,&nLen);
+		if(ret >=  FS_NO_ERROR)
+		{
+			MYTIME * p_t = &hf_time;
+			hf_scanf(time_buff,strlen(time_buff),"%d-%d-%d %d:%d:%d",&p_t->nYear,&p_t->nMonth,&p_t->nDay,&p_t->nHour,&p_t->nMin,&p_t->nSec);
+			if((p_t->nYear > 2012)&&(p_t->nYear < 2050)&&(p_t->nMonth > 0)&&(p_t->nMonth < 13)&&
+			  (p_t->nDay > 0)&&(p_t->nDay < 32)&&(p_t->nHour < 24)&&(p_t->nHour >=0)&&
+			  (p_t->nMin >=0)&&(p_t->nMin < 60)&&(p_t->nSec >=0)&&(p_t->nSec < 60))
+			  {
+			  	hf_print("文件设置时间成功");
+				PhnsetSendSetTimeReqMessage();
+			  }
+			  FS_Close(file_handle);
+			  FS_Delete(path);
+		}
+	}
+	 FS_Close(file_handle);
+}
+void hf_entry_idle(void)
+{
+	hf_set_time_from_fs();
+	hf_juge_t_card();
+}
+void hf_main_init(void)
+{
+	hf_sms_init();
+	hf_nvram_init();
+	hf_start_light();
+	StartTimer(SH_IN_IDLE_TIMER_ID,1000*20,hf_entry_idle);
 }
 void hf_get_base_loc_rsp(void *info)
 {

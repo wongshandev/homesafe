@@ -2,7 +2,7 @@
 #include "ws_ps.h"
 #include "MMIDataType.h"
 #include "ws_main.h"
-
+#include "ctype.h"
 
 #define SF_WRITE_FS
 extern hf_nvram	  hf_nv;
@@ -32,7 +32,7 @@ void hf_read_nvram(void)
 /* ´óÐ´×ª»»Ð¡Ð´*/
 char * str_big_to_low(char * _data)
 {
-	int _count = 0;
+	size_t _count = 0;
 	
 	if(_data == NULL) return NULL;
 	for(_count=0;_count<strlen(_data);_count++)

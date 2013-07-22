@@ -29,6 +29,7 @@
 #define MIN_PHONENUMBER_LENTH			4	
 #define MAX_ADMIN_PSW					6
 
+#define MAX_LENTH_REC_TIME		20
 //命令集
 typedef enum _homesafe_cmd{
  MSG_SMS_CMD_SET, 
@@ -79,6 +80,8 @@ typedef enum _hf_task_msg_id{
  HF_MSG_ID_QUIT,
  HF_MSG_ID_LOCA,
  HF_MSG_ID_INCOMING_CALL,
+ HF_MSG_ID_EINT_IND,
+
 #if defined(__MSGCMD_SUPPORT__)
     MSG_ID_MC_BASE,
     MSG_ID_MC_END = MSG_ID_MC_BASE + 10,
@@ -112,11 +115,11 @@ typedef struct {
     U32    ignore_size; //小于该值(BYTE)的文件都将被删除
 }MsgCmdRecdArg;
 #endif
-
 typedef MMI_BOOL (*loc_cb)(rr_em_lai_info_struct *pInData);
 typedef struct _loc_info_struct
 {
 	loc_cb		  cb;
+	char		   cb_number[MAX_PHONENUMBER_LENTH + 1];
 	rr_em_lai_info_struct loc;
 	
 }loc_info_struct;
