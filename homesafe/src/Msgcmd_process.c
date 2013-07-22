@@ -510,11 +510,22 @@ U32 MsgCmd_GetDiskFreeSize(S32 drive)
     return 0;
 }
 
+/*******************************************************************************
+** 函数: MsgCmd_CheckValidDrive
+** 功能: 检查给定的盘符是否已挂载
+** 参数: 盘符, C/D/E/F...
+** 返回: 驱动盘可供使用
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_CheckValidDrive(U32 drive)
+{
+    return (MMI_BOOL)(FS_NO_ERROR == FS_GetDevStatus(drive, FS_MOUNT_STATE_ENUM));
+}
 
 /*******************************************************************************
 ** 函数: MsgCmd_GetUsableDrive
 ** 功能: 获取系统可用的存储设备盘符
-** 参数: 
+** 参数: 无
 ** 返回: 返回盘符 0x43~0x47
 ** 作者: wasfayu
 *******/
@@ -533,7 +544,7 @@ S32 MsgCmd_GetUsableDrive(void)
 /*******************************************************************************
 ** 函数: MsgCmd_GetSystemDrive
 ** 功能: 获取系统盘的盘符
-** 参数: 
+** 参数: 无
 ** 返回: Success:                0x43~0x47 (A~G)
 **       Error:                  RTF_PARAM_ERROR        (-2)
 **                               RTF_DRIVE_NOT_FOUND    (-4)
@@ -576,17 +587,22 @@ WCHAR *MsgCmd_CombineFilePath(
     WCHAR *filename;
 
     ASSERT(NULL != pathbuffer);
-    ASSERT(NULL != folder);
     ASSERT(NULL != ext_name);
     
 	memset(pathbuffer, 0, length_in_byte);
 
     //先打印路径
-	kal_wsprintf(
-		(WCHAR*)pathbuffer, 
-		"%c:\\%w\\", 
-		MsgCmd_GetUsableDrive(),
-		folder);
+    if (NULL == folder)
+        kal_wsprintf(
+    		(WCHAR*)pathbuffer, 
+    		"%c:\\", 
+    		MsgCmd_GetUsableDrive());
+    else
+    	kal_wsprintf(
+    		(WCHAR*)pathbuffer, 
+    		"%c:\\%w\\", 
+    		MsgCmd_GetUsableDrive(),
+    		folder);
 
     //再打印文件名
     filename = pathbuffer + app_ucs2_strlen((const kal_int8 *)pathbuffer);
@@ -1895,6 +1911,8 @@ static AdoRecdMngr *arm;
 static void msgcmd_AdoRecdDoingCb(MDI_RESULT result)
 {
     mc_trace("%s, result=%d.", __FUNCTION__, result);
+
+    //如果文件小于这个值则删除掉他
     if (applib_get_file_size(arm->filepath) >= MsgCmd_GetAdoRecdArgs()->ignore_size)
     {
     	MsgCmd_RecordFileName(
@@ -2205,7 +2223,7 @@ static MMI_BOOL msgcmd_CaptureDoing(S8 *filepath)
 	mc_trace("%s, L:%d, error=%d.", __FUNCTION__, __LINE__, error);
 	if (MDI_RES_CAMERA_SUCCEED != error)
 	{		
-		FS_Delete((const WCHAR**)filepath);
+		FS_Delete((const WCHAR*)filepath);
 		return MMI_FALSE;
 	}
 	
@@ -2213,7 +2231,7 @@ static MMI_BOOL msgcmd_CaptureDoing(S8 *filepath)
 	mc_trace("%s, L:%d, error=%d.", __FUNCTION__, __LINE__, error);
 	if (MDI_RES_CAMERA_SUCCEED != error)
 	{
-		FS_Delete((const WCHAR**)filepath);
+		FS_Delete((const WCHAR*)filepath);
 		return MMI_FALSE;
 	}
 	
@@ -2431,6 +2449,74 @@ static void msgcmd_VdoRecdSaveCb(MDI_RESULT result)
 
 	/* close LED */
 	MsgCmd_isink(MMI_FALSE);
+
+    //如果文件小于这个值则删除掉他
+    if (applib_get_file_size(vrm->filepath) >= MsgCmd_GetVdoRecdArgs()->ignore_size)
+    {
+    	MsgCmd_RecordFileName(
+    		MSGCMD_VIDEO_LIST_FILE_NAME,
+    		(void*)vrm->filepath, 
+    		app_ucs2_strlen((const S8 *)vrm->filepath) * sizeof(WCHAR));
+    }
+    else
+    {
+        FS_Delete(vrm->filepath);
+    }
+    
+	//mdi_video_rec_get_cur_record_time
+    if (MDI_RES_VDOREC_SUCCEED == result)
+    {
+        if (vrm->forever)
+        {
+            MsgcmdVdoProcReq *req = (MsgcmdVdoProcReq*)\
+                MsgCmd_ConstructPara(sizeof(MsgcmdVdoProcReq));
+            
+            req->forever = MMI_TRUE;
+            req->record  = MMI_TRUE;
+            req->saveGap = MsgCmd_GetVdoRecdArgs()->save_gap;
+            strcpy(req->number, vrm->number);
+            MsgCmd_SendIlm2Mmi(MSG_ID_MC_VDORECD_REQ, (void *)req);
+        }
+        else
+        {
+            vrm->time -= vrm->saveGap;
+            
+            //如果有追加, 则增加一段时间, 时长为默认的保存间隔时长
+            if (vrm->append)
+            {
+				mc_trace("%s, time=%dS, add time(%dS).", __FUNCTION__, vrm->time, MsgCmd_GetVdoRecdArgs()->save_gap);
+                vrm->append = MMI_FALSE;
+                vrm->time  += MsgCmd_GetVdoRecdArgs()->save_gap;
+            }
+
+            //剩余时间小于xx秒则忽略掉
+            if (vrm->time && vrm->time >= MsgCmd_GetVdoRecdArgs()->ignore_time)
+            {
+                MsgcmdVdoProcReq *req = (MsgcmdVdoProcReq*)\
+                    MsgCmd_ConstructPara(sizeof(MsgcmdVdoProcReq));
+                
+                req->forever = MMI_FALSE;
+                req->record  = MMI_TRUE;
+                req->saveGap = vrm->saveGap;
+                req->recdTime= vrm->time;
+                strcpy(req->number, vrm->number);
+                MsgCmd_SendIlm2Mmi(MSG_ID_MC_VDORECD_REQ, (void *)req);
+            }
+            else
+            {
+                //notify user by SMS
+                mc_trace("%s, record finish.", __FUNCTION__);
+            }
+        }
+        
+    }
+
+    if (vrm)
+    {
+    	mc_trace("%s, free resource, stop record.", __FUNCTION__);
+        MsgCmd_Mfree(vrm);
+        vrm = NULL;
+    }
 }
 
 /*******************************************************************************
@@ -2523,12 +2609,18 @@ static MMI_BOOL msgcmd_VdoRecdPreview(void)
         video_preview_data.wb					= MDI_VIDEO_WB_AUTO;
         video_preview_data.ev					= MDI_VIDEO_EV_0;
         video_preview_data.banding				= MDI_VIDEO_BANDING_50HZ;
-        video_preview_data.video_qty			= VID_REC_QTY_HIGH;
-        video_preview_data.video_format 		= 1;
+        video_preview_data.video_qty			= MDI_VIDEO_REC_QTY_HIGH;
+    #if defined(MP4_ENCODE)
+    	video_preview_data.video_format 		= MDI_VIDEO_VIDEO_FORMAT_3GP;
+    #elif defined(MJPG_ENCODE)
+    	video_preview_data.video_format 		= MDI_VIDEO_VIDEO_FORMAT_MP4;
+    #else
+    	MMI_ASSERT(0);
+    #endif
         video_preview_data.effect				= MDI_VIDEO_EFFECT_NOMRAL;
         video_preview_data.video_size			= MDI_VIDEO_VIDEO_SIZE_QVGA;
-        video_preview_data.user_def_width		= 0;
-        video_preview_data.user_def_height		= 0;
+        video_preview_data.user_def_width		= 320;
+        video_preview_data.user_def_height		= 240;
         video_preview_data.zoom 				= 10;
         video_preview_data.night				= 0;
         video_preview_data.brightness			= 128;
@@ -2544,10 +2636,13 @@ static MMI_BOOL msgcmd_VdoRecdPreview(void)
         video_preview_data.overlay_frame_buffer_address = 0;
     #if defined(__MMI_MAINLCD_320X240__)||defined(__MMI_MAINLCD_160X128__)||defined(__MMI_MAINLCD_220X176__)&&!defined(__MMI_QTV_OSD_HOLD_5S__)
         video_preview_data.lcm_rotate			= 0;
+        video_preview_data.preview_rotate       = 0;
     #else
         video_preview_data.lcm_rotate			= MDI_VIDEO_LCD_ROTATE_270;
+        video_preview_data.preview_rotate       = MDI_VIDEO_LCD_ROTATE_270;
     #endif
         video_preview_data.size_limit			= 0;
+        video_preview_data.time_limit           = vrm->saveGap;
         video_preview_data.record_aud			= TRUE;
 
         error = mdi_video_rec_preview_start(
@@ -2679,7 +2774,19 @@ MMI_BOOL MsgCmd_VdoRecdStart(
 
     if (vrm)
         return MMI_FALSE;
-    
+            
+#ifdef __MMI_UCM__
+    //reference: mmi_vdorec_is_in_bgcall()
+    if (0 != srv_ucm_query_call_count(SRV_UCM_CALL_STATE_ALL, SRV_UCM_CALL_TYPE_NO_CSD, NULL))
+        return MMI_FALSE;
+#else
+    if (0 != srv_ucm_query_call_count(SRV_UCM_CALL_STATE_ALL, SRV_UCM_CALL_TYPE_NO_CSD, NULL))
+        return MMI_FALSE;
+#endif
+
+    if (!MsgCmd_CheckValidDrive(MsgCmd_GetUsableDrive()))
+        return MMI_FALSE;
+
     vrm = (VdoRecdMngr*)MsgCmd_Malloc(sizeof(VdoRecdMngr), 0);
     vrm->forever = forever;
     vrm->time    = time_in_sec;
@@ -2697,7 +2804,14 @@ MMI_BOOL MsgCmd_VdoRecdStart(
         vrm->filepath, 
         MSGCMD_FILE_PATH_LENGTH*sizeof(WCHAR),
         MSGCMD_VIDEOS_FOLDER_NAME,
-        L".avi");
+    #if defined(MP4_ENCODE)
+    	L".3gp"
+    #elif defined(MJPG_ENCODE)
+    	L".avi"
+    #else
+    	MMI_ASSERT(0)  
+    #endif
+        );
     
     if (msgcmd_VdoRecdPreview())
     {

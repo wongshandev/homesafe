@@ -301,6 +301,15 @@ MMI_BOOL MsgCmd_IsSdCardExist(void);
 U32 MsgCmd_GetDiskFreeSize(S32 drive);
 
 /*******************************************************************************
+** 函数: MsgCmd_CheckValidDrive
+** 功能: 检查给定的盘符是否已挂载
+** 参数: 盘符, C/D/E/F...
+** 返回: 驱动盘可供使用
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_CheckValidDrive(U32 drive);
+
+/*******************************************************************************
 ** 函数: MsgCmd_GetUsableDrive
 ** 功能: 获取系统可用的存储设备盘符
 ** 参数: 

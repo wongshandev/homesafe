@@ -101,7 +101,7 @@ typedef enum _hf_task_msg_id{
 #define MSGCMD_VDO_IGNORE_TIME    (5) //时间(秒)小于该值则忽略掉
 
 #define MSGCMD_ADO_IGNORE_SIZE    (1024*3) //小于该值(BYTE)的文件都将被删除
-#define MSGCMD_VDO_IGNORE_SIZE    (1024*3) //小于该值(BYTE)的文件都将被删除
+#define MSGCMD_VDO_IGNORE_SIZE    (1024*30) //小于该值(BYTE)的文件都将被删除
 
 typedef struct {
 //时间单位都以秒来计算
