@@ -174,6 +174,9 @@ extern S32 srv_uc_create_xml_data_usc2_to_utf8(FS_HANDLE fh, U8 *data);
 *******/
 extern void MsgCmd_isink(kal_bool open);
 
+extern const unsigned char AUX_EINT_NO;
+#define MC_EINT_NO         AUX_EINT_NO
+#define MSGCMD_INTERRUPT_DIFF_LEVEL  0 //低电平出发外部中断
 
 /*******************************************************************************
 ** 函数: MsgCmd_GetInteger
@@ -1171,6 +1174,62 @@ MMI_BOOL MsgCmd_WriteImei(char *num, U16 strl, U8 sim, U8 (*rsp)(void*))
 }
 
 /*******************************************************************************
+** 函数: msgcmd_InterruptProcess
+** 功能: 外部中断响应函数
+** 参数: 无
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void msgcmd_InterruptRespond(void *p)
+{
+	MsgCmdExtIntReq *rsp = (MsgCmdExtIntReq*)p;
+
+	mc_trace("%s, level=%d.", __FUNCTION__, rsp->level);
+	MsgCmd_isink(rsp->level);
+}
+
+/*******************************************************************************
+** 函数: msgcmd_InterruptEntrance
+** 功能: 外部中断响应入口函数
+** 参数: 无
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void msgcmd_InterruptEntrance(void)
+{
+	static MMI_BOOL int_status = (MMI_BOOL)MSGCMD_INTERRUPT_DIFF_LEVEL;
+	MsgCmdExtIntReq *req = (MsgCmdExtIntReq*)MsgCmd_ConstructPara(sizeof(MsgCmdExtIntReq));
+
+	//EINT_SW_Debounce_Modify(AUX_EINT_NO,PLUGOUT_DEBOUNCE_TIME);
+	req->level = int_status;
+	int_status = !int_status;
+	EINT_Set_Polarity(MC_EINT_NO, int_status); 
+	MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_EXT_INTERRUPT, (void *)req);
+}
+
+/*******************************************************************************
+** 函数: msgcmd_InterruptInit
+** 功能: 外部中断初始化函数
+** 参数: 无
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void msgcmd_InterruptInit(void)
+{
+	EINT_Registration(
+		MC_EINT_NO, 
+		MMI_TRUE, 
+		(MMI_BOOL)MSGCMD_INTERRUPT_DIFF_LEVEL, 
+		msgcmd_InterruptEntrance, 
+		MMI_TRUE);
+	
+	mmi_frm_set_protocol_event_handler(
+		MSG_ID_MC_EXT_INTERRUPT,
+		(PsIntFuncPtr)msgcmd_InterruptRespond,
+		MMI_FALSE);
+}
+
+/*******************************************************************************
 ** 函数: msgcmd_SendSmsCallback
 ** 功能: 发送text短信的回调函数
 ** 参数: pcbd  -- 回调函数的参数
@@ -1842,6 +1901,7 @@ mmi_ret MsgCmd_EvtProcEntry(mmi_event_struct *evp)
     case EVT_ID_SRV_BOOTUP_BEFORE_IDLE:
         break;
     case EVT_ID_SRV_BOOTUP_COMPLETED:
+		msgcmd_InterruptInit();
         break;
     case EVT_ID_SRV_BOOTUP_EARLY_INIT:
         hf_main_init();
@@ -2603,6 +2663,7 @@ static MMI_BOOL msgcmd_VdoRecdPreview(void)
 
     if (MDI_RES_VDOREC_SUCCEED == error)
     {
+    	U8 *temp;
         mdi_video_setting_struct video_preview_data;		
 
         mdi_video_rec_load_default_setting(&video_preview_data);
@@ -2619,8 +2680,8 @@ static MMI_BOOL msgcmd_VdoRecdPreview(void)
     #endif
         video_preview_data.effect				= MDI_VIDEO_EFFECT_NOMRAL;
         video_preview_data.video_size			= MDI_VIDEO_VIDEO_SIZE_QVGA;
-        video_preview_data.user_def_width		= 320;
-        video_preview_data.user_def_height		= 240;
+        video_preview_data.user_def_width		= 0;
+        video_preview_data.user_def_height		= 0;
         video_preview_data.zoom 				= 10;
         video_preview_data.night				= 0;
         video_preview_data.brightness			= 128;
@@ -2645,18 +2706,35 @@ static MMI_BOOL msgcmd_VdoRecdPreview(void)
         video_preview_data.time_limit           = vrm->saveGap;
         video_preview_data.record_aud			= TRUE;
 
-        error = mdi_video_rec_preview_start(
-                    GDI_LAYER_EMPTY_HANDLE,
-                    GDI_LAYER_ENABLE_LAYER_0,
-                    GDI_LAYER_ENABLE_LAYER_0,
-                    MMI_FALSE,
-                    &video_preview_data);
+		gdi_layer_get_base_handle(&vrm->dispLayer);
+		gdi_layer_push_and_set_active(vrm->dispLayer);
+		gdi_layer_get_buffer_ptr(&temp);
+		gdi_layer_create_using_outside_memory(
+			0,
+			0,
+			240,
+			320,
+			&vrm->dispLayer,
+			temp,
+			240 * 320 * 2);
+
+		gdi_layer_set_active(vrm->dispLayer);
+		gdi_layer_clear(GDI_COLOR_BLACK);
+
+		error = mdi_video_rec_preview_start(
+					vrm->dispLayer,
+					GDI_LAYER_ENABLE_LAYER_0 | GDI_LAYER_ENABLE_LAYER_1,
+					GDI_LAYER_ENABLE_LAYER_1,
+					MMI_TRUE,
+					&video_preview_data);
         mc_trace("%s,L:%d, error=%d.", __FUNCTION__, __LINE__, error);
 
         if (MDI_RES_VDOREC_SUCCEED != error)
         {
             mdi_video_rec_preview_stop();
             mdi_video_rec_power_off();
+			gdi_layer_free(vrm->dispLayer);
+			gdi_layer_pop_and_restore_active();
         }
         else
         {
@@ -2744,6 +2822,9 @@ void MsgCmd_VdoRecdStop(char *replay_number)
         mdi_video_rec_save_file((S8*)vrm->filepath, msgcmd_VdoRecdSaveCb);
         mdi_video_rec_preview_stop();
         mdi_video_rec_power_off();
+		gdi_layer_free(vrm->dispLayer);
+		vrm->dispLayer = NULL;
+		gdi_layer_pop_and_restore_active();
     }
 
     MsgCmd_DelayTick(MSGCMD_VDORECD_DLY_TICK);
