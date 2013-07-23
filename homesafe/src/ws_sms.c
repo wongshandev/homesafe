@@ -744,7 +744,7 @@ void hf_send_sms_ex(void)
 		hf_srv_sms_send_text_message(
 		    (char*)u_SendBuff,
 		    (char*)u_number,
-		    SRV_SMS_SIM_2);
+		    SRV_SMS_SIM_1);
 	}
 
 }

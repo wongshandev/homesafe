@@ -43,6 +43,7 @@
 #define MSG_ID_MC_ADORECD_REQ     (MSG_ID_MC_BASE + 1)
 #define MSG_ID_MC_CAPTURE_REQ     (MSG_ID_MC_BASE + 2)
 #define MSG_ID_MC_SEND_MMS_REQ    (MSG_ID_MC_BASE + 3)
+#define MSG_ID_MC_EXT_INTERRUPT   (MSG_ID_MC_BASE + 4)
 
 
 /* 字符类型 */
@@ -77,7 +78,8 @@ typedef struct {
     U32           saveGap;       //unit: second
     MMI_BOOL      forever;       //是否无限时录制
     MMI_BOOL      append;        //是否追加一次saveGap时长的录制
-    gdi_handle    dispHandle;    //OSD层句柄
+    gdi_handle    dispLayer;     //OSD层句柄
+    gdi_handle    baseLayer;     //OSD层句柄
     VdoRecdStatus status;        //当前状态
 }VdoRecdMngr;
 
@@ -165,6 +167,11 @@ typedef struct {
     mma_sim_id_enum  sim;
 }MsgCmdMMSReq;
 
+/* 外部中断处理请求 */
+typedef struct {
+	LOCAL_PARA_HDR
+    MMI_BOOL   level;
+}MsgCmdExtIntReq;
 
 /*******************************************************************************
 ** 函数: MsgCmd_GetInteger
