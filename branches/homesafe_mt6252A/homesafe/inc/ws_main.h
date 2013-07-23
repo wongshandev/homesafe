@@ -141,9 +141,9 @@ typedef struct _homesafe_info
 
 typedef struct _hf_nvram{
 
-	char admin_number[MAX_ADMIN_NUMBER][MAX_PHONENUMBER_LENTH];
+	char admin_number[MAX_ADMIN_NUMBER][MAX_PHONENUMBER_LENTH + 1];
 	
-	char admin_passwd[MAX_ADMIN_PSW];
+	char admin_passwd[MAX_ADMIN_PSW + 1];
 	
 #if defined(__MSGCMD_SUPPORT__)
     MsgCmdRecdArg ado;
