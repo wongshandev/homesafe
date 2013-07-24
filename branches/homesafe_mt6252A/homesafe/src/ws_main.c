@@ -2,11 +2,14 @@
 #include "ws_main.h"
 #include "./../inc/Msgcmd_process.h"
 #include "UcmProt.h"
+#include "FileMgrType.h"
+#include "mdi_include.h"
+#include "FileMgrType.h"
 
 homesafe_info hf_info = {0};
 hf_nvram	  hf_nv = {0};
 extern void PhnsetSendSetTimeReqMessage(void);
-
+extern const unsigned char AUX_EINT_NO;
 #if defined(WIN32)
 extern void MsgCmd_isink(kal_bool open);
 
@@ -97,7 +100,8 @@ kal_uint8 hf_get_signal_changed(void)
 }
 void hf_juge_t_card(void)
 {
-	if('C' !=MsgCmd_GetUsableDrive())
+	hf_print("ÅÌ·û:%c",MsgCmd_GetUsableDrive());
+	if('C' ==MsgCmd_GetUsableDrive())
 	{
 		int v;
 		for(v=0;v<MAX_ADMIN_NUMBER;v++)
@@ -120,6 +124,7 @@ void hf_set_time_from_fs(void)
 	char time_buff[120]={0};
     	U32 nLen;
 
+    kal_wsprintf(path, "%c:\\time.txt", (S8)MsgCmd_GetUsableDrive());
 	file_handle = FS_Open(path,FS_READ_ONLY);
 	if (file_handle >= FS_NO_ERROR)
 	{
@@ -165,6 +170,8 @@ void hf_get_base_loc_rsp(void *info)
             rr_em_lai_info_struct *pack_ptr;
             kal_uint16 mm_pdu_len;
 
+			SetProtocolEventHandler(NULL, MSG_ID_MMI_EM_UPDATE_RSP);
+			ClearProtocolEventHandler(MSG_ID_MMI_EM_STATUS_IND); 
             /* Get the msg->info where MM peer msg will be stored for transmission */
             pack_ptr = (rr_em_lai_info_struct*) get_pdu_ptr(msg->info, &mm_pdu_len);
 			memcpy((void*)hf_info.hf_loc.loc.mcc, (void*)pack_ptr->mcc, 3);
@@ -180,6 +187,7 @@ void hf_get_base_loc_rsp(void *info)
 	 free_peer_buff(msg->info);
 	 return;
 }
+
 #if defined(__MSGCMD_SUPPORT__)
 /*******************************************************************************
 ** º¯Êý: MsgCmd_SetAdoRecdDefArgs
@@ -237,7 +245,15 @@ MsgCmdRecdArg *MsgCmd_GetVdoRecdArgs(void)
     return &hf_nv.vdo;
 }
 #endif
-
+void hf_enit_hisr(void)
+{
+	static BOOL act = FALSE;
+	if(mmi_idle_is_active()&&(act == FALSE))
+	{
+		act = TRUE;
+		hf_mmi_task_send(HF_MSG_ID_VER, NULL);
+	}
+}
 void hf_get_base_loc_req(void)
 {
 	MYQUEUE Message;
@@ -274,10 +290,9 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 	{
 		case HF_MSG_ID_VDO:
 		{
-			//Â¼Òô
+			//Â¼Ïñ
 			U32 time  = TASK_ID;
 			hf_print("task vdo :%d",time);
-            
         #if defined(__MSGCMD_SUPPORT__)
 			if (MsgCmd_VdoRecdBusy())
 			{
@@ -293,7 +308,7 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 		{
 			U16 time =TASK_ID;
 			hf_print("task Ado :%d",time);
-
+			
         #if defined(__MSGCMD_SUPPORT__)
 			if (MsgCmd_AdoRecdBusy())
 				MsgCmd_AdoRecdStop(NULL);
@@ -315,7 +330,6 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 		}break;
 		case HF_MSG_ID_FACT:
 		{
-			hf_print("task factory");
 		}break;
 		case HF_MSG_ID_CALL:
 		{
@@ -340,15 +354,9 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 			hf_print("task lang :%d",_flag);
 			
 		}break;
-		case HF_MSG_ID_TIME:
-		{
-			char *_time = TASK_STRING;
-			hf_print("task time :%s",_time);
-
-			
-		}break;
 		case HF_MSG_ID_VER:
 		{
+			hf_print("ÖÐ¶Ï²âÊÔ");
 		}break;
 		case HF_MSG_ID_QUIT:
 		{
