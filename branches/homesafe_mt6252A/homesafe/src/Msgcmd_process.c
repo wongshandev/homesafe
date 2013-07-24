@@ -57,6 +57,7 @@
 #include "mma_api.h"
 #include "ucsrv.h"
 #include "nwusabsrvgprot.h"
+#include "Eint.h"
 
 
 
@@ -173,6 +174,11 @@ extern S32 srv_uc_create_xml_data_usc2_to_utf8(FS_HANDLE fh, U8 *data);
 ** 作者: wasfayu
 *******/
 extern void MsgCmd_isink(kal_bool open);
+
+#if defined(WIN32)
+extern void MsgCmd_ModisCreateJPEG(WCHAR *filepath);
+extern void MsgCmd_ModisCreateAVI(WCHAR *filepath);
+#endif
 
 extern const unsigned char AUX_EINT_NO;
 #define MC_EINT_NO         AUX_EINT_NO
@@ -545,6 +551,23 @@ S32 MsgCmd_GetUsableDrive(void)
 }
 
 /*******************************************************************************
+** 函数: MsgCmd_GetTFcardDrive
+** 功能: 判断T卡是否存在并返回T卡的盘符
+** 参数: litter -- 输出盘符
+** 返回: 存在或者不存在
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_GetTFcardDrive(S32 *litter)
+{
+    S32 drive = SRV_FMGR_CARD_DRV;
+
+    if (litter)
+        *litter = SRV_FMGR_CARD_DRV;
+
+    return srv_fmgr_drv_is_accessible(drive);
+}
+
+/*******************************************************************************
 ** 函数: MsgCmd_GetSystemDrive
 ** 功能: 获取系统盘的盘符
 ** 参数: 无
@@ -590,7 +613,6 @@ WCHAR *MsgCmd_CombineFilePath(
     WCHAR *filename;
 
     ASSERT(NULL != pathbuffer);
-    ASSERT(NULL != ext_name);
     
 	memset(pathbuffer, 0, length_in_byte);
 
@@ -609,30 +631,33 @@ WCHAR *MsgCmd_CombineFilePath(
 
     //再打印文件名
     filename = pathbuffer + app_ucs2_strlen((const kal_int8 *)pathbuffer);
-	applib_dt_get_date_time(&mt);
-#if defined(WIN32)
-    kal_wsprintf(
-        filename,
-        "%04d-%02d-%02d %02d%02d%02d%w",
-		mt.nYear,
-		mt.nMonth,
-		mt.nDay,
-		mt.nHour,
-		mt.nMin,
-		mt.nSec,
-		ext_name);
-#else
-    kal_wsprintf(
-        filename,
-        "%04d%02d%02d%02d%02d%08X%w",
-		mt.nYear,
-		mt.nMonth,
-		mt.nDay,
-		mt.nHour,
-		mt.nMin,
-		MsgCmd_GetCurrentTime(),
-		ext_name);	
-#endif
+    if (NULL != ext_name)
+    {
+    	applib_dt_get_date_time(&mt);
+    #if defined(WIN32)
+        kal_wsprintf(
+            filename,
+            "%04d-%02d-%02d %02d%02d%02d%w",
+    		mt.nYear,
+    		mt.nMonth,
+    		mt.nDay,
+    		mt.nHour,
+    		mt.nMin,
+    		mt.nSec,
+    		ext_name);
+    #else
+        kal_wsprintf(
+            filename,
+            "%04d%02d%02d%02d%02d%08X%w",
+    		mt.nYear,
+    		mt.nMonth,
+    		mt.nDay,
+    		mt.nHour,
+    		mt.nMin,
+    		MsgCmd_GetCurrentTime(),
+    		ext_name);	
+    #endif
+    }
 
 	return filename;
 }
@@ -1198,13 +1223,16 @@ static void msgcmd_InterruptRespond(void *p)
 static void msgcmd_InterruptEntrance(void)
 {
 	static MMI_BOOL int_status = (MMI_BOOL)MSGCMD_INTERRUPT_DIFF_LEVEL;
-	MsgCmdExtIntReq *req = (MsgCmdExtIntReq*)MsgCmd_ConstructPara(sizeof(MsgCmdExtIntReq));
+	MsgCmdExtIntReq *req;
 
+    EINT_Mask(MC_EINT_NO);
+    req = (MsgCmdExtIntReq*)MsgCmd_ConstructPara(sizeof(MsgCmdExtIntReq));
 	//EINT_SW_Debounce_Modify(AUX_EINT_NO,PLUGOUT_DEBOUNCE_TIME);
 	req->level = int_status;
 	int_status = !int_status;
 	EINT_Set_Polarity(MC_EINT_NO, int_status); 
 	MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_EXT_INTERRUPT, (void *)req);
+    EINT_UnMask(MC_EINT_NO);
 }
 
 /*******************************************************************************
@@ -1227,6 +1255,34 @@ static void msgcmd_InterruptInit(void)
 		MSG_ID_MC_EXT_INTERRUPT,
 		(PsIntFuncPtr)msgcmd_InterruptRespond,
 		MMI_FALSE);
+}
+
+/*******************************************************************************
+** 函数: MsgCmd_InterruptMask
+** 功能: 屏蔽/打开外部中断
+** 参数: mask  -- 屏蔽
+** 返回: 无
+** 作者: wasfayu
+*******/
+void MsgCmd_InterruptMask(MMI_BOOL mask)
+{
+    if (mask)
+    {
+        EINT_Mask(MC_EINT_NO);
+        mmi_frm_clear_protocol_event_handler(
+    		MSG_ID_MC_EXT_INTERRUPT,
+    		(PsIntFuncPtr)msgcmd_InterruptRespond);
+    }
+    else
+    {
+        mmi_frm_set_protocol_event_handler(
+    		MSG_ID_MC_EXT_INTERRUPT,
+    		(PsIntFuncPtr)msgcmd_InterruptRespond,
+    		MMI_FALSE);
+        EINT_UnMask(MC_EINT_NO);
+    }
+    
+    mc_trace("%s, mask=%d.", __FUNCTION__, mask);
 }
 
 /*******************************************************************************
@@ -1871,13 +1927,16 @@ MMI_BOOL MsgCmd_RecordFileName(const WCHAR *fname, void *pdata, U32 datalen)
 *******/
 void MsgCmd_DelayTick(U32 dt)
 {
-    U32 tick1, tick2;
-
-	kal_get_time(&tick1);
-	dt = dt ? dt : 2;
-	do {
-		kal_get_time(&tick2);
-	}while(tick2 - tick1 < dt);
+    if (dt)
+    {
+        U32 tick1, tick2;
+        
+    	kal_get_time(&tick1);
+    	dt = dt ? dt : 2;
+    	do {
+    		kal_get_time(&tick2);
+    	}while(tick2 - tick1 < dt);
+    }
 }
 
 /*******************************************************************************
@@ -2166,6 +2225,23 @@ MMI_BOOL MsgCmd_AdoRecdStart(
     if (arm)
         return MMI_FALSE;
 
+    //T卡不存在就返回
+    if (!MsgCmd_GetTFcardDrive(NULL))
+        return MMI_FALSE;
+
+#ifdef __MMI_UCM__
+    //reference: mmi_vdorec_is_in_bgcall()
+    if (0 != srv_ucm_query_call_count(SRV_UCM_CALL_STATE_ALL, SRV_UCM_CALL_TYPE_NO_CSD, NULL))
+        return MMI_FALSE;
+#else
+    if (0 != srv_ucm_query_call_count(SRV_UCM_CALL_STATE_ALL, SRV_UCM_CALL_TYPE_NO_CSD, NULL))
+        return MMI_FALSE;
+#endif
+
+    //获取的盘符是否正确挂载--就是是否存在的一个意思
+    if (!MsgCmd_CheckValidDrive(MsgCmd_GetUsableDrive()))
+        return MMI_FALSE;
+    
     MsgCmd_isink(MMI_TRUE);
     arm = (AdoRecdMngr*)MsgCmd_Malloc(sizeof(AdoRecdMngr), 0);
     arm->saveGap = auto_save_gap ? auto_save_gap : MsgCmd_GetAdoRecdArgs()->save_gap;
@@ -2261,18 +2337,8 @@ static MMI_BOOL msgcmd_CaptureFinish(void)
 static MMI_BOOL msgcmd_CaptureDoing(S8 *filepath)
 {
 #if defined(WIN32)
-    FS_HANDLE fd;
 
-    fd = FS_Open((const WCHAR*)filepath, FS_READ_WRITE | FS_CREATE_ALWAYS);
-    if (fd < FS_NO_ERROR)
-        return MMI_FALSE;
-
-    FS_Write(fd, "picture", 7, NULL);
-    FS_Seek(fd, 64, FS_FILE_BEGIN);
-    FS_Commit(fd);
-    
-    FS_Close(fd);
-
+    MsgCmd_ModisCreateJPEG(filepath);
     return MMI_TRUE;
 
 #else
@@ -2437,6 +2503,14 @@ MMI_BOOL MsgCmd_CaptureEntry(char *replay_number)
 	
     mc_trace("%s, replay=%s.", __FUNCTION__, replay_number?replay_number:"NULL");
 
+    //T卡不存在就返回
+    if (!MsgCmd_GetTFcardDrive(NULL))
+        return MMI_FALSE;
+
+    //获取的盘符是否正确挂载--就是是否存在的一个意思
+    if (!MsgCmd_CheckValidDrive(MsgCmd_GetUsableDrive()))
+        return MMI_FALSE;
+
 	if (msgcmd_CapturePreview(pictureW, pictureH))
 	{
 	    MsgCmdMMSReq *req = (MsgCmdMMSReq*)MsgCmd_ConstructPara(sizeof(MsgCmdMMSReq));
@@ -2471,8 +2545,74 @@ MMI_BOOL MsgCmd_CaptureEntry(char *replay_number)
 }
 #endif
 
-#if 1 //video record
+#if 1//video record
+
+static WCHAR *msgcmd_VdoRecdGetSavePath(WCHAR *buffer, U32 length_in_byte);
+static WCHAR *msgcmd_VdoRecdGetFilePath(WCHAR *buffer, U32 length_in_byte);
+static void msgcmd_VdoRecdSaveCb(MDI_RESULT result);
+static void msgcmd_VdoRecdDoingCb(MDI_RESULT result);
+static void msgcmd_VdoRecdLayerMngr(MMI_BOOL create, gdi_handle *layer);
+static MMI_BOOL msgcmd_VdoRecdPowerMngr(MMI_BOOL on);
+static MMI_BOOL msgcmd_VdoRecdPreview(MMI_BOOL start, gdi_handle layer);
+static MMI_BOOL msgcmd_VdoRecdDoing(WCHAR *filepath);
+static MMI_BOOL msgcmd_VdoRecdStop(void);
+static void msgcmd_VdoRecdDelete(WCHAR *filepath);
+static MMI_BOOL msgcmd_VdoRecdSave(WCHAR *filepath);
+static void msgcmd_VdoRecdTimerCyclic(void);
+static void msgcmd_VdoRecdCyclicTimer(MMI_BOOL start);
+static void msgcmd_VdoRecdResponse(void *p);
+
 static VdoRecdMngr *vrm;
+
+#define MSGCMD_VDORECD_CYCLIC_TIMER_TIME  800 //ms
+#define MSGCMD_VDORECD_CYCLIC_TIMER_ID   1
+
+/*******************************************************************************
+** 函数: msgcmd_VdoRecdGetSavePath
+** 功能: 获取录像保存的路径
+** 参数: buffer  -- 路径输出
+**       length_in_byte -- 路径输出buffer的长度, 字节为单位
+** 返回: 路径buffer地址
+** 作者: wasfayu
+*******/
+static WCHAR *msgcmd_VdoRecdGetSavePath(WCHAR *buffer, U32 length_in_byte)
+{
+    memset(buffer, 0, length_in_byte);
+    MsgCmd_CombineFilePath(
+        buffer, 
+        MSGCMD_FILE_PATH_LENGTH*sizeof(WCHAR),
+        MSGCMD_VIDEOS_FOLDER_NAME,
+        NULL);
+
+    return buffer;
+}
+
+/*******************************************************************************
+** 函数: msgcmd_VdoRecdGetFilePath
+** 功能: 获取录像文件的绝对路径
+** 参数: buffer  -- 文件绝对路径输出
+**       length_in_byte -- 文件路径输出buffer的长度, 字节为单位
+** 返回: 文件绝对路径buffer地址
+** 作者: wasfayu
+*******/
+static WCHAR *msgcmd_VdoRecdGetFilePath(WCHAR *buffer, U32 length_in_byte)
+{
+    memset(buffer, 0, length_in_byte);
+    MsgCmd_CombineFilePath(
+        buffer, 
+        MSGCMD_FILE_PATH_LENGTH*sizeof(WCHAR),
+        MSGCMD_VIDEOS_FOLDER_NAME,
+    #if defined(MP4_ENCODE)
+    	L".3gp"
+    #elif defined(MJPG_ENCODE)
+    	L".avi"
+    #else
+    	MMI_ASSERT(0)  
+    #endif
+        );
+
+    return buffer;
+}
 
 /*******************************************************************************
 ** 函数: msgcmd_VdoRecdSaveCb
@@ -2483,61 +2623,36 @@ static VdoRecdMngr *vrm;
 *******/
 static void msgcmd_VdoRecdSaveCb(MDI_RESULT result)
 {
+    if (NULL == vrm)
+        return;
+    
     mc_trace("%s,L:%d. result=%d.", __FUNCTION__, __LINE__, result);
-	
-	/* resume alignment timer */
-	UI_enable_alignment_timers();
-
-	/* resume LED patten */
-	StartLEDPatternBackGround();
-
-	/* let MMI can sleep */
-	TurnOffBacklight();
-
-	/* re-enable keypad tone */
-	mmi_frm_kbd_set_tone_state(MMI_KEY_TONE_ENABLED);
-
-	/* store camera setting back to NVRAM */
-	mmi_camera_store_setting();
-
-	/* resume background audio */
-	mdi_audio_resume_background_play();
-	
-#if defined(MSGCMD_USE_FLASH_LED_4_CAPTURE)	
-	mmi_camera_turn_off_led_highlight();
-#endif
-
-	/* close LED */
-	MsgCmd_isink(MMI_FALSE);
-
-    //如果文件小于这个值则删除掉他
-    if (applib_get_file_size(vrm->filepath) >= MsgCmd_GetVdoRecdArgs()->ignore_size)
-    {
-    	MsgCmd_RecordFileName(
-    		MSGCMD_VIDEO_LIST_FILE_NAME,
-    		(void*)vrm->filepath, 
-    		app_ucs2_strlen((const S8 *)vrm->filepath) * sizeof(WCHAR));
-    }
-    else
-    {
-        FS_Delete(vrm->filepath);
-    }
     
 	//mdi_video_rec_get_cur_record_time
     if (MDI_RES_VDOREC_SUCCEED == result)
     {
-        if (vrm->forever)
+    #if defined(WIN32)
+        //模拟器就随机的写入一些数据充斥下
+        if (rand()%4==0)
         {
-            MsgcmdVdoProcReq *req = (MsgcmdVdoProcReq*)\
-                MsgCmd_ConstructPara(sizeof(MsgcmdVdoProcReq));
-            
-            req->forever = MMI_TRUE;
-            req->record  = MMI_TRUE;
-            req->saveGap = MsgCmd_GetVdoRecdArgs()->save_gap;
-            strcpy(req->number, vrm->number);
-            MsgCmd_SendIlm2Mmi(MSG_ID_MC_VDORECD_REQ, (void *)req);
+            MsgCmd_ModisCreateAVI(vrm->filepath);
+        }
+    #endif
+    
+        //如果文件小于这个值则删除掉他
+        if (applib_get_file_size(vrm->filepath) >= MsgCmd_GetVdoRecdArgs()->ignore_size)
+        {
+        	MsgCmd_RecordFileName(
+        		MSGCMD_VIDEO_LIST_FILE_NAME,
+        		(void*)vrm->filepath, 
+        		app_ucs2_strlen((const S8 *)vrm->filepath) * sizeof(WCHAR));
         }
         else
+        {
+            FS_Delete(vrm->filepath);
+        }
+        
+        if (!vrm->forever)
         {
             vrm->time -= vrm->saveGap;
             
@@ -2545,35 +2660,39 @@ static void msgcmd_VdoRecdSaveCb(MDI_RESULT result)
             if (vrm->append)
             {
 				mc_trace("%s, time=%dS, add time(%dS).", __FUNCTION__, vrm->time, MsgCmd_GetVdoRecdArgs()->save_gap);
-                vrm->append = MMI_FALSE;
                 vrm->time  += MsgCmd_GetVdoRecdArgs()->save_gap;
             }
 
             //剩余时间小于xx秒则忽略掉
-            if (vrm->time && vrm->time >= MsgCmd_GetVdoRecdArgs()->ignore_time)
+            if (vrm->time < MsgCmd_GetVdoRecdArgs()->ignore_time)
             {
-                MsgcmdVdoProcReq *req = (MsgcmdVdoProcReq*)\
-                    MsgCmd_ConstructPara(sizeof(MsgcmdVdoProcReq));
-                
-                req->forever = MMI_FALSE;
-                req->record  = MMI_TRUE;
-                req->saveGap = vrm->saveGap;
-                req->recdTime= vrm->time;
-                strcpy(req->number, vrm->number);
-                MsgCmd_SendIlm2Mmi(MSG_ID_MC_VDORECD_REQ, (void *)req);
-            }
-            else
-            {
+                vrm->stop = MMI_TRUE;
                 //notify user by SMS
                 mc_trace("%s, record finish.", __FUNCTION__);
-            }
+            }    
         }
         
+        vrm->append    = MMI_FALSE;
+        vrm->timeCount = 0;
+    }
+    else
+    {
+        vrm->stop = MMI_TRUE;
+        msgcmd_VdoRecdDelete(vrm->filepath);
     }
 
-    if (vrm)
+    if (!vrm->stop)
+    {
+        msgcmd_VdoRecdGetFilePath(vrm->filepath, (MSGCMD_FILE_PATH_LENGTH+1)*sizeof(WCHAR));
+        vrm->stop = !msgcmd_VdoRecdDoing(vrm->filepath);
+    }
+    
+    if (vrm->stop)
     {
     	mc_trace("%s, free resource, stop record.", __FUNCTION__);
+        msgcmd_VdoRecdPreview(MMI_FALSE, vrm->dispLayer);
+        msgcmd_VdoRecdPowerMngr(MMI_FALSE);
+        msgcmd_VdoRecdLayerMngr(MMI_FALSE, &vrm->dispLayer);
         MsgCmd_Mfree(vrm);
         vrm = NULL;
     }
@@ -2589,81 +2708,130 @@ static void msgcmd_VdoRecdSaveCb(MDI_RESULT result)
 static void msgcmd_VdoRecdDoingCb(MDI_RESULT result)
 {
     mc_trace("%s,L:%d. result=%d.", __FUNCTION__, __LINE__, result);
+    if (MDI_RES_VDOREC_SUCCEED != result)
+    {
+        vrm->stop = MMI_TRUE;
+        msgcmd_VdoRecdSave(vrm->filepath);
+    }
 }
 
 /*******************************************************************************
-** 函数: msgcmd_VdoRecdDoing
-** 功能: 开始录像
-** 参数: vrm  -- 录像管理变量
-** 返回: 执行录像时返回的错误码
+** 函数: msgcmd_VdoRecdLayerMngr
+** 功能: 录像的显示层管理
+** 参数: create  -- 录像启动结果
+**       layer   -- 层句柄的地址
+** 返回: 无
 ** 作者: wasfayu
 *******/
-static MMI_BOOL msgcmd_VdoRecdDoing(VdoRecdMngr *vrm)
+static void msgcmd_VdoRecdLayerMngr(MMI_BOOL create, gdi_handle *layer)
 {
-    MDI_RESULT error;
-    MMI_BOOL   recdOk;
+    if (NULL == layer)
+        return;
     
-    ASSERT(NULL != vrm);
-    
-    if (vrm->status != VDO_STATUS_PREVIEW && vrm->status != VDO_STATUS_PAUSE)
+    if (create)
     {
-        mc_trace("%s,L:%d. status=%d. return.", __FUNCTION__, __LINE__, vrm->status);
-        return MMI_FALSE;
+        U8 *temp;
+        S32 h = 320, w = 240;
+        
+        /* enable multi-layer */
+        gdi_layer_multi_layer_enable();
+        
+        //create layer resource
+        gdi_layer_get_base_handle(layer);
+        gdi_layer_push_and_set_active(*layer);
+        gdi_layer_get_buffer_ptr(&temp);
+		gdi_layer_create_using_outside_memory(0, 0, w, h, layer, temp, w*h*2);
+		gdi_layer_set_active(*layer);
+        gdi_layer_clear(GDI_COLOR_BLACK);
+    }
+    else
+    {
+        //free layer resource
+        gdi_layer_free(*layer);
+        *layer = GDI_NULL_HANDLE;
+		gdi_layer_pop_and_restore_active();
+
+        /* enable multi-layer */
+        gdi_layer_multi_layer_disable();
+    }
+}
+
+/*******************************************************************************
+** 函数: msgcmd_VdoRecdPowerMngr
+** 功能: 录像电源管理
+** 参数: on  -- 是否打开电源
+** 返回: 打开/关闭电源是否成功
+** 作者: wasfayu
+*******/
+static MMI_BOOL msgcmd_VdoRecdPowerMngr(MMI_BOOL on)
+{
+    MDI_RESULT ret;
+    
+    if (on)
+    {
+        /* open LED */
+    	MsgCmd_isink(MMI_TRUE);
+        /* stop bg music */
+        mdi_audio_suspend_background_play();
+        /* 
+        * This is used to solve a very rare situation. When playing a IMELODY 
+        * with backlight on/off, and the screen previous to this screen is a 
+        * horizontal screen. Before enter this screen, the IMELODY turn off the
+        * backlight. While exit previous screen, the layer rotate back to normal
+        * size and the content is not correct. So when calling TurnOnBacklight, 
+        * LCD is in sleepin state and draw wrong content to LCD.
+        * So we need to clear the buffer first to avoid this situation.
+        */
+        /* stop MMI sleep */
+        TurnOnBacklight(GPIO_BACKLIGHT_PERMANENT);
+        /* force all playing keypad tone off */
+        srv_profiles_stop_tone((srv_prof_tone_enum)GetCurKeypadTone());
+        /* disable key pad tone */
+        mmi_frm_kbd_set_tone_state(MMI_KEY_TONE_DISABLED);
+        /* disalbe align timer  */
+        UI_disable_alignment_timers();
+        /* stop LED patten */
+        srv_pattern_send_req_to_hw(srv_led_pattern_get_bg_pattern(), 0);
+        /* camera power up */
+        ret = mdi_camera_power_on();
+    }
+    else
+    {
+        /* shut down camera */
+        ret = mdi_camera_power_off();
+        /* resume alignment timer */
+        UI_enable_alignment_timers();
+        /* resume LED patten */
+    	StartLEDPatternBackGround();
+        /* resume LED patten */
+        srv_pattern_play_req(srv_led_pattern_get_bg_pattern(), 1);
+        /* let MMI can sleep */
+    	TurnOffBacklight();
+        /* resume background audio */
+        mdi_audio_resume_background_play();
+        /* re-enable keypad tone */
+        mmi_frm_kbd_set_tone_state(MMI_KEY_TONE_ENABLED);
+        /* close LED */
+    	MsgCmd_isink(MMI_FALSE);
     }
 
-    recdOk = MMI_FALSE;
-    error = mdi_video_rec_record_start((S8*)vrm->filepath, msgcmd_VdoRecdDoingCb);
-    mc_trace("%s,L:%d. error=%d.", __FUNCTION__, __LINE__, error);
-
-    if (MDI_RES_VDOREC_SUCCEED == error)
-    {
-        recdOk = MMI_TRUE;
-    }
-    
-    return recdOk;
+    mc_trace("%s, on=%d, ret=%d.", __FUNCTION__, on, ret);
+    return (MMI_BOOL)(MDI_RES_VDOREC_SUCCEED == ret);
 }
 
 /*******************************************************************************
 ** 函数: msgcmd_VdoRecdPreview
-** 功能: 进入录像预览
-** 参数: 无
-** 返回: 执行预览成功否
-** 参考: mmi_fm_camera_test_entry_preview_screen [FactoryModeSrc.c]
-**       mmi_fm_camera_test_start_avr_preview [FactoryModeSrc.c]
+** 功能: 录像预览
+** 参数: start  -- 开始/停止预览
+** 返回: 开始/停止预览是否成功
 ** 作者: wasfayu
 *******/
-static MMI_BOOL msgcmd_VdoRecdPreview(void)
+static MMI_BOOL msgcmd_VdoRecdPreview(MMI_BOOL start, gdi_handle layer)
 {
-    MDI_RESULT error;
-    MMI_BOOL   previewOk;
-
-    ASSERT(NULL != vrm);
-
-	/* stop bg music */
-	mdi_audio_suspend_background_play();
-
-	/* stop MMI sleep */
-	TurnOnBacklight(GPIO_BACKLIGHT_PERMANENT);
-	
-	/* force all playing keypad tone off */
-	srv_profiles_stop_tone((srv_prof_tone_enum)GetCurKeypadTone());
-	
-	/* disable key pad tone */
-	mmi_frm_kbd_set_tone_state(MMI_KEY_TONE_DISABLED);
-	
-	/* disalbe align timer	*/
-	UI_disable_alignment_timers();
-	
-	/* stop LED patten */
-	StopLEDPatternBackGround();
-
-    previewOk = MMI_FALSE;
-    error = mdi_video_rec_power_on();
-    mc_trace("%s,L:%d, error=%d.", __FUNCTION__, __LINE__, error);
-
-    if (MDI_RES_VDOREC_SUCCEED == error)
+    MDI_RESULT ret;
+    
+    if (start)
     {
-    	U8 *temp;
         mdi_video_setting_struct video_preview_data;		
 
         mdi_video_rec_load_default_setting(&video_preview_data);
@@ -2679,7 +2847,7 @@ static MMI_BOOL msgcmd_VdoRecdPreview(void)
     	MMI_ASSERT(0);
     #endif
         video_preview_data.effect				= MDI_VIDEO_EFFECT_NOMRAL;
-        video_preview_data.video_size			= MDI_VIDEO_VIDEO_SIZE_QVGA;
+        video_preview_data.video_size			= MDI_VIDEO_VIDEO_SIZE_HVGA;//480x320
         video_preview_data.user_def_width		= 0;
         video_preview_data.user_def_height		= 0;
         video_preview_data.zoom 				= 10;
@@ -2688,7 +2856,7 @@ static MMI_BOOL msgcmd_VdoRecdPreview(void)
         video_preview_data.contrast 			= 128;
         video_preview_data.saturation			= 128;
         video_preview_data.hue					= 0;
-        video_preview_data.preview_rotate		= MDI_VIDEO_PREVIEW_ROTATE_0;		
+        video_preview_data.preview_rotate		= MDI_VIDEO_PREVIEW_ROTATE_90;		
         video_preview_data.overlay_frame_mode	= FALSE;
         video_preview_data.overlay_frame_depth	= 0;
         video_preview_data.overlay_frame_width	= 0;
@@ -2703,50 +2871,156 @@ static MMI_BOOL msgcmd_VdoRecdPreview(void)
         video_preview_data.preview_rotate       = MDI_VIDEO_LCD_ROTATE_270;
     #endif
         video_preview_data.size_limit			= 0;
-        video_preview_data.time_limit           = vrm->saveGap;
+        video_preview_data.time_limit           = 0;
         video_preview_data.record_aud			= TRUE;
 
-		gdi_layer_get_base_handle(&vrm->dispLayer);
-		gdi_layer_push_and_set_active(vrm->dispLayer);
-		gdi_layer_get_buffer_ptr(&temp);
-		gdi_layer_create_using_outside_memory(
-			0,
-			0,
-			240,
-			320,
-			&vrm->dispLayer,
-			temp,
-			240 * 320 * 2);
-
-		gdi_layer_set_active(vrm->dispLayer);
-		gdi_layer_clear(GDI_COLOR_BLACK);
-
-		error = mdi_video_rec_preview_start(
-					vrm->dispLayer,
+		ret = mdi_video_rec_preview_start(
+					layer,
 					GDI_LAYER_ENABLE_LAYER_0 | GDI_LAYER_ENABLE_LAYER_1,
 					GDI_LAYER_ENABLE_LAYER_1,
 					MMI_TRUE,
 					&video_preview_data);
-        mc_trace("%s,L:%d, error=%d.", __FUNCTION__, __LINE__, error);
-
-        if (MDI_RES_VDOREC_SUCCEED != error)
-        {
-            mdi_video_rec_preview_stop();
-            mdi_video_rec_power_off();
-			gdi_layer_free(vrm->dispLayer);
-			gdi_layer_pop_and_restore_active();
-        }
-        else
-        {
-            previewOk = MMI_TRUE;
-        }
     }
     else
     {
-        error = mdi_video_rec_power_off();
+         ret = mdi_camera_preview_stop();
     }
     
-    return previewOk;
+    mc_trace("%s, start=%d, ret=%d.", __FUNCTION__, start, ret);
+    return (MMI_BOOL)(MDI_RES_VDOREC_SUCCEED == ret);
+}
+
+/*******************************************************************************
+** 函数: msgcmd_VdoRecdDoing
+** 功能: 开始录像
+** 参数: filepath -- 文件存放路径
+** 返回: 是否成功执行录像
+** 作者: wasfayu
+*******/
+static MMI_BOOL msgcmd_VdoRecdDoing(WCHAR *filepath)
+{
+    MDI_RESULT ret;
+
+    ret = mdi_video_rec_record_start((S8*)filepath, msgcmd_VdoRecdDoingCb);
+    if (MDI_RES_VDOREC_SUCCEED == ret)
+        msgcmd_VdoRecdCyclicTimer(MMI_TRUE);
+    
+    return (MMI_BOOL)(MDI_RES_VDOREC_SUCCEED == ret);
+}
+
+/*******************************************************************************
+** 函数: msgcmd_VdoRecdStop
+** 功能: 停止录像录像
+** 参数: 无
+** 返回: 是否停止
+** 作者: wasfayu
+*******/
+static MMI_BOOL msgcmd_VdoRecdStop(void)
+{
+    MDI_RESULT ret;
+
+    ret = mdi_video_rec_record_stop();
+    if (MDI_RES_VDOREC_SUCCEED == ret)
+        msgcmd_VdoRecdCyclicTimer(MMI_FALSE);
+
+    mc_trace("%s, ret.", __FUNCTION__, ret);
+    return (MMI_BOOL)(MDI_RES_VDOREC_SUCCEED == ret);
+}
+
+/*******************************************************************************
+** 函数: msgcmd_VdoRecdDelete
+** 功能: 删除未保存的文件
+** 参数: filepath -- 文件存放路径
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void msgcmd_VdoRecdDelete(WCHAR *filepath)
+{
+    mdi_video_rec_delete_unsaved_file((S8*)filepath);
+    mc_trace("%s.", __FUNCTION__);
+}
+
+/*******************************************************************************
+** 函数: msgcmd_VdoRecdSafe
+** 功能: 保存录像文件
+** 参数: filepath -- 文件存放路径
+** 返回: 保存结果
+** 作者: wasfayu
+*******/
+static MMI_BOOL msgcmd_VdoRecdSave(WCHAR *filepath)
+{
+    MDI_RESULT ret = MDI_RES_VDOREC_SUCCEED;
+
+    msgcmd_VdoRecdStop();
+#if defined(WIN32)
+    if (MMI_TRUE)
+#else
+    if (mdi_video_rec_has_unsaved_file((S8*)filepath))
+#endif
+    {
+        ret = mdi_video_rec_save_file((S8*)filepath, msgcmd_VdoRecdSaveCb);
+        mc_trace("%s, ret=%d.", __FUNCTION__, ret);
+    }
+    else
+    {
+        msgcmd_VdoRecdPreview(MMI_FALSE, vrm->dispLayer);
+        msgcmd_VdoRecdPowerMngr(MMI_FALSE);
+        msgcmd_VdoRecdLayerMngr(MMI_FALSE, &vrm->dispLayer);
+        MsgCmd_Mfree(vrm);
+        vrm = NULL;
+    }
+    
+    return (MMI_BOOL)(MDI_RES_VDOREC_SUCCEED == ret);
+}
+
+/*******************************************************************************
+** 函数: msgcmd_VdoRecdTimerCyclic
+** 功能: 定时器的回调函数
+** 参数: 无
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void msgcmd_VdoRecdTimerCyclic(void)
+{
+    U64 time;
+    
+    if (NULL == vrm)
+        return;
+
+    mdi_video_rec_get_cur_record_time(&time);
+    vrm->timeCount = (U32)(time/1000);
+    if (vrm->timeCount >= vrm->saveGap)
+    {
+        //save
+        vrm->stop = MMI_FALSE;
+        mc_trace("%s, timeCount=%dS, save.", __FUNCTION__, vrm->timeCount);
+        msgcmd_VdoRecdSave(vrm->filepath);
+    }
+    else
+    {
+        msgcmd_VdoRecdCyclicTimer(MMI_TRUE);
+    }
+}
+
+/*******************************************************************************
+** 函数: msgcmd_VdoRecdCyclicTimer
+** 功能: 定时器操作
+** 参数: start -- 启动/停止
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void msgcmd_VdoRecdCyclicTimer(MMI_BOOL start)
+{
+    if (NULL == vrm)
+        return;
+    
+    if (start)
+        StartTimer(
+            MSGCMD_VDORECD_CYCLIC_TIMER_ID, 
+            MSGCMD_VDORECD_CYCLIC_TIMER_TIME,
+            msgcmd_VdoRecdTimerCyclic);
+    else
+        StopTimer(MSGCMD_VDORECD_CYCLIC_TIMER_ID);
 }
 
 /*******************************************************************************
@@ -2802,7 +3076,7 @@ MMI_BOOL MsgCmd_VdoRecdSetAppend(void)
 *******/
 MMI_BOOL MsgCmd_VdoRecdBusy(void)
 {
-    return (MMI_BOOL)(vrm && VDO_STATUS_IDLE != vrm->status);
+    return (MMI_BOOL)(NULL != vrm);
 }
 
 /*******************************************************************************
@@ -2818,16 +3092,10 @@ void MsgCmd_VdoRecdStop(char *replay_number)
 
     if (vrm)
     {
-        mdi_video_rec_record_stop();
-        mdi_video_rec_save_file((S8*)vrm->filepath, msgcmd_VdoRecdSaveCb);
-        mdi_video_rec_preview_stop();
-        mdi_video_rec_power_off();
-		gdi_layer_free(vrm->dispLayer);
-		vrm->dispLayer = NULL;
-		gdi_layer_pop_and_restore_active();
+        vrm->stop = MMI_TRUE;
+        msgcmd_VdoRecdSave(vrm->filepath);
+        MsgCmd_DelayTick(MSGCMD_VDORECD_DLY_TICK);
     }
-
-    MsgCmd_DelayTick(MSGCMD_VDORECD_DLY_TICK);
 }
 
 /*******************************************************************************
@@ -2853,9 +3121,13 @@ MMI_BOOL MsgCmd_VdoRecdStart(
         time_in_sec, 
         replay_number?replay_number:"NULL");
 
-    if (vrm)
+    if (MsgCmd_VdoRecdBusy())
         return MMI_FALSE;
-            
+
+    //T卡不存在就返回
+    if (!MsgCmd_GetTFcardDrive(NULL))
+        return MMI_FALSE;
+    
 #ifdef __MMI_UCM__
     //reference: mmi_vdorec_is_in_bgcall()
     if (0 != srv_ucm_query_call_count(SRV_UCM_CALL_STATE_ALL, SRV_UCM_CALL_TYPE_NO_CSD, NULL))
@@ -2865,9 +3137,30 @@ MMI_BOOL MsgCmd_VdoRecdStart(
         return MMI_FALSE;
 #endif
 
+    //获取的盘符是否正确挂载--就是是否存在的一个意思
     if (!MsgCmd_CheckValidDrive(MsgCmd_GetUsableDrive()))
         return MMI_FALSE;
+    else
+    {
+        WCHAR buffer[MSGCMD_FILE_PATH_LENGTH+1];
 
+        memset(buffer, 0, (MSGCMD_FILE_PATH_LENGTH+1)*sizeof(WCHAR));
+
+        MsgCmd_CombineFilePath(
+            buffer, 
+            MSGCMD_FILE_PATH_LENGTH*sizeof(WCHAR),
+            MSGCMD_VIDEOS_FOLDER_NAME,
+            NULL);
+        
+        //是否有未保存过的视频
+        if (mdi_video_rec_has_unsaved_file((S8*)buffer))
+        {
+            //保存之?删除之?
+            mc_trace("%s, L:%d, has unsaved video, delete.", __FUNCTION__, __LINE__);
+            mdi_video_rec_delete_unsaved_file((S8*)buffer);
+        }
+    }
+    
     vrm = (VdoRecdMngr*)MsgCmd_Malloc(sizeof(VdoRecdMngr), 0);
     vrm->forever = forever;
     vrm->time    = time_in_sec;
@@ -2880,38 +3173,29 @@ MMI_BOOL MsgCmd_VdoRecdStart(
     else
         vrm->number[0] = '\0';
 
+    msgcmd_VdoRecdGetFilePath(vrm->filepath, MSGCMD_FILE_PATH_LENGTH*sizeof(WCHAR));
+    msgcmd_VdoRecdLayerMngr(MMI_TRUE, &vrm->dispLayer);
     
-    MsgCmd_CombineFilePath(
-        vrm->filepath, 
-        MSGCMD_FILE_PATH_LENGTH*sizeof(WCHAR),
-        MSGCMD_VIDEOS_FOLDER_NAME,
-    #if defined(MP4_ENCODE)
-    	L".3gp"
-    #elif defined(MJPG_ENCODE)
-    	L".avi"
-    #else
-    	MMI_ASSERT(0)  
-    #endif
-        );
-    
-    if (msgcmd_VdoRecdPreview())
+    if (msgcmd_VdoRecdPowerMngr(MMI_TRUE) &&
+        msgcmd_VdoRecdPreview(MMI_TRUE, vrm->dispLayer))
     {
         vrm->status = VDO_STATUS_PREVIEW;
         
         MsgCmd_DelayTick(MSGCMD_VDORECD_DLY_TICK);
-        
-        if (!msgcmd_VdoRecdDoing(vrm))
+        if (msgcmd_VdoRecdDoing(vrm->filepath))
         {
-            mdi_video_rec_preview_stop();
-            mdi_video_rec_power_off();
-            MsgCmd_Mfree(vrm);
-            vrm = NULL;
-
+            vrm->status = VDO_STATUS_RECODING;
+        }
+        else
+        {
+            MsgCmd_VdoRecdStop(vrm->number);
             MsgCmd_DelayTick(MSGCMD_VDORECD_DLY_TICK);
         }
     }
     else
     {
+        msgcmd_VdoRecdPowerMngr(MMI_FALSE);
+        msgcmd_VdoRecdLayerMngr(MMI_FALSE, &vrm->dispLayer);
         MsgCmd_Mfree(vrm);
         vrm = NULL;
     }
@@ -2951,7 +3235,6 @@ void MsgCmd_ProcessInit(void)
     
     }while(0);
 
-
     //注册消息响应
     mmi_frm_set_protocol_event_handler(
         MSG_ID_MC_CAPTURE_REQ,
@@ -2967,7 +3250,7 @@ void MsgCmd_ProcessInit(void)
         MSG_ID_MC_VDORECD_REQ,
         (PsIntFuncPtr)msgcmd_VdoRecdResponse,
         MMI_FALSE);
-    
+
     mmi_frm_set_protocol_event_handler(
         MSG_ID_MC_SEND_MMS_REQ,
         (PsIntFuncPtr)msgcmd_SendMMSResponse,

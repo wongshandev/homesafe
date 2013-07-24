@@ -277,6 +277,8 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 			//录音
 			U32 time  = TASK_ID;
 			hf_print("task vdo :%d",time);
+            
+        #if defined(__MSGCMD_SUPPORT__)
 			if (MsgCmd_VdoRecdBusy())
 			{
 				//replay system busy
@@ -285,26 +287,31 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 			{
 				MsgCmd_VdoRecdStart(time ? MMI_FALSE : MMI_TRUE, time, 5*60, NULL);
 			}
+        #endif
 		}break;
 		case HF_MSG_ID_ADO:
 		{
 			U16 time =TASK_ID;
 			hf_print("task Ado :%d",time);
-			
+
+        #if defined(__MSGCMD_SUPPORT__)
 			if (MsgCmd_AdoRecdBusy())
 				MsgCmd_AdoRecdStop(NULL);
 			else
 				MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, time, 5*60, NULL);
+        #endif
 		}break;
 		case HF_MSG_ID_MMS:
 		{
 			char * _number = TASK_STRING;
 			hf_print("task mms:[length=%d] \"%s\".", strlen(_number), _number);
 
+        #if defined(__MSGCMD_SUPPORT__)
 			if (strlen(_number))
 				MsgCmd_CaptureEntry(_number);
 			else
 				MsgCmd_CaptureEntry(NULL);
+        #endif
 		}break;
 		case HF_MSG_ID_FACT:
 		{
@@ -314,13 +321,18 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 		{
 			char * _number =TASK_STRING;
 			hf_print("task call out :%s",_number);
+        #if defined(__MSGCMD_SUPPORT__)
 			MsgCmd_MakeCall(_number);
+        #endif
 		}break;
 		case HF_MSG_ID_MOS:
 		{
 			U16 _flag = TASK_ID;
 			hf_print("task mos :%d",_flag);
-			
+
+        #if defined(__MSGCMD_SUPPORT__)
+            MsgCmd_InterruptMask((MMI_BOOL)_flag);
+        #endif
 		}break;
 		case HF_MSG_ID_LANG:
 		{
@@ -341,11 +353,13 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 		case HF_MSG_ID_QUIT:
 		{
 			hf_print("task quit ");
+        #if defined(__MSGCMD_SUPPORT__)
 			if (MsgCmd_AdoRecdBusy())
 				MsgCmd_AdoRecdStop(NULL);
 			
 			if (MsgCmd_VdoRecdBusy())
 				MsgCmd_VdoRecdStop(NULL);
+        #endif
 		}break;
 		case HF_MSG_ID_LOCA:
 		{
@@ -356,6 +370,16 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 		{
 			char * number = TASK_STRING;
 			srv_ucm_result_enum result;
+
+        #if defined(__MSGCMD_SUPPORT__)
+            //这里肯定是超级号码了, 停止录音和录像
+            if (MsgCmd_AdoRecdBusy())
+				MsgCmd_AdoRecdStop(NULL);
+			
+			if (MsgCmd_VdoRecdBusy())
+				MsgCmd_VdoRecdStop(NULL);
+        #endif
+        
 			//发送消息过去，直接接听来电
 			result = mmi_ucm_answer_option(MMI_UCM_EXEC_IF_PERMIT_PASS);
 			hf_print("task number=\"%s\", anser_result=%d.",number, result);

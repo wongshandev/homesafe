@@ -74,12 +74,13 @@ typedef enum {
 typedef struct {
     WCHAR         filepath[MSGCMD_FILE_PATH_LENGTH+1]; //文件绝对路径
     char          number[MAX_PHONENUMBER_LENTH+1];
-    U32           time;          //unit: second
-    U32           saveGap;       //unit: second
+    U32           time;          //unit: second, 总的录制时间
+    U32           saveGap;       //unit: second, 自动保存间隔
+    U32           timeCount;     //unit: second, 当前已经录制的时间
     MMI_BOOL      forever;       //是否无限时录制
     MMI_BOOL      append;        //是否追加一次saveGap时长的录制
+    MMI_BOOL      stop;          //是否停止录制
     gdi_handle    dispLayer;     //OSD层句柄
-    gdi_handle    baseLayer;     //OSD层句柄
     VdoRecdStatus status;        //当前状态
 }VdoRecdMngr;
 
@@ -324,6 +325,15 @@ MMI_BOOL MsgCmd_CheckValidDrive(U32 drive);
 ** 作者: wasfayu
 *******/
 S32 MsgCmd_GetUsableDrive(void);
+
+/*******************************************************************************
+** 函数: MsgCmd_GetTFcardDrive
+** 功能: 判断T卡是否存在并返回T卡的盘符
+** 参数: litter -- 输出盘符
+** 返回: 存在或者不存在
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_GetTFcardDrive(S32 *litter);
 
 /*******************************************************************************
 ** 函数: MsgCmd_GetSystemDrive
@@ -586,6 +596,15 @@ void MsgCmd_MakeCall(char *pnumber);
 ** 作者: wasfayu
 *******/
 MMI_BOOL MsgCmd_WriteImei(char *num, U16 strl, U8 sim, U8 (*rsp)(void*));
+
+/*******************************************************************************
+** 函数: MsgCmd_InterruptMask
+** 功能: 屏蔽/打开外部中断
+** 参数: mask  -- 屏蔽
+** 返回: 无
+** 作者: wasfayu
+*******/
+void MsgCmd_InterruptMask(MMI_BOOL mask);
 
 /*******************************************************************************
 ** 函数: MsgCmd_SendSms

@@ -10,7 +10,8 @@ SRC_LIST = homesafe\src\ws_sms.c \
            homesafe\src\ws_main.c \
            homesafe\src\msgcmd_at.c \
            homesafe\src\msgcmd_process.c \
-           homesafe\src\msgcmd_dtmf.c
+           homesafe\src\msgcmd_dtmf.c \
+           homesafe\src\msgcmd_win32data.c
 
 # Define the specified compile options to COMP_DEFS
 COMP_DEFS = 
