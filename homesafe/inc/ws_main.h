@@ -136,6 +136,9 @@ typedef struct {
     U32    ignore_size; //小于该值(BYTE)的文件都将被删除
 }MsgCmdRecdArg;
 #endif
+typedef void (*hf_FuncPtr) (BOOL result);
+
+
 typedef MMI_BOOL (*loc_cb)(rr_em_lai_info_struct *pInData);
 typedef struct _loc_info_struct
 {
@@ -157,6 +160,11 @@ typedef struct _homesafe_info
 	hf_task_struct*     hf_task;
 
 	kal_uint8 		signal;
+
+	U16				call_result_time;
+	BOOL			call_result_is_connet;
+	BOOL                    is_call_out;
+	BOOL                   call_is_complete;
 	
 }homesafe_info;
 

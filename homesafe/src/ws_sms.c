@@ -787,6 +787,14 @@ void hf_send_sms_ex(void)
 	}
 
 }
+
+BOOL hf_is_vaild_service(void)
+{
+/*
+	是否信号有效，无卡和无信号都是效服务。
+*/
+	return (BOOL)mmi_bootup_is_network_service_available();
+}
 void hf_send_sms_req(const char * _number, const char* content)
 {
 	if (!mmi_bootup_is_network_service_available())
