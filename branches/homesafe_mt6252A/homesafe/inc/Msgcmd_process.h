@@ -37,6 +37,7 @@
 #define MSGCMD_TIMER_SHUTDOWN     (MSGCMD_TIMER_BASE + 1)
 #define MSGCMD_TIMER_FACTORY      (MSGCMD_TIMER_BASE + 2)
 #define MSGCMD_TIMER_INT_RECHECK  (MSGCMD_TIMER_BASE + 3)
+#define MSGCMD_TIMER_VDO_CHECK    (MSGCMD_TIMER_BASE + 4)
 
 /* 消息ID定义 */
 #define MSG_ID_MC_VDORECD_REQ     (MSG_ID_MC_BASE + 0)
@@ -109,8 +110,17 @@ typedef struct {
 #define MSGCMD_AUDIOS_FOLDER_NAME   L"Audios"
 #define MSGCMD_VIDEOS_FOLDER_NAME   L"Videos"
 
-#define MSGCMD_AUDIO_LIST_FILE_NAME L"AdoFiles.lst"
-#define MSGCMD_VIDEO_LIST_FILE_NAME L"VdoFiles.lst"
+#define MSGCMD_ADO_LIST_FILE_NAME   L"AdoFiles.lst"
+#define MSGCMD_VDO_LIST_FILE_NAME   L"VdoFiles.lst"
+
+//执行录音/录像需要检查磁盘空间的剩余量
+#define MSGCMD_ADO_FREE_SPACE_REQUIRE   (1024*1024*5)  //5MB
+#define MSGCMD_VDO_FREE_SPACE_REQUIRE   (1024*1024*15) //15MB
+
+//因磁盘空间不足, 需要删除的文件的最低值
+#define MSGCMD_ADO_DELETE_SIZE     (1024*1024)    //1MB
+#define MSGCMD_VDO_DELETE_SIZE     (1024*1024*3)  //3MB
+
 
 /* capture request */
 typedef struct {
@@ -688,6 +698,15 @@ void MsgCmd_DelayTick(U32 dt);
 mmi_ret MsgCmd_EvtProcEntry(mmi_event_struct *evp);
 
 /*******************************************************************************
+** 函数: MsgCmd_AdoRecdGetContext
+** 功能: 获取录音管理变量的地址
+** 参数: 无
+** 返回: 返回管理变量的地址
+** 作者: wasfayu
+*******/
+AdoRecdMngr *MsgCmd_AdoRecdGetContext(void);
+
+/*******************************************************************************
 ** 函数: MsgCmd_AdoRecdSetAppend
 ** 功能: 增加一段录音时间
 ** 参数: 无
@@ -738,6 +757,15 @@ MMI_BOOL MsgCmd_AdoRecdStart(
 ** 作者: wasfayu
 *******/
 MMI_BOOL MsgCmd_CaptureEntry(char *replay_number);
+
+/*******************************************************************************
+** 函数: MsgCmd_VdoRecdGetContext
+** 功能: 获取录像管理变量的地址
+** 参数: 无
+** 返回: 返回管理变量的地址
+** 作者: wasfayu
+*******/
+VdoRecdMngr *MsgCmd_VdoRecdGetContext(void);
 
 /*******************************************************************************
 ** 函数: MsgCmd_VdoRecdSetAppend

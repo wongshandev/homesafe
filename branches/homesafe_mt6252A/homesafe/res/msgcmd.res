@@ -5,7 +5,7 @@
 
 <?xml version="1.0" encoding="UTF-8"?>
 
-<APP id="APP_NPPLG">
+<APP id="APP_MSGCMD">
 
     <!-----------------------------------------------------String Resource Area----------------------------------------------------->
     //<STRING id="STR_ID_NPPLG_ERROR_TITLE"/>
@@ -40,6 +40,10 @@
 	<RECEIVER id="EVT_ID_SRV_NW_INFO_ROAMING_STATUS_CHANGED" proc="MsgCmd_EvtProcEntry"/>
 #endif
 
+    <!--------------------------------------------------Events--------------------------------------------------->
+    <EVENT id="EVT_ID_SRV_MC_INCOMING_CALL"/>
+    <EVENT id="EVT_ID_SRV_MC_OUTGOING_CALL"/>
+    
 </APP>
 
 #endif /* defined(__MESSAGE_COMMAND_SUPPORT__) */

@@ -91,6 +91,24 @@ typedef enum _hf_task_msg_id{
 }hf_task_msg_id;
 
 #if defined(__MSGCMD_SUPPORT__)
+#if defined(WIN32)
+#define MSGCMD_ADO_RECD_TIME_MIN  (3)
+#define MSGCMD_VDO_RECD_TIME_MIN  (3)
+
+#define MSGCMD_ADO_AUTO_SAVE_GAP  (8) // 300S
+#define MSGCMD_VDO_AUTO_SAVE_GAP  (8) // 300S
+
+#define MSGCMD_ADO_INT_CHECK_TIME (5)
+#define MSGCMD_VDO_INT_CHECK_TIME (5)
+
+#define MSGCMD_ADO_IGNORE_TIME    (2) //时间(秒)小于该值则忽略掉
+#define MSGCMD_VDO_IGNORE_TIME    (2) //时间(秒)小于该值则忽略掉
+
+#define MSGCMD_ADO_IGNORE_SIZE    (256) //小于该值(BYTE)的文件都将被删除
+#define MSGCMD_VDO_IGNORE_SIZE    (1024) //小于该值(BYTE)的文件都将被删除
+
+#else
+
 #define MSGCMD_ADO_RECD_TIME_MIN  (60*2)
 #define MSGCMD_VDO_RECD_TIME_MIN  (60*2)
 
@@ -105,6 +123,7 @@ typedef enum _hf_task_msg_id{
 
 #define MSGCMD_ADO_IGNORE_SIZE    (1024*3) //小于该值(BYTE)的文件都将被删除
 #define MSGCMD_VDO_IGNORE_SIZE    (1024*30) //小于该值(BYTE)的文件都将被删除
+#endif
 
 typedef struct {
 //时间单位都以秒来计算
