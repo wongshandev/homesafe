@@ -29,7 +29,9 @@
 #define MIN_PHONENUMBER_LENTH			4	
 #define MAX_ADMIN_PSW					6
 
-#define MAX_LENTH_REC_TIME		20
+#define MAX_LENTH_REC_TIME		30
+#define MIN_LENTH_REC_TIME		2
+
 //√¸¡ÓºØ
 typedef enum _homesafe_cmd{
  MSG_SMS_CMD_SET, 

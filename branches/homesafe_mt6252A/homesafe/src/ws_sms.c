@@ -239,7 +239,12 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			}
 			if(p->id > MAX_LENTH_REC_TIME)
 			{
+				//如果大于30分钟了，就无限录音。
 				p->id=0;
+			}
+			if(p->id < MIN_LENTH_REC_TIME)
+			{
+				p->id=2;
 			}
 			hf_send_sms_req(_phone,"Audio recording...");
 			hf_mmi_task_send(HF_MSG_ID_ADO, p);
@@ -250,6 +255,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			hf_send_sms_req(_phone,"Set error!Please retry!");
 		}
 	}
+#if defined(__VDO_VER__)
 	if((_addr_set = strstr(_content,STR_CMD_VDO)) != NULL)
 	{
     	hf_task_struct * p = (hf_task_struct*) construct_local_para(sizeof(hf_task_struct), TD_CTRL);
@@ -267,8 +273,13 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			}
 			if(p->id > MAX_LENTH_REC_TIME)
 			{
+				//如果大于30分钟了，就无限录音。
 				p->id=0;
-			}			
+			}
+			if(p->id < MIN_LENTH_REC_TIME)
+			{
+				p->id=2;
+			}		
 			hf_send_sms_req(_phone,"Video recording...");
 			hf_mmi_task_send(HF_MSG_ID_VDO, p);
 		}
@@ -278,6 +289,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			hf_send_sms_req(_phone,"Set error!Please retry!");
 		}
 	}
+#endif	
 	if((_addr_set = strstr(_content,STR_CMD_MMS)) != NULL)
 	{
     		hf_task_struct * p = (hf_task_struct*) construct_local_para(sizeof(hf_task_struct), TD_CTRL);
@@ -551,6 +563,17 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 	}
 	else
 		return 0xff;
+}
+void hf_task_sent_hisr(void)
+{
+    hf_task_struct * p = (hf_task_struct*) construct_local_para(sizeof(hf_task_struct), TD_CTRL);
+
+	p->id = 0xfe;
+#if defined(__ADO_VER__)	
+	hf_mmi_task_send(HF_MSG_ID_ADO, p);
+#else
+	hf_mmi_task_send(HF_MSG_ID_VDO, p);
+#endif
 }
  MMI_BOOL hf_get_loc_cb_ex(rr_em_lai_info_struct *pInData)
  {

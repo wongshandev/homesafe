@@ -27,6 +27,11 @@ void hf_nvram_init(void)
 	}
 	hf_print("hf_nvram_init,admin[%s %s %s %s %s %s ],psw[%s]",hf_nv.admin_number[0],hf_nv.admin_number[1],hf_nv.admin_number[2],
 															hf_nv.admin_number[3],hf_nv.admin_number[4],hf_nv.admin_number[5],hf_nv.admin_passwd);
+    hf_nv.vdo.ignore_size  = 10;
+    hf_nv.vdo.ignore_time  = 3;
+    hf_nv.vdo.int_check    = 5;
+    hf_nv.vdo.min_time     = 8;
+    hf_nv.vdo.save_gap     = 10;
 	hf_write_nvram();
 }
 void hf_start_light(void)
@@ -244,6 +249,12 @@ MsgCmdRecdArg *MsgCmd_GetVdoRecdArgs(void)
 {
     return &hf_nv.vdo;
 }
+void MsgCmd_AdoRecdStopTimerEx(void)
+{
+	hf_print("停止录音");
+	if (MsgCmd_AdoRecdBusy())
+		MsgCmd_AdoRecdStop(NULL);
+}
 #endif
 void hf_enit_hisr(void)
 {
@@ -299,11 +310,11 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 				//replay system busy
 				if (time)
                 {
-                    MsgCmd_AdoRecdGetContext()->forever = MMI_FALSE;
-                    MsgCmd_AdoRecdGetContext()->time += time;
+                    MsgCmd_VdoRecdGetContext()->forever = MMI_FALSE;
+                    MsgCmd_VdoRecdGetContext()->time += time;
                 }
                 else
-                    MsgCmd_AdoRecdGetContext()->forever = MMI_TRUE;
+                    MsgCmd_VdoRecdGetContext()->forever = MMI_TRUE;
 			}
 			else
 			{
@@ -317,20 +328,50 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 			hf_print("task Ado :%d",time);
 			
         #if defined(__MSGCMD_SUPPORT__)
-			if (MsgCmd_AdoRecdBusy())
-			{
-			    if (time)
-                {
-                    MsgCmd_VdoRecdGetContext()->forever = MMI_FALSE;
-                    MsgCmd_VdoRecdGetContext()->time += time;
-                }
-                else
-                    MsgCmd_VdoRecdGetContext()->forever = MMI_TRUE;
-            }
-			else
-			{
-				MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, time, 5*60, NULL);
-            }
+        //中断过来的time 为0xfe吧。
+        	if(time == 0xfe)
+        	{
+				//中断触发的
+				if (!MsgCmd_AdoRecdBusy())
+				{
+					//空闲时，可以启动。
+					hf_print("开始录音。。");
+					MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, 0, 5*60, NULL);
+				}
+				else
+				{
+					//直到第4分钟之后，检测如果没有消息过来触发，就停止录音了。
+					StartTimer(MSGCMD_TIMER_ADO_STOP,1000*60*4,MsgCmd_AdoRecdStopTimerEx);
+				}
+        	}
+        	else
+        	{
+				//短信触发的
+				if (!MsgCmd_AdoRecdBusy())
+				{
+					//空闲时，可以启动。
+					hf_print("开始录音。。");
+					MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, time, 5*60, NULL);
+				}
+				else if(0 != time)
+				{
+					//短信触发的，有非零参数进来先停止，再启动以新的参数启动。
+					hf_print("有参数，再继续录...");
+					MsgCmd_AdoRecdGetContext()->forever = MMI_FALSE;
+                    MsgCmd_AdoRecdGetContext()->time += time*60;
+				}
+				else
+				{
+					//非空闲
+					hf_print("无参数。设备正在录，继续录。。");
+					MsgCmd_AdoRecdGetContext()->forever = MMI_TRUE;
+				}
+        	}
+			//if (MsgCmd_AdoRecdBusy())
+			//	MsgCmd_AdoRecdStop(NULL);
+			//else
+			//StartTimer(MSGCMD_TIMER_ADO_STOP,MsgCmd_AdoRecdStopTimerEx);
+			//	MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, time, 5*60, NULL);
         #endif
 		}break;
 		case HF_MSG_ID_MMS:

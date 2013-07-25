@@ -1287,7 +1287,7 @@ MMI_BOOL MsgCmd_WriteImei(char *num, U16 strl, U8 sim, U8 (*rsp)(void*))
     return MMI_TRUE;
 #endif
 }
-
+extern void hf_task_sent_hisr(void);
 /*******************************************************************************
 ** 函数: msgcmd_InterruptProcess
 ** 功能: 外部中断响应函数
@@ -1301,6 +1301,8 @@ static void msgcmd_InterruptRespond(void *p)
 
 	mc_trace("%s, level=%d.", __FUNCTION__, rsp->level);
 	MsgCmd_isink(rsp->level);
+	//发消息到hf_mmi_task_process() 统一处理。响应的消息ID还是HF_MSG_ID_ADO或者HF_MSG_ID_VDO
+	hf_task_sent_hisr();
 }
 
 /*******************************************************************************
