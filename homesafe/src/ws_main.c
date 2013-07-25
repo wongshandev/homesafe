@@ -311,14 +311,18 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 				if (time)
                 {
                     MsgCmd_VdoRecdGetContext()->forever = MMI_FALSE;
-                    MsgCmd_VdoRecdGetContext()->time += time;
+                    MsgCmd_VdoRecdGetContext()->time += time*60;
                 }
                 else
                     MsgCmd_VdoRecdGetContext()->forever = MMI_TRUE;
 			}
 			else
 			{
-				MsgCmd_VdoRecdStart(time ? MMI_FALSE : MMI_TRUE, time, 5*60, NULL);
+				MsgCmd_VdoRecdStart(
+                    time ? MMI_FALSE : MMI_TRUE, 
+                    time*60, 
+                    MsgCmd_GetVdoRecdArgs()->save_gap,
+                    NULL);
 			}
         #endif
 		}break;
@@ -336,7 +340,11 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 				{
 					//空闲时，可以启动。
 					hf_print("开始录音。。");
-					MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, 0, 5*60, NULL);
+					MsgCmd_AdoRecdStart(
+                        time ? MMI_FALSE : MMI_TRUE, 
+                        0, 
+                        MsgCmd_GetAdoRecdArgs()->save_gap,
+                        NULL);
 				}
 				else
 				{
@@ -351,7 +359,11 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 				{
 					//空闲时，可以启动。
 					hf_print("开始录音。。");
-					MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, time, 5*60, NULL);
+					MsgCmd_AdoRecdStart(
+                        time ? MMI_FALSE : MMI_TRUE, 
+                        time, 
+                        MsgCmd_GetAdoRecdArgs()->save_gap, 
+                        NULL);
 				}
 				else if(0 != time)
 				{
@@ -367,11 +379,6 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 					MsgCmd_AdoRecdGetContext()->forever = MMI_TRUE;
 				}
         	}
-			//if (MsgCmd_AdoRecdBusy())
-			//	MsgCmd_AdoRecdStop(NULL);
-			//else
-			//StartTimer(MSGCMD_TIMER_ADO_STOP,MsgCmd_AdoRecdStopTimerEx);
-			//	MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, time, 5*60, NULL);
         #endif
 		}break;
 		case HF_MSG_ID_MMS:

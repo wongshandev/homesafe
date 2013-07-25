@@ -45,6 +45,7 @@
 #define MSG_ID_MC_CAPTURE_REQ     (MSG_ID_MC_BASE + 2)
 #define MSG_ID_MC_SEND_MMS_REQ    (MSG_ID_MC_BASE + 3)
 #define MSG_ID_MC_EXT_INTERRUPT   (MSG_ID_MC_BASE + 4)
+#define MSG_ID_MC_CONT_RECD_VDO   (MSG_ID_MC_BASE + 5)
 
 
 /* ×Ö·ûÀàÐÍ */

@@ -2674,6 +2674,7 @@ static MMI_BOOL msgcmd_VdoRecdSave(WCHAR *filepath);
 static void msgcmd_VdoRecdTimerCyclic(void);
 static void msgcmd_VdoRecdCyclicTimer(MMI_BOOL start);
 static void msgcmd_VdoRecdResponse(void *p);
+static void msgcmd_VdoRecdContRecdRsp(void *p);
 
 static VdoRecdMngr *vrm;
 
@@ -2793,12 +2794,6 @@ static void msgcmd_VdoRecdSaveCb(MDI_RESULT result)
         vrm->stop = MMI_TRUE;
         msgcmd_VdoRecdDelete(vrm->filepath);
     }
-
-    if (!vrm->stop)
-    {
-        msgcmd_VdoRecdGetFilePath(vrm->filepath, (MSGCMD_FILE_PATH_LENGTH+1)*sizeof(WCHAR));
-        vrm->stop = !msgcmd_VdoRecdDoing(vrm->filepath);
-    }
     
     if (vrm->stop)
     {
@@ -2808,6 +2803,19 @@ static void msgcmd_VdoRecdSaveCb(MDI_RESULT result)
         msgcmd_VdoRecdLayerMngr(MMI_FALSE, &vrm->dispLayer);
         MsgCmd_Mfree(vrm);
         vrm = NULL;
+    }
+    else
+    {
+        //发消息出去重新录像
+        local_para_struct *req = (local_para_struct*)\
+            MsgCmd_ConstructPara(sizeof(local_para_struct));
+
+        mc_trace("%s, pose contiue record request.", __FUNCTION__);
+        mmi_frm_set_protocol_event_handler(
+            MSG_ID_MC_CONT_RECD_VDO,
+            (PsIntFuncPtr)msgcmd_VdoRecdContRecdRsp,
+            MMI_FALSE);
+        MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_CONT_RECD_VDO, (void *)req);                
     }
 }
 
@@ -2849,20 +2857,21 @@ static void msgcmd_VdoRecdLayerMngr(MMI_BOOL create, gdi_handle *layer)
         /* enable multi-layer */
         //gdi_layer_multi_layer_enable();
         
-        //create layer resource
-        gdi_layer_get_base_handle(layer);
-        gdi_layer_push_and_set_active(*layer);
         gdi_layer_get_buffer_ptr(&temp);
-		gdi_layer_create_using_outside_memory(0, 0, w, h, layer, temp, w*h*2);
-		gdi_layer_set_active(*layer);
-        gdi_layer_clear(GDI_COLOR_BLACK);
+        ASSERT(temp != NULL);
+        gdi_layer_create_using_outside_memory(0, 0, w, h, layer, temp, w*h*2);
+        gdi_layer_push_and_set_active(*layer);
+        gdi_layer_set_background(GDI_COLOR_BLACK);
+        gdi_layer_set_position(0, 0);
+        gdi_layer_pop_and_restore_active();
+        gdi_layer_set_blt_layer(*layer, 0, 0, 0);
     }
     else
     {
         //free layer resource
         gdi_layer_free(*layer);
         *layer = GDI_NULL_HANDLE;
-		gdi_layer_pop_and_restore_active();
+		//gdi_layer_pop_and_restore_active();
 
         /* enable multi-layer */
         //gdi_layer_multi_layer_disable();
@@ -2882,44 +2891,63 @@ static MMI_BOOL msgcmd_VdoRecdPowerMngr(MMI_BOOL on)
     
     if (on)
     {
+        /* set main camera id */
+        mdi_video_set_camera_id(0);
+    
+        /* camera power up */
+        ret = mdi_video_rec_power_on();
+        
         /* open LED */
     	MsgCmd_isink(MMI_TRUE);
-        /* stop bg music */
-        mdi_audio_suspend_background_play();
-        /* 
-        * This is used to solve a very rare situation. When playing a IMELODY 
-        * with backlight on/off, and the screen previous to this screen is a 
-        * horizontal screen. Before enter this screen, the IMELODY turn off the
-        * backlight. While exit previous screen, the layer rotate back to normal
-        * size and the content is not correct. So when calling TurnOnBacklight, 
-        * LCD is in sleepin state and draw wrong content to LCD.
-        * So we need to clear the buffer first to avoid this situation.
-        */
-        /* stop MMI sleep */
-        TurnOnBacklight(GPIO_BACKLIGHT_PERMANENT);
+        
         /* force all playing keypad tone off */
-        srv_profiles_stop_tone((srv_prof_tone_enum)GetCurKeypadTone());
+        srv_profiles_stop_tone(SRV_PROF_TONE_KEYPAD);
+
         /* disable key pad tone */
         mmi_frm_kbd_set_tone_state(MMI_KEY_TONE_DISABLED);
-        /* disalbe align timer  */
+
+        /* enable multi_layer */
+        gdi_layer_multi_layer_enable();
+
+        /* suspend background play */
+        //mdi_audio_suspend_background_play();
+
+        /* disalbe align timer */
         UI_disable_alignment_timers();
+
         /* stop LED patten */
-        srv_pattern_send_req_to_hw(srv_led_pattern_get_bg_pattern(), 0);
-        /* camera power up */
-        ret = mdi_camera_power_on();
+        StopLEDPatternBackGround();
+
+        /* 
+         * This is used to solve a very rare situation. When playing a IMELODY 
+         * with backlight on/off, and the screen previous to this screen is a 
+         * horizontal screen. Before enter this screen, the IMELODY turn off the
+         * backlight. While exit previous screen, the layer rotate back to normal
+         * size and the content is not correct. So when calling TurnOnBacklight, 
+         * LCD is in sleepin state and draw wrong content to LCD.
+         * So we need to clear the buffer first to avoid this situation.
+         */
+        gdi_layer_clear(GDI_COLOR_BLACK);
+
+        /* stop MMI sleep */
+        TurnOnBacklight(0);
     }
     else
     {
         /* shut down camera */
-        ret = mdi_camera_power_off();
+        ret = mdi_video_rec_power_off();
+        
+        /* disable multi layer */
+        gdi_layer_multi_layer_disable();
+
         /* resume alignment timer */
-        UI_enable_alignment_timers();
+        //UI_disable_alignment_timers();
+
         /* resume LED patten */
-    	StartLEDPatternBackGround();
-        /* resume LED patten */
-        srv_pattern_play_req(srv_led_pattern_get_bg_pattern(), 1);
+        StartLEDPatternBackGround();
+
         /* let MMI can sleep */
-    	TurnOffBacklight();
+        TurnOffBacklight();
         /* resume background audio */
         mdi_audio_resume_background_play();
         /* re-enable keypad tone */
@@ -2991,7 +3019,7 @@ static MMI_BOOL msgcmd_VdoRecdPreview(MMI_BOOL start, gdi_handle layer)
 					layer,
 					GDI_LAYER_ENABLE_LAYER_0 | GDI_LAYER_ENABLE_LAYER_1,
 					GDI_LAYER_ENABLE_LAYER_1,
-					MMI_TRUE,
+					MMI_FALSE,
 					&video_preview_data);
     }
     else
@@ -3174,6 +3202,36 @@ static void msgcmd_VdoRecdResponse(void *p)
 }
 
 /*******************************************************************************
+** 函数: msgcmd_VdoRecdContRecdRsp
+** 功能: 继续录像的消息响应
+** 参数: p -- 
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void msgcmd_VdoRecdContRecdRsp(void *p)
+{
+    mmi_frm_clear_protocol_event_handler(
+        MSG_ID_MC_CONT_RECD_VDO,
+        (PsIntFuncPtr)msgcmd_VdoRecdContRecdRsp);
+
+    if (NULL != vrm)
+    {
+        msgcmd_VdoRecdPreview(MMI_TRUE, vrm->dispLayer);
+        msgcmd_VdoRecdGetFilePath(vrm->filepath, (MSGCMD_FILE_PATH_LENGTH+1)*sizeof(WCHAR));
+        kal_sleep_task(20);
+        if (!msgcmd_VdoRecdDoing(vrm->filepath))
+        {
+            msgcmd_VdoRecdPreview(MMI_FALSE, vrm->dispLayer);
+            msgcmd_VdoRecdPowerMngr(MMI_FALSE);
+            msgcmd_VdoRecdLayerMngr(MMI_FALSE, &vrm->dispLayer);
+        	mc_trace("%s, free resource, stop record.", __FUNCTION__);
+            MsgCmd_Mfree(vrm);
+            vrm = NULL;
+        }
+    }
+}
+
+/*******************************************************************************
 ** 函数: MsgCmd_VdoRecdGetContext
 ** 功能: 获取录像管理变量的地址
 ** 参数: 无
@@ -3231,7 +3289,6 @@ void MsgCmd_VdoRecdStop(char *replay_number)
     {
         vrm->stop = MMI_TRUE;
         msgcmd_VdoRecdSave(vrm->filepath);
-        MsgCmd_DelayTick(MSGCMD_VDORECD_DLY_TICK);
     }
 }
 
@@ -3314,7 +3371,7 @@ MMI_BOOL MsgCmd_VdoRecdStart(
     {
         vrm->status = VDO_STATUS_PREVIEW;
         
-        MsgCmd_DelayTick(MSGCMD_VDORECD_DLY_TICK);
+        kal_sleep_task(20);
         if (msgcmd_VdoRecdDoing(vrm->filepath))
         {
             vrm->status = VDO_STATUS_RECODING;
@@ -3322,7 +3379,6 @@ MMI_BOOL MsgCmd_VdoRecdStart(
         else
         {
             MsgCmd_VdoRecdStop(vrm->number);
-            MsgCmd_DelayTick(MSGCMD_VDORECD_DLY_TICK);
         }
     }
     else
