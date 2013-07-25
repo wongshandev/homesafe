@@ -184,6 +184,96 @@ extern const unsigned char AUX_EINT_NO;
 #define MC_EINT_NO         AUX_EINT_NO
 #define MSGCMD_INTERRUPT_DIFF_LEVEL  0 //低电平出发外部中断
 
+#if 0
+/*******************************************************************************
+** 函数: lfy_write_log
+** 功能: 日志打印函数, 写入到磁盘的文件上
+** 参数: fmt -- 打印格式控制字符串
+** 返回: 实际写入的数据长度字节
+** 作者: wasfayu
+*******/
+U32 lfy_write_log(const char *fmt, ...)
+{
+#define LFY_LOG_BUFFER_SZ        512 //BYTE
+#define LFY_LOG_FILE_LIMITED     20  //KB
+
+    static U32 logCount = 0;
+    static FS_HANDLE logFH = -1;
+    static WCHAR logFile[] = {L"C:\\lfy_log.txt"};
+    
+    U32 length, written = 0;
+    char buffer[LFY_LOG_BUFFER_SZ] = {0};
+    va_list list;
+    
+    if (-1 == logFH)
+    {
+        logFile[0] = SRV_FMGR_CARD_DRV;
+        if(!srv_fmgr_drv_is_accessible(SRV_FMGR_CARD_DRV))
+            logFile[0] = SRV_FMGR_PUBLIC_DRV;
+
+        logFH = FS_Open(logFile, FS_READ_WRITE|FS_CREATE);
+        if (logFH <= FS_NO_ERROR)
+            return 0;
+    }
+
+    va_start(list, fmt);
+#if defined(WIN32)
+    length = _vsnprintf(buffer, LFY_LOG_BUFFER_SZ, fmt, list);
+#else
+    length = vsnprintf(buffer, LFY_LOG_BUFFER_SZ, fmt, list);
+#endif
+    va_end(list);
+
+    if (length)
+    {
+        U32 temp;
+        applib_time_struct t;
+        char tstr[32] = {0};
+
+        if (FS_GetFileSize(logFH, &temp) >= FS_NO_ERROR)
+        {
+            if (temp >= LFY_LOG_FILE_LIMITED*1024)
+            {
+                WCHAR backup[] = {L"C:\\lfy_back.log"};
+                
+                FS_Close(logFH);
+                logFile[0] = (WCHAR)SRV_FMGR_PUBLIC_DRV;
+                
+                backup[0] = logFile[0];
+                FS_Delete(backup);
+                FS_Rename(logFile, backup);
+                
+                logFH = FS_Open(logFile, FS_READ_WRITE|FS_CREATE);
+                if (logFH <= FS_NO_ERROR)
+                    return 0;
+            }
+        }
+        else
+        {
+            FS_Close(logFH);
+            logFH = -1;
+            return 0;
+        }
+
+        applib_dt_get_date_time(&t);
+        temp = sprintf(tstr, "\t[%02d:%02d:%02d,0x%X]\n", t.nHour, t.nMin, t.nSec, ++logCount);
+        FS_Seek(logFH, 0, FS_FILE_END);
+        FS_Write(logFH, buffer, length, &written);
+        FS_Write(logFH, tstr, temp, &length);
+        FS_Commit(logFH);
+        written = written + length;
+    }
+
+    return written;
+}
+
+#ifdef mc_trace
+#undef mc_trace
+#endif
+#define mc_trace lfy_write_log
+
+#endif
+
 /*******************************************************************************
 ** 函数: MsgCmd_GetInteger
 ** 功能: 从给定长度的字符串中获取一个32位无符号整数
@@ -2029,13 +2119,16 @@ static AdoRecdMngr *arm;
 *******/
 static void msgcmd_AdoRecdDoingCb(MDI_RESULT result)
 {
+    if (NULL == arm)
+        return;
+    
     mc_trace("%s, result=%d.", __FUNCTION__, result);
 
     //如果文件小于这个值则删除掉他
     if (applib_get_file_size(arm->filepath) >= MsgCmd_GetAdoRecdArgs()->ignore_size)
     {
     	MsgCmd_RecordFileName(
-    		MSGCMD_AUDIO_LIST_FILE_NAME,
+    		MSGCMD_ADO_LIST_FILE_NAME,
     		(void*)arm->filepath, 
     		app_ucs2_strlen((const S8 *)arm->filepath) * sizeof(WCHAR));
     }
@@ -2151,6 +2244,18 @@ static void msgcmd_AdoRecdResponse(void *p)
 }
 
 /*******************************************************************************
+** 函数: MsgCmd_AdoRecdGetContext
+** 功能: 获取录音管理变量的地址
+** 参数: 无
+** 返回: 返回管理变量的地址
+** 作者: wasfayu
+*******/
+AdoRecdMngr *MsgCmd_AdoRecdGetContext(void)
+{
+    return arm;
+}
+
+/*******************************************************************************
 ** 函数: MsgCmd_AdoRecdSetAppend
 ** 功能: 增加一段录音时间
 ** 参数: 无
@@ -2241,6 +2346,12 @@ MMI_BOOL MsgCmd_AdoRecdStart(
     //获取的盘符是否正确挂载--就是是否存在的一个意思
     if (!MsgCmd_CheckValidDrive(MsgCmd_GetUsableDrive()))
         return MMI_FALSE;
+
+    //磁盘剩余空间小于5M则删除就的录音文件
+    if (MsgCmd_GetDiskFreeSize(MsgCmd_GetUsableDrive()) <= MSGCMD_ADO_FREE_SPACE_REQUIRE)
+    {
+        MsgCmd_DeleteOldFile(MSGCMD_ADO_LIST_FILE_NAME, MSGCMD_ADO_DELETE_SIZE);
+    }
     
     MsgCmd_isink(MMI_TRUE);
     arm = (AdoRecdMngr*)MsgCmd_Malloc(sizeof(AdoRecdMngr), 0);
@@ -2338,7 +2449,7 @@ static MMI_BOOL msgcmd_CaptureDoing(S8 *filepath)
 {
 #if defined(WIN32)
 
-    MsgCmd_ModisCreateJPEG(filepath);
+    MsgCmd_ModisCreateJPEG((WCHAR *)filepath);
     return MMI_TRUE;
 
 #else
@@ -2564,8 +2675,8 @@ static void msgcmd_VdoRecdResponse(void *p);
 
 static VdoRecdMngr *vrm;
 
-#define MSGCMD_VDORECD_CYCLIC_TIMER_TIME  800 //ms
-#define MSGCMD_VDORECD_CYCLIC_TIMER_ID   1
+#define MSGCMD_VDORECD_CYCLIC_TIMER_TIME  1000 //ms
+#define MSGCMD_VDORECD_CYCLIC_TIMER_ID   MSGCMD_TIMER_VDO_CHECK
 
 /*******************************************************************************
 ** 函数: msgcmd_VdoRecdGetSavePath
@@ -2626,7 +2737,7 @@ static void msgcmd_VdoRecdSaveCb(MDI_RESULT result)
     if (NULL == vrm)
         return;
     
-    mc_trace("%s,L:%d. result=%d.", __FUNCTION__, __LINE__, result);
+    mc_trace("%s. result=%d, stop=%d.", __FUNCTION__, result, vrm->stop);
     
 	//mdi_video_rec_get_cur_record_time
     if (MDI_RES_VDOREC_SUCCEED == result)
@@ -2643,7 +2754,7 @@ static void msgcmd_VdoRecdSaveCb(MDI_RESULT result)
         if (applib_get_file_size(vrm->filepath) >= MsgCmd_GetVdoRecdArgs()->ignore_size)
         {
         	MsgCmd_RecordFileName(
-        		MSGCMD_VIDEO_LIST_FILE_NAME,
+        		MSGCMD_VDO_LIST_FILE_NAME,
         		(void*)vrm->filepath, 
         		app_ucs2_strlen((const S8 *)vrm->filepath) * sizeof(WCHAR));
         }
@@ -2734,7 +2845,7 @@ static void msgcmd_VdoRecdLayerMngr(MMI_BOOL create, gdi_handle *layer)
         S32 h = 320, w = 240;
         
         /* enable multi-layer */
-        gdi_layer_multi_layer_enable();
+        //gdi_layer_multi_layer_enable();
         
         //create layer resource
         gdi_layer_get_base_handle(layer);
@@ -2752,7 +2863,7 @@ static void msgcmd_VdoRecdLayerMngr(MMI_BOOL create, gdi_handle *layer)
 		gdi_layer_pop_and_restore_active();
 
         /* enable multi-layer */
-        gdi_layer_multi_layer_disable();
+        //gdi_layer_multi_layer_disable();
     }
 }
 
@@ -2901,7 +3012,14 @@ static MMI_BOOL msgcmd_VdoRecdDoing(WCHAR *filepath)
 {
     MDI_RESULT ret;
 
+    //磁盘剩余空间小于15M则删除就的视频文件
+    if (MsgCmd_GetDiskFreeSize(MsgCmd_GetUsableDrive()) <= MSGCMD_VDO_FREE_SPACE_REQUIRE)
+    {
+        MsgCmd_DeleteOldFile(MSGCMD_VDO_LIST_FILE_NAME, MSGCMD_ADO_DELETE_SIZE);
+    }
+    
     ret = mdi_video_rec_record_start((S8*)filepath, msgcmd_VdoRecdDoingCb);
+    mc_trace("%s, ret=%d.", __FUNCTION__, ret);
     if (MDI_RES_VDOREC_SUCCEED == ret)
         msgcmd_VdoRecdCyclicTimer(MMI_TRUE);
     
@@ -2923,7 +3041,7 @@ static MMI_BOOL msgcmd_VdoRecdStop(void)
     if (MDI_RES_VDOREC_SUCCEED == ret)
         msgcmd_VdoRecdCyclicTimer(MMI_FALSE);
 
-    mc_trace("%s, ret.", __FUNCTION__, ret);
+    mc_trace("%s, ret=%d.", __FUNCTION__, ret);
     return (MMI_BOOL)(MDI_RES_VDOREC_SUCCEED == ret);
 }
 
@@ -2982,18 +3100,23 @@ static MMI_BOOL msgcmd_VdoRecdSave(WCHAR *filepath)
 *******/
 static void msgcmd_VdoRecdTimerCyclic(void)
 {
-    U64 time;
+    U64 time = 0;
     
     if (NULL == vrm)
         return;
 
     mdi_video_rec_get_cur_record_time(&time);
+#if defined(WIN32)
+    vrm->timeCount += (U32)(time/1000);
+#else
     vrm->timeCount = (U32)(time/1000);
+#endif
+    mc_trace("%s, timeCount=%dS. saveGap=%dS.", __FUNCTION__, vrm->timeCount, vrm->saveGap);
     if (vrm->timeCount >= vrm->saveGap)
     {
         //save
         vrm->stop = MMI_FALSE;
-        mc_trace("%s, timeCount=%dS, save.", __FUNCTION__, vrm->timeCount);
+        mc_trace("%s, timeCount=%dS, saveGap=%dS, save.", __FUNCTION__, vrm->timeCount, vrm->saveGap);
         msgcmd_VdoRecdSave(vrm->filepath);
     }
     else
@@ -3046,6 +3169,18 @@ static void msgcmd_VdoRecdResponse(void *p)
     {
         MsgCmd_VdoRecdStop(strlen(rsp->number) ? rsp->number : NULL);
     }
+}
+
+/*******************************************************************************
+** 函数: MsgCmd_VdoRecdGetContext
+** 功能: 获取录像管理变量的地址
+** 参数: 无
+** 返回: 返回管理变量的地址
+** 作者: wasfayu
+*******/
+VdoRecdMngr *MsgCmd_VdoRecdGetContext(void)
+{
+    return vrm;
 }
 
 /*******************************************************************************
@@ -3144,13 +3279,9 @@ MMI_BOOL MsgCmd_VdoRecdStart(
     {
         WCHAR buffer[MSGCMD_FILE_PATH_LENGTH+1];
 
-        memset(buffer, 0, (MSGCMD_FILE_PATH_LENGTH+1)*sizeof(WCHAR));
-
-        MsgCmd_CombineFilePath(
+        msgcmd_VdoRecdGetSavePath(
             buffer, 
-            MSGCMD_FILE_PATH_LENGTH*sizeof(WCHAR),
-            MSGCMD_VIDEOS_FOLDER_NAME,
-            NULL);
+            MSGCMD_FILE_PATH_LENGTH*sizeof(WCHAR));
         
         //是否有未保存过的视频
         if (mdi_video_rec_has_unsaved_file((S8*)buffer))

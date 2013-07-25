@@ -297,6 +297,13 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 			if (MsgCmd_VdoRecdBusy())
 			{
 				//replay system busy
+				if (time)
+                {
+                    MsgCmd_AdoRecdGetContext()->forever = MMI_FALSE;
+                    MsgCmd_AdoRecdGetContext()->time += time;
+                }
+                else
+                    MsgCmd_AdoRecdGetContext()->forever = MMI_TRUE;
 			}
 			else
 			{
@@ -311,9 +318,19 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 			
         #if defined(__MSGCMD_SUPPORT__)
 			if (MsgCmd_AdoRecdBusy())
-				MsgCmd_AdoRecdStop(NULL);
+			{
+			    if (time)
+                {
+                    MsgCmd_VdoRecdGetContext()->forever = MMI_FALSE;
+                    MsgCmd_VdoRecdGetContext()->time += time;
+                }
+                else
+                    MsgCmd_VdoRecdGetContext()->forever = MMI_TRUE;
+            }
 			else
+			{
 				MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, time, 5*60, NULL);
+            }
         #endif
 		}break;
 		case HF_MSG_ID_MMS:
