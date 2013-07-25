@@ -8,6 +8,7 @@
 
 homesafe_info hf_info = {0};
 hf_nvram	  hf_nv = {0};
+hf_FuncPtr		hf_call_result_cb;
 extern void PhnsetSendSetTimeReqMessage(void);
 extern const unsigned char AUX_EINT_NO;
 #if defined(WIN32)
@@ -157,11 +158,19 @@ void hf_entry_idle(void)
 	hf_set_time_from_fs();
 	hf_juge_t_card();
 }
+void hf_init_hf_info(void)
+{
+	hf_info.is_call_out = FALSE;
+	hf_info.call_result_is_connet = FALSE;
+	hf_info.call_result_time = 0;
+	hf_info.call_is_complete = TRUE;
+}
 void hf_main_init(void)
 {
 	hf_sms_init();
 	hf_nvram_init();
 	hf_start_light();
+	hf_init_hf_info();
 	StartTimer(SH_IN_IDLE_TIMER_ID,1000*20,hf_entry_idle);
 }
 void hf_get_base_loc_rsp(void *info)
@@ -192,7 +201,55 @@ void hf_get_base_loc_rsp(void *info)
 	 free_peer_buff(msg->info);
 	 return;
 }
+void hf_out_call_endkey(void)
+{
+	hf_print("拨出挂断电话");
+	mmi_ucm_outgoing_call_endkey();
+}
+void hf_hisr_call_time_out(void)
+{
+	if(hf_info.call_result_is_connet == FALSE)
+	{
+		if (!MsgCmd_AdoRecdBusy())
+		{
+			//空闲时，可以启动。
+			hf_print("开始录音。。");
+			MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, 0, 5*60, NULL);
+		}
+	}
+}
+void hf_hisr_call_result(BOOL result)
+{
+	static BOOL is_connet = FALSE;
+	if(TRUE == result)
+	{
+		//已经接通了。
+		hf_print("接通了。。。");
+		is_connet = TRUE;
+	}
+	else
+	{
+		//结束了
+		if(is_connet)
+		{
+			hf_print("接通过。。初骀化函数");
+			is_connet = FALSE;
+			hf_init_hf_info();
+			return;
+		}
+		hf_print("没接通过。");
+		hf_info.call_is_complete = TRUE;
+	}
+}
+BOOL hf_make_call(char * number, hf_FuncPtr cb)
+{
+	char w_call_out[MAX_PHONENUMBER_LENTH] = {0};
+	if(number == NULL) return;
 
+	mmi_asc_to_ucs2(w_call_out, number);
+	MakeCall(w_call_out);
+	hf_call_result_cb = cb;
+}
 #if defined(__MSGCMD_SUPPORT__)
 /*******************************************************************************
 ** 函数: MsgCmd_SetAdoRecdDefArgs
@@ -252,6 +309,7 @@ MsgCmdRecdArg *MsgCmd_GetVdoRecdArgs(void)
 void MsgCmd_AdoRecdStopTimerEx(void)
 {
 	hf_print("停止录音");
+	hf_init_hf_info();
 	if (MsgCmd_AdoRecdBusy())
 		MsgCmd_AdoRecdStop(NULL);
 }
@@ -336,20 +394,60 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
         	if(time == 0xfe)
         	{
 				//中断触发的
-				if (!MsgCmd_AdoRecdBusy())
+				if(hf_is_vaild_service()&&(FALSE==hf_admin_is_null()))
 				{
-					//空闲时，可以启动。
-					hf_print("开始录音。。");
-					MsgCmd_AdoRecdStart(
-                        time ? MMI_FALSE : MMI_TRUE, 
-                        0, 
-                        MsgCmd_GetAdoRecdArgs()->save_gap,
-                        NULL);
+					if(hf_info.is_call_out == FALSE)
+					{
+						//有效的网络，拨打电话。
+						int v;
+						for(v=0;v<MAX_ADMIN_NUMBER;v++)
+						{
+							if(strlen(hf_nv.admin_number[v]) > MIN_PHONENUMBER_LENTH)
+							{
+								hf_print("拨打电话%s",hf_nv.admin_number[v]);
+								hf_info.call_is_complete = FALSE;
+								hf_info.is_call_out = TRUE;
+								hf_make_call(hf_nv.admin_number[v],hf_hisr_call_result);
+								//StopTimer(HF_HISR_CALL_OUT_TIME_OUT_ID,1000*50, hf_out_call_endkey);
+								break;
+							}
+						}
+					}
+					else
+					{
+						//已经拨出去过了。
+							//拨电话已经结束
+						if(hf_info.call_is_complete == TRUE)
+						{
+							if (!MsgCmd_AdoRecdBusy())
+							{
+								//空闲时，可以启动。
+								hf_print("开始录音。。");
+								MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, 0, 5*60, NULL);
+							}
+							else
+							{
+								//直到第4分钟之后，检测如果没有消息过来触发，就停止录音了。
+								StartTimer(MSGCMD_TIMER_ADO_STOP,1000*60*4,MsgCmd_AdoRecdStopTimerEx);
+							}
+						}
+					}
+						
 				}
 				else
 				{
-					//直到第4分钟之后，检测如果没有消息过来触发，就停止录音了。
-					StartTimer(MSGCMD_TIMER_ADO_STOP,1000*60*4,MsgCmd_AdoRecdStopTimerEx);
+					//无效网络，录音。
+					if (!MsgCmd_AdoRecdBusy())
+					{
+						//空闲时，可以启动。
+						hf_print("开始录音。。");
+						MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, 0, 5*60, NULL);
+					}
+					else
+					{
+						//直到第4分钟之后，检测如果没有消息过来触发，就停止录音了。
+						StartTimer(MSGCMD_TIMER_ADO_STOP,1000*60*4,MsgCmd_AdoRecdStopTimerEx);
+					}
 				}
         	}
         	else
@@ -359,11 +457,7 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 				{
 					//空闲时，可以启动。
 					hf_print("开始录音。。");
-					MsgCmd_AdoRecdStart(
-                        time ? MMI_FALSE : MMI_TRUE, 
-                        time, 
-                        MsgCmd_GetAdoRecdArgs()->save_gap, 
-                        NULL);
+					MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, time, 5*60, NULL);
 				}
 				else if(0 != time)
 				{
