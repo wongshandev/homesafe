@@ -25,14 +25,14 @@ void hf_nvram_init(void)
         MsgCmd_SetAdoRecdDefArgs(&hf_nv.ado);
         MsgCmd_SetVdoRecdDefArgs(&hf_nv.vdo);
     #endif	
+		hf_nv.vdo.ignore_size  = 10;
+		hf_nv.vdo.ignore_time  = 3;
+		hf_nv.vdo.int_check    = 5;
+		hf_nv.vdo.min_time     = 8;
+		hf_nv.vdo.save_gap     = 10;
 	}
 	hf_print("hf_nvram_init,admin[%s %s %s %s %s %s ],psw[%s]",hf_nv.admin_number[0],hf_nv.admin_number[1],hf_nv.admin_number[2],
-															hf_nv.admin_number[3],hf_nv.admin_number[4],hf_nv.admin_number[5],hf_nv.admin_passwd);
-    hf_nv.vdo.ignore_size  = 10;
-    hf_nv.vdo.ignore_time  = 3;
-    hf_nv.vdo.int_check    = 5;
-    hf_nv.vdo.min_time     = 8;
-    hf_nv.vdo.save_gap     = 10;
+	hf_nv.admin_number[3],hf_nv.admin_number[4],hf_nv.admin_number[5]);
 	hf_write_nvram();
 }
 void hf_start_light(void)
@@ -206,18 +206,7 @@ void hf_out_call_endkey(void)
 	hf_print("拨出挂断电话");
 	mmi_ucm_outgoing_call_endkey();
 }
-void hf_hisr_call_time_out(void)
-{
-	if(hf_info.call_result_is_connet == FALSE)
-	{
-		if (!MsgCmd_AdoRecdBusy())
-		{
-			//空闲时，可以启动。
-			hf_print("开始录音。。");
-			MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, 0, 5*60, NULL);
-		}
-	}
-}
+
 void hf_hisr_call_result(BOOL result)
 {
 	static BOOL is_connet = FALSE;
@@ -243,7 +232,7 @@ void hf_hisr_call_result(BOOL result)
 }
 BOOL hf_make_call(char * number, hf_FuncPtr cb)
 {
-	char w_call_out[MAX_PHONENUMBER_LENTH] = {0};
+	char w_call_out[MAX_PHONENUMBER_LENTH*2] = {0};
 	if(number == NULL) return;
 
 	mmi_asc_to_ucs2(w_call_out, number);
