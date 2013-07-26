@@ -672,7 +672,12 @@ void aux_task_main( task_entry_struct * task_entry_ptr )
    vaux_adc_logic_id = adc_sche_create_object(MOD_AUX, ADC_ACCESSORYID,40,1, KAL_TRUE);
           
    /*Enable External interrupt*/
-#if !defined(__MSGCMD_SUPPORT__)
+#if defined(__MSGCMD_SUPPORT__)
+{
+    extern void MsgCmd_InterruptRegister(void); //defined in msgcmd_process.c
+    MsgCmd_InterruptRegister();
+}
+#else
    EINT_Registration(AUX_EINT_NO,KAL_TRUE,aux_state,AUX_EINT_HISR, KAL_TRUE);      
 #endif   
    

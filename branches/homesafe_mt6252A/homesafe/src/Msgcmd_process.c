@@ -55,9 +55,15 @@
 #include "SimDetectionStruct.h"
 #include "mms_sap_struct.h"
 #include "mma_api.h"
+#include "mma_sap.h"
 #include "ucsrv.h"
 #include "nwusabsrvgprot.h"
 #include "Eint.h"
+#if defined(__ACCDET_SUPPORT__) || defined(__ACCDET_HYBRID_SOLUTION_SUPPORT__)
+#include "drv_hisr.h"
+#include "accdet_hw.h"
+#include "accdet_sw.h"
+#endif
 
 
 
@@ -179,10 +185,6 @@ extern void MsgCmd_isink(kal_bool open);
 extern void MsgCmd_ModisCreateJPEG(WCHAR *filepath);
 extern void MsgCmd_ModisCreateAVI(WCHAR *filepath);
 #endif
-
-extern const unsigned char AUX_EINT_NO;
-#define MC_EINT_NO         AUX_EINT_NO
-#define MSGCMD_INTERRUPT_DIFF_LEVEL  0 //低电平出发外部中断
 
 #if 0
 /*******************************************************************************
@@ -564,6 +566,15 @@ char *MsgCmd_strsep(char **s, const char *ct)
 *******/
 S32 MsgCmd_GetCallCount(void)
 {
+//#ifdef __MMI_UCM__
+//    //reference: mmi_vdorec_is_in_bgcall()
+//    if (0 != srv_ucm_query_call_count(SRV_UCM_CALL_STATE_ALL, SRV_UCM_CALL_TYPE_NO_CSD, NULL))
+//        return MMI_FALSE;
+//#else
+//    if (0 != srv_ucm_query_call_count(SRV_UCM_CALL_STATE_ALL, SRV_UCM_CALL_TYPE_NO_CSD, NULL))
+//        return MMI_FALSE;
+//#endif
+
     return srv_ucm_query_call_count(
                 SRV_UCM_CALL_STATE_ALL,
                 SRV_UCM_CALL_TYPE_ALL,
@@ -1287,9 +1298,40 @@ MMI_BOOL MsgCmd_WriteImei(char *num, U16 strl, U8 sim, U8 (*rsp)(void*))
     return MMI_TRUE;
 #endif
 }
-extern void hf_task_sent_hisr(void);
+
 /*******************************************************************************
-** 函数: msgcmd_InterruptProcess
+** 函数: MsgCmd_CreatePath
+** 功能: 创建一级深度的路径
+** 参数: drive   -- 盘符
+**       folder  -- 文件夹名字
+** 返回: 是否创建成功
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_CreatePath(S32 drive, const WCHAR *folder)
+{
+    FS_HANDLE h;
+    WCHAR buffer[MSGCMD_FILE_PATH_LENGTH+1] = {0};
+    
+    kal_wsprintf(buffer, "%c:\\%w\\", drive, folder);
+	if ((h = FS_Open((const WCHAR*)buffer, FS_OPEN_DIR|FS_READ_ONLY)) >= FS_NO_ERROR)
+    {
+        FS_Close(h);
+        return MMI_TRUE;
+    }
+	else
+    {
+        return (MMI_BOOL)(FS_CreateDir((const WCHAR*)buffer) >= FS_NO_ERROR);
+    }
+}
+
+#if 1
+extern const unsigned char AUX_EINT_NO;
+
+#define MC_EINT_NO         AUX_EINT_NO
+#define MSGCMD_INTERRUPT_DIFF_LEVEL  0 //低电平出发外部中断
+
+/*******************************************************************************
+** 函数: msgcmd_InterruptRespond
 ** 功能: 外部中断响应函数
 ** 参数: 无
 ** 返回: 无
@@ -1297,6 +1339,7 @@ extern void hf_task_sent_hisr(void);
 *******/
 static void msgcmd_InterruptRespond(void *p)
 {
+    extern void hf_task_sent_hisr(void);
 	MsgCmdExtIntReq *rsp = (MsgCmdExtIntReq*)p;
 
 	mc_trace("%s, level=%d.", __FUNCTION__, rsp->level);
@@ -1314,7 +1357,28 @@ static void msgcmd_InterruptRespond(void *p)
 *******/
 static void msgcmd_InterruptEntrance(void)
 {
-	static MMI_BOOL int_status = (MMI_BOOL)MSGCMD_INTERRUPT_DIFF_LEVEL;
+#if defined(__ACCDET_SUPPORT__) || defined(__ACCDET_HYBRID_SOLUTION_SUPPORT__)
+    MsgCmdExtIntReq *req;
+    U32 iA,iB;
+    U32 iStatus = 0;
+
+    iStatus = DRV_ACCDET_Reg32(ACCDET_MEMORIZED_IN); // get AB status.
+   	iA = (iStatus & 0x2) >> 1;
+   	iB = iStatus & 0x1; // we just care the B bit status
+        
+    req = (MsgCmdExtIntReq*)MsgCmd_ConstructPara(sizeof(MsgCmdExtIntReq));
+    if((iA == 0) && (iB == 1))
+	    req->level = MMI_TRUE;
+	else if ((iA == 0)&&(iB == 0))
+		req->level = MMI_FALSE;
+    MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_EXT_INTERRUPT, (void *)req);
+    
+    IRQClearInt(IRQ_ACCDET_CODE);
+    IRQUnmask(IRQ_ACCDET_CODE);
+
+#else
+
+    static MMI_BOOL int_status = (MMI_BOOL)MSGCMD_INTERRUPT_DIFF_LEVEL;
 	MsgCmdExtIntReq *req;
 
     EINT_Mask(MC_EINT_NO);
@@ -1323,30 +1387,10 @@ static void msgcmd_InterruptEntrance(void)
 	req->level = int_status;
 	int_status = !int_status;
 	EINT_Set_Polarity(MC_EINT_NO, int_status); 
+
 	MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_EXT_INTERRUPT, (void *)req);
     EINT_UnMask(MC_EINT_NO);
-}
-
-/*******************************************************************************
-** 函数: msgcmd_InterruptInit
-** 功能: 外部中断初始化函数
-** 参数: 无
-** 返回: 无
-** 作者: wasfayu
-*******/
-static void msgcmd_InterruptInit(void)
-{
-	EINT_Registration(
-		MC_EINT_NO, 
-		MMI_TRUE, 
-		(MMI_BOOL)MSGCMD_INTERRUPT_DIFF_LEVEL, 
-		msgcmd_InterruptEntrance, 
-		MMI_TRUE);
-	
-	mmi_frm_set_protocol_event_handler(
-		MSG_ID_MC_EXT_INTERRUPT,
-		(PsIntFuncPtr)msgcmd_InterruptRespond,
-		MMI_FALSE);
+#endif
 }
 
 /*******************************************************************************
@@ -1360,7 +1404,12 @@ void MsgCmd_InterruptMask(MMI_BOOL mask)
 {
     if (mask)
     {
+    #if defined(__ACCDET_SUPPORT__) || defined(__ACCDET_HYBRID_SOLUTION_SUPPORT__)
+        IRQMask(IRQ_ACCDET_CODE);
+    #else
         EINT_Mask(MC_EINT_NO);
+    #endif
+    
         mmi_frm_clear_protocol_event_handler(
     		MSG_ID_MC_EXT_INTERRUPT,
     		(PsIntFuncPtr)msgcmd_InterruptRespond);
@@ -1371,11 +1420,63 @@ void MsgCmd_InterruptMask(MMI_BOOL mask)
     		MSG_ID_MC_EXT_INTERRUPT,
     		(PsIntFuncPtr)msgcmd_InterruptRespond,
     		MMI_FALSE);
+        
+    #if defined(__ACCDET_SUPPORT__) || defined(__ACCDET_HYBRID_SOLUTION_SUPPORT__)
+        IRQClearInt(IRQ_ACCDET_CODE);
+        IRQUnmask(IRQ_ACCDET_CODE);
+    #else
         EINT_UnMask(MC_EINT_NO);
+    #endif
     }
     
     mc_trace("%s, mask=%d.", __FUNCTION__, mask);
 }
+
+/*******************************************************************************
+** 函数: msgcmd_InterruptLISR
+** 功能: 快速中断的响应函数, 里面就是激活ACCDET中断
+** 参数: void
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void msgcmd_InterruptLISR(void)
+{
+#if defined(__ACCDET_SUPPORT__) || defined(__ACCDET_HYBRID_SOLUTION_SUPPORT__)
+   DRV_ACCDET_WriteReg32(ACCDET_IRQ_STS, ACCDET_IRQ_CLR); //pause the IRQ
+   IRQMask(IRQ_ACCDET_CODE);
+   drv_active_hisr(DRV_ACCDET_HISR_ID);
+#endif
+}
+
+/*******************************************************************************
+** 函数: MsgCmd_InterruptRegister
+** 功能: 外部中断注册, 必须在多任务初始化的时候就注册, 
+**       否则会在EINT_LISR里面"ASSERT(EINT_FUNC[index].eint_func!=NULL);"
+** 参数: void
+** 返回: 无
+** 作者: wasfayu
+*******/
+void MsgCmd_InterruptRegister(void)
+{
+#if defined(__ACCDET_SUPPORT__) || defined(__ACCDET_HYBRID_SOLUTION_SUPPORT__)
+    DRV_Register_HISR(DRV_ACCDET_HISR_ID, msgcmd_InterruptEntrance);
+    IRQ_Register_LISR(IRQ_ACCDET_CODE, msgcmd_InterruptLISR, "MSGCMD handler");
+    IRQSensitivity(IRQ_ACCDET_CODE, EDGE_SENSITIVE);
+    IRQMask(IRQ_ACCDET_CODE);
+#else
+	EINT_Registration(
+		MC_EINT_NO, 
+		MMI_TRUE, 
+		(MMI_BOOL)MSGCMD_INTERRUPT_DIFF_LEVEL, 
+		msgcmd_InterruptEntrance, 
+		MMI_TRUE);
+
+    //最开始是屏蔽状态, 待初始化之后再打开
+    EINT_Mask(MC_EINT_NO);
+#endif
+}
+
+#endif
 
 /*******************************************************************************
 ** 函数: msgcmd_SendSmsCallback
@@ -1805,6 +1906,21 @@ static void msgcmd_SendMMSResponse(void *param)
 }
 
 /*******************************************************************************
+** 函数: msgcmd_SendMMSRespond
+** 功能: 发送MMS的结果通知
+** 入参: p   -- wap_mma_send_rsp_struct
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void msgcmd_SendMMSRespond(void *p)
+{
+    wap_mma_send_rsp_struct *rsp = (wap_mma_send_rsp_struct*)p;
+
+    mc_trace("%s, result=%d, msg_id=%d.",
+		__FUNCTION__, rsp->result, rsp->msg_id);
+}
+
+/*******************************************************************************
 ** 函数: MsgCmd_CreateAndSendMMSCb
 ** 功能: 创建并且发送MMS的回调函数
 ** 入参: result   -- 
@@ -2052,7 +2168,7 @@ mmi_ret MsgCmd_EvtProcEntry(mmi_event_struct *evp)
     case EVT_ID_SRV_BOOTUP_BEFORE_IDLE:
         break;
     case EVT_ID_SRV_BOOTUP_COMPLETED:
-		msgcmd_InterruptInit();
+		MsgCmd_InterruptMask(MMI_FALSE);
         break;
     case EVT_ID_SRV_BOOTUP_EARLY_INIT:
         hf_main_init();
@@ -2322,6 +2438,8 @@ MMI_BOOL MsgCmd_AdoRecdStart(
     U32      auto_save_gap,
     char    *replay_number)
 {
+    S32 drive;
+    
     mc_trace(
         "%s, forever=%d, time=%d, replay=%s.",
         __FUNCTION__, 
@@ -2336,21 +2454,28 @@ MMI_BOOL MsgCmd_AdoRecdStart(
     if (!MsgCmd_GetTFcardDrive(NULL))
         return MMI_FALSE;
 
-#ifdef __MMI_UCM__
-    //reference: mmi_vdorec_is_in_bgcall()
-    if (0 != srv_ucm_query_call_count(SRV_UCM_CALL_STATE_ALL, SRV_UCM_CALL_TYPE_NO_CSD, NULL))
+    //有电话在忙
+    if (MsgCmd_GetCallCount() > 0)
         return MMI_FALSE;
-#else
-    if (0 != srv_ucm_query_call_count(SRV_UCM_CALL_STATE_ALL, SRV_UCM_CALL_TYPE_NO_CSD, NULL))
+
+    //磁盘未获取到
+    if ((drive = MsgCmd_GetUsableDrive()) < 0)
         return MMI_FALSE;
-#endif
+
+    //保证路径存在
+    if (!MsgCmd_CreatePath(drive, MSGCMD_AUDIOS_FOLDER_NAME))
+        return MMI_FALSE;
 
     //获取的盘符是否正确挂载--就是是否存在的一个意思
-    if (!MsgCmd_CheckValidDrive(MsgCmd_GetUsableDrive()))
+    if (!MsgCmd_CheckValidDrive(drive))
         return MMI_FALSE;
 
+    //正在录像
+    if (MsgCmd_VdoRecdBusy())
+        return MMI_FALSE;
+    
     //磁盘剩余空间小于5M则删除就的录音文件
-    if (MsgCmd_GetDiskFreeSize(MsgCmd_GetUsableDrive()) <= MSGCMD_ADO_FREE_SPACE_REQUIRE)
+    if (MsgCmd_GetDiskFreeSize(drive) <= MSGCMD_ADO_FREE_SPACE_REQUIRE)
     {
         MsgCmd_DeleteOldFile(MSGCMD_ADO_LIST_FILE_NAME, MSGCMD_ADO_DELETE_SIZE);
     }
@@ -2855,7 +2980,7 @@ static void msgcmd_VdoRecdLayerMngr(MMI_BOOL create, gdi_handle *layer)
         S32 h = 320, w = 240;
         
         /* enable multi-layer */
-        //gdi_layer_multi_layer_enable();
+        gdi_layer_multi_layer_enable();
         
         gdi_layer_get_buffer_ptr(&temp);
         ASSERT(temp != NULL);
@@ -2871,10 +2996,9 @@ static void msgcmd_VdoRecdLayerMngr(MMI_BOOL create, gdi_handle *layer)
         //free layer resource
         gdi_layer_free(*layer);
         *layer = GDI_NULL_HANDLE;
-		//gdi_layer_pop_and_restore_active();
 
         /* enable multi-layer */
-        //gdi_layer_multi_layer_disable();
+        gdi_layer_multi_layer_disable();
     }
 }
 
@@ -2948,10 +3072,13 @@ static MMI_BOOL msgcmd_VdoRecdPowerMngr(MMI_BOOL on)
 
         /* let MMI can sleep */
         TurnOffBacklight();
+
         /* resume background audio */
         mdi_audio_resume_background_play();
+
         /* re-enable keypad tone */
         mmi_frm_kbd_set_tone_state(MMI_KEY_TONE_ENABLED);
+
         /* close LED */
     	MsgCmd_isink(MMI_FALSE);
     }
@@ -3308,6 +3435,8 @@ MMI_BOOL MsgCmd_VdoRecdStart(
     U32      auto_save_gap,
     char    *replay_number)
 {
+    S32 drive;
+    
     mc_trace(
         "%s, forever=%d, time=%d, replay=%s.",
         __FUNCTION__, 
@@ -3322,17 +3451,20 @@ MMI_BOOL MsgCmd_VdoRecdStart(
     if (!MsgCmd_GetTFcardDrive(NULL))
         return MMI_FALSE;
     
-#ifdef __MMI_UCM__
-    //reference: mmi_vdorec_is_in_bgcall()
-    if (0 != srv_ucm_query_call_count(SRV_UCM_CALL_STATE_ALL, SRV_UCM_CALL_TYPE_NO_CSD, NULL))
+    //有电话在忙
+    if (MsgCmd_GetCallCount() > 0)
         return MMI_FALSE;
-#else
-    if (0 != srv_ucm_query_call_count(SRV_UCM_CALL_STATE_ALL, SRV_UCM_CALL_TYPE_NO_CSD, NULL))
-        return MMI_FALSE;
-#endif
 
+    //磁盘未获取到
+    if ((drive = MsgCmd_GetUsableDrive()) < 0)
+        return MMI_FALSE;
+
+    //保证路径存在
+    if (!MsgCmd_CreatePath(drive, MSGCMD_VIDEOS_FOLDER_NAME))
+        return MMI_FALSE;
+    
     //获取的盘符是否正确挂载--就是是否存在的一个意思
-    if (!MsgCmd_CheckValidDrive(MsgCmd_GetUsableDrive()))
+    if (!MsgCmd_CheckValidDrive(drive))
         return MMI_FALSE;
     else
     {
@@ -3402,27 +3534,14 @@ MMI_BOOL MsgCmd_VdoRecdStart(
 *******/
 void MsgCmd_ProcessInit(void)
 {
-    do {
-        S32 h, i;
-        WCHAR  buffer[MSGCMD_FILE_PATH_LENGTH+1];
-        WCHAR *folder[] = {
-            MSGCMD_AUDIOS_FOLDER_NAME,
-            MSGCMD_PHOTOS_FOLDER_NAME,
-            MSGCMD_VIDEOS_FOLDER_NAME,
-        };
-        
-    	//用户盘路径
-    	for (i=0; i<3; i++)
-        {   
-        	memset(buffer, 0, sizeof(WCHAR)*(MSGCMD_FILE_PATH_LENGTH+1));
-            kal_wsprintf(buffer, "%c:\\%w\\", MsgCmd_GetUsableDrive(), folder[i]);
-        	if ((h = FS_Open((const WCHAR*)buffer, FS_OPEN_DIR|FS_READ_ONLY)) >= FS_NO_ERROR)
-                FS_Close(h);
-        	else
-                FS_CreateDir((const WCHAR*)buffer);
-        }
+    S32 drive;
     
-    }while(0);
+    if ((drive = MsgCmd_GetUsableDrive()) > 0)
+    {
+    	MsgCmd_CreatePath(drive, MSGCMD_AUDIOS_FOLDER_NAME);
+        MsgCmd_CreatePath(drive, MSGCMD_PHOTOS_FOLDER_NAME);
+        MsgCmd_CreatePath(drive, MSGCMD_VIDEOS_FOLDER_NAME);
+    }
 
     //注册消息响应
     mmi_frm_set_protocol_event_handler(
@@ -3444,6 +3563,12 @@ void MsgCmd_ProcessInit(void)
         MSG_ID_MC_SEND_MMS_REQ,
         (PsIntFuncPtr)msgcmd_SendMMSResponse,
         MMI_FALSE);
+
+    mmi_frm_set_protocol_event_handler(
+        MSG_ID_WAP_MMA_SEND_RSP, 
+        (PsIntFuncPtr)msgcmd_SendMMSRespond,
+        MMI_TRUE);
+
 }
 
 #endif/*__MSGCMD_SUPPORT__*/

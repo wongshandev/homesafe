@@ -33,20 +33,24 @@
 #define MSGCMD_VDORECD_DLY_TICK  (10)
 
 /* 定时器ID定义 */
-#define MSGCMD_TIMER_REBOOT       (MSGCMD_TIMER_BASE + 0)
-#define MSGCMD_TIMER_SHUTDOWN     (MSGCMD_TIMER_BASE + 1)
-#define MSGCMD_TIMER_FACTORY      (MSGCMD_TIMER_BASE + 2)
-#define MSGCMD_TIMER_INT_RECHECK  (MSGCMD_TIMER_BASE + 3)
-#define MSGCMD_TIMER_VDO_CHECK    (MSGCMD_TIMER_BASE + 4)
+enum msgcmd_timer_id_enum{
+//最大值为 MSGCMD_TIMER_BASE
+	MSGCMD_TIMER_REBOOT       = MSGCMD_TIMER_BASE,
+	MSGCMD_TIMER_SHUTDOWN     ,
+	MSGCMD_TIMER_FACTORY      ,
+	MSGCMD_TIMER_INT_RECHECK  ,
+};
 
 /* 消息ID定义 */
-#define MSG_ID_MC_VDORECD_REQ     (MSG_ID_MC_BASE + 0)
-#define MSG_ID_MC_ADORECD_REQ     (MSG_ID_MC_BASE + 1)
-#define MSG_ID_MC_CAPTURE_REQ     (MSG_ID_MC_BASE + 2)
-#define MSG_ID_MC_SEND_MMS_REQ    (MSG_ID_MC_BASE + 3)
-#define MSG_ID_MC_EXT_INTERRUPT   (MSG_ID_MC_BASE + 4)
-#define MSG_ID_MC_CONT_RECD_VDO   (MSG_ID_MC_BASE + 5)
-
+enum msgcmd_msg_id_enum{
+//最大值为 MSG_ID_MC_END
+	MSG_ID_MC_VDORECD_REQ     = MSG_ID_MC_BASE,
+	MSG_ID_MC_ADORECD_REQ     ,
+	MSG_ID_MC_CAPTURE_REQ     ,
+	MSG_ID_MC_SEND_MMS_REQ    ,
+	MSG_ID_MC_EXT_INTERRUPT   ,
+	MSG_ID_MC_CONT_RECD_VDO   ,
+};
 
 /* 字符类型 */
 typedef enum {
@@ -609,6 +613,16 @@ void MsgCmd_MakeCall(char *pnumber);
 MMI_BOOL MsgCmd_WriteImei(char *num, U16 strl, U8 sim, U8 (*rsp)(void*));
 
 /*******************************************************************************
+** 函数: MsgCmd_CreatePath
+** 功能: 创建一级深度的路径
+** 参数: drive   -- 盘符
+**       folder  -- 文件夹名字
+** 返回: 是否创建成功
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_CreatePath(S32 drive, const WCHAR *folder);
+
+/*******************************************************************************
 ** 函数: MsgCmd_InterruptMask
 ** 功能: 屏蔽/打开外部中断
 ** 参数: mask  -- 屏蔽
@@ -616,6 +630,16 @@ MMI_BOOL MsgCmd_WriteImei(char *num, U16 strl, U8 sim, U8 (*rsp)(void*));
 ** 作者: wasfayu
 *******/
 void MsgCmd_InterruptMask(MMI_BOOL mask);
+
+/*******************************************************************************
+** 函数: MsgCmd_InterruptRegister
+** 功能: 外部中断注册, 必须在多任务初始化的时候就注册, 
+**       否则会在EINT_LISR里面"ASSERT(EINT_FUNC[index].eint_func!=NULL);"
+** 参数: void
+** 返回: 无
+** 作者: wasfayu
+*******/
+void MsgCmd_InterruptRegister(void);
 
 /*******************************************************************************
 ** 函数: MsgCmd_SendSms

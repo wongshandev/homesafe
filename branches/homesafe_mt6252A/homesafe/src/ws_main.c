@@ -11,10 +11,8 @@ hf_nvram	  hf_nv = {0};
 hf_FuncPtr		hf_call_result_cb;
 extern void PhnsetSendSetTimeReqMessage(void);
 extern const unsigned char AUX_EINT_NO;
-#if defined(WIN32)
-extern void MsgCmd_isink(kal_bool open);
+extern void MsgCmd_isink(MMI_BOOL open);
 
-#endif
 void hf_nvram_init(void)
 {
 	hf_read_nvram();
@@ -25,11 +23,6 @@ void hf_nvram_init(void)
         MsgCmd_SetAdoRecdDefArgs(&hf_nv.ado);
         MsgCmd_SetVdoRecdDefArgs(&hf_nv.vdo);
     #endif	
-		hf_nv.vdo.ignore_size  = 10;
-		hf_nv.vdo.ignore_time  = 3;
-		hf_nv.vdo.int_check    = 5;
-		hf_nv.vdo.min_time     = 8;
-		hf_nv.vdo.save_gap     = 10;
 	}
 	hf_print("hf_nvram_init,admin[%s %s %s %s %s %s ],psw[%s]",hf_nv.admin_number[0],hf_nv.admin_number[1],hf_nv.admin_number[2],
 	hf_nv.admin_number[3],hf_nv.admin_number[4],hf_nv.admin_number[5]);
