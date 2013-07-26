@@ -1,0 +1,13 @@
+B321output/hal/peripheral/src/Accdet.c
+B321output/tools/nvramstatistic/include/Custom_option.txt
+B321output/plutommi/mmi/TargetOption.txt
+B321output/config/include/hal/Stack_msgs.h
+B321output/plutommi/mmi/idle/idlesrc/Lfy_exp.c
+B321output/custom/common/ps/Customer_at_command.c
+B321output/hal/peripheral/src/Auxmain.c
+B321output/plutommi/mmi/inc/TimerEvents.h
+B321output/plutommi/mmi/bootup/bootupinc/BootupInitConfig.h
+B321output/plutommi/customer/resgenerator/Custom_option.txt
+B321output/plutommi/service/ucsrv/UcXmlSrv.c
+B321output/make/Option.mak
+B321output/plutommi/mmi/idle/idlesrc/Lfy_exp.h
