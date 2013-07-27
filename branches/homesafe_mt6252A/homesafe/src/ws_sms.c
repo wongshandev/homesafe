@@ -564,11 +564,18 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 	else
 		return 0xff;
 }
-void hf_task_sent_hisr(void)
+void hf_task_sent_hisr(MMI_BOOL level)
 {
     hf_task_struct * p = (hf_task_struct*) construct_local_para(sizeof(hf_task_struct), TD_CTRL);
 
-	p->id = 0xfe;
+	if(level)
+	{
+		p->id = HF_HISR_OUT;
+	}
+	else
+	{
+		p->id = HF_HISR_IN;
+	}
 #if defined(__ADO_VER__)	
 	hf_mmi_task_send(HF_MSG_ID_ADO, p);
 #else

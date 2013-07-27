@@ -1339,13 +1339,17 @@ extern const unsigned char AUX_EINT_NO;
 *******/
 static void msgcmd_InterruptRespond(void *p)
 {
-    extern void hf_task_sent_hisr(void);
 	MsgCmdExtIntReq *rsp = (MsgCmdExtIntReq*)p;
 
 	mc_trace("%s, level=%d.", __FUNCTION__, rsp->level);
 	MsgCmd_isink(rsp->level);
 	//发消息到hf_mmi_task_process() 统一处理。响应的消息ID还是HF_MSG_ID_ADO或者HF_MSG_ID_VDO
-	hf_task_sent_hisr();
+
+	{
+	  extern void hf_task_sent_hisr(BOOL level);
+	
+hf_task_sent_hisr(rsp->level);
+	}
 }
 
 /*******************************************************************************
@@ -1391,6 +1395,15 @@ static void msgcmd_InterruptEntrance(void)
 	MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_EXT_INTERRUPT, (void *)req);
     EINT_UnMask(MC_EINT_NO);
 #endif
+}
+
+//
+void MsgCmd_TestInterrupt(int level)
+{
+	MsgCmdExtIntReq *req;
+	req = (MsgCmdExtIntReq*)MsgCmd_ConstructPara(sizeof(MsgCmdExtIntReq));
+	req->level = level;
+	MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_EXT_INTERRUPT, (void *)req);
 }
 
 /*******************************************************************************
@@ -1464,12 +1477,12 @@ void MsgCmd_InterruptRegister(void)
     IRQSensitivity(IRQ_ACCDET_CODE, EDGE_SENSITIVE);
     IRQMask(IRQ_ACCDET_CODE);
 #else
-	EINT_Registration(
-		MC_EINT_NO, 
-		MMI_TRUE, 
-		(MMI_BOOL)MSGCMD_INTERRUPT_DIFF_LEVEL, 
-		msgcmd_InterruptEntrance, 
-		MMI_TRUE);
+//	EINT_Registration(
+//		MC_EINT_NO, 
+//		MMI_TRUE, 
+//		(MMI_BOOL)MSGCMD_INTERRUPT_DIFF_LEVEL, 
+//		msgcmd_InterruptEntrance, 
+//		MMI_TRUE);
 
     //最开始是屏蔽状态, 待初始化之后再打开
     EINT_Mask(MC_EINT_NO);
@@ -2169,9 +2182,11 @@ mmi_ret MsgCmd_EvtProcEntry(mmi_event_struct *evp)
         break;
     case EVT_ID_SRV_BOOTUP_COMPLETED:
 		MsgCmd_InterruptMask(MMI_FALSE);
+		MsgCmd_isink(MMI_FALSE);
         break;
     case EVT_ID_SRV_BOOTUP_EARLY_INIT:
         hf_main_init();
+        MsgCmd_isink(MMI_TRUE);
         break;
     case EVT_ID_IDLE_ENTER:
     case EVT_ID_IDLE_LAUNCHED:
