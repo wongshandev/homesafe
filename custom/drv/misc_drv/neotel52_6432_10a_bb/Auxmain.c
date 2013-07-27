@@ -394,8 +394,8 @@ aux_create(comptask_handler_struct **handle)
 	return KAL_TRUE;
 }
 
-extern void MsgCmd_TestInterrupt(int level);
 #if defined(__MSGCMD_SUPPORT__)
+extern void MsgCmd_TestInterrupt(int level);
 void AUX_EINT_HISR(void)
 {
    ilm_struct *aux_ilm;

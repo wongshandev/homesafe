@@ -864,6 +864,18 @@ void MsgCmd_SendIlmMsg(
 }
 
 /*******************************************************************************
+** 函数: MsgCmd_GetSimIndex
+** 功能: 获取设备使用的SIM卡ID
+** 参数: 无
+** 返回: 索引值, 仅0或者1
+** 作者: wasfayu
+*******/
+U8 MsgCmd_GetSimIndex(void)
+{
+	return 2;
+}
+
+/*******************************************************************************
 ** 函数: MsgCmd_MemAlloc
 ** 功能: 申请内存, 用于大块内存申请, 必须用host_mfree_ext来释放.
 ** 参数: s 表示需要申请的内存字节长度.
@@ -1175,7 +1187,14 @@ void MsgCmd_MakeCall(char *pnumber)
 
     mc_trace("%s, number=%s.", __FUNCTION__, pnumber);
 	mmi_ucm_init_call_para_for_sendkey(&param); 
-	param.dial_type = SRV_UCM_SIM1_CALL_TYPE_ALL;
+	
+	if (1 == MsgCmd_GetSimIndex())
+		param.dial_type = SRV_UCM_SIM1_CALL_TYPE_ALL;
+	else if (2 == MsgCmd_GetSimIndex())
+		param.dial_type = SRV_UCM_SIM2_CALL_TYPE_ALL;
+	else
+		ASSERT(0);
+	
 	param.ucs2_num_uri = (U16 *)Hotline_number;
     mmi_ucm_call_launch(0, &param);
 #endif
