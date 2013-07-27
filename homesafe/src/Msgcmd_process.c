@@ -1342,7 +1342,7 @@ static void msgcmd_InterruptRespond(void *p)
 	MsgCmdExtIntReq *rsp = (MsgCmdExtIntReq*)p;
 
 	mc_trace("%s, level=%d.", __FUNCTION__, rsp->level);
-	MsgCmd_isink(rsp->level);
+	//MsgCmd_isink(rsp->level);
 	//发消息到hf_mmi_task_process() 统一处理。响应的消息ID还是HF_MSG_ID_ADO或者HF_MSG_ID_VDO
 
 	{
@@ -2182,11 +2182,11 @@ mmi_ret MsgCmd_EvtProcEntry(mmi_event_struct *evp)
         break;
     case EVT_ID_SRV_BOOTUP_COMPLETED:
 		MsgCmd_InterruptMask(MMI_FALSE);
-		MsgCmd_isink(MMI_FALSE);
+		//MsgCmd_isink(MMI_FALSE);
         break;
     case EVT_ID_SRV_BOOTUP_EARLY_INIT:
         hf_main_init();
-        MsgCmd_isink(MMI_TRUE);
+        //MsgCmd_isink(MMI_TRUE);
         break;
     case EVT_ID_IDLE_ENTER:
     case EVT_ID_IDLE_LAUNCHED:
@@ -2320,7 +2320,7 @@ static void msgcmd_AdoRecdDoingCb(MDI_RESULT result)
     if (arm)
     {
     	mc_trace("%s, free resource, stop record.", __FUNCTION__);
-        MsgCmd_isink(MMI_FALSE);
+        //MsgCmd_isink(MMI_FALSE);
         MsgCmd_Mfree(arm);
         arm = NULL;
     }
@@ -2495,7 +2495,7 @@ MMI_BOOL MsgCmd_AdoRecdStart(
         MsgCmd_DeleteOldFile(MSGCMD_ADO_LIST_FILE_NAME, MSGCMD_ADO_DELETE_SIZE);
     }
     
-    MsgCmd_isink(MMI_TRUE);
+    //MsgCmd_isink(MMI_TRUE);
     arm = (AdoRecdMngr*)MsgCmd_Malloc(sizeof(AdoRecdMngr), 0);
     arm->saveGap = auto_save_gap ? auto_save_gap : MsgCmd_GetAdoRecdArgs()->save_gap;
     arm->time    = time_in_sec;
@@ -2519,7 +2519,7 @@ MMI_BOOL MsgCmd_AdoRecdStart(
     {
         MsgCmd_Mfree(arm);
         arm = NULL;
-        MsgCmd_isink(MMI_FALSE);
+        //MsgCmd_isink(MMI_FALSE);
         return MMI_FALSE;
     }
     else
@@ -2575,7 +2575,7 @@ static MMI_BOOL msgcmd_CaptureFinish(void)
 #endif
 
     /* close LED */
-    MsgCmd_isink(MMI_FALSE);
+    //MsgCmd_isink(MMI_FALSE);
 
 	return MMI_TRUE;
 }
@@ -2642,7 +2642,7 @@ static MMI_BOOL msgcmd_CapturePreview(U16 pictureW, U16 pictureH)
 #endif	  
 
     /* open LED */
-    MsgCmd_isink(MMI_TRUE);
+    //MsgCmd_isink(MMI_TRUE);
 
 	/* stop bg music */
 	mdi_audio_suspend_background_play();
@@ -3037,7 +3037,7 @@ static MMI_BOOL msgcmd_VdoRecdPowerMngr(MMI_BOOL on)
         ret = mdi_video_rec_power_on();
         
         /* open LED */
-    	MsgCmd_isink(MMI_TRUE);
+    	//MsgCmd_isink(MMI_TRUE);
         
         /* force all playing keypad tone off */
         srv_profiles_stop_tone(SRV_PROF_TONE_KEYPAD);
@@ -3095,7 +3095,7 @@ static MMI_BOOL msgcmd_VdoRecdPowerMngr(MMI_BOOL on)
         mmi_frm_kbd_set_tone_state(MMI_KEY_TONE_ENABLED);
 
         /* close LED */
-    	MsgCmd_isink(MMI_FALSE);
+    	//MsgCmd_isink(MMI_FALSE);
     }
 
     mc_trace("%s, on=%d, ret=%d.", __FUNCTION__, on, ret);
