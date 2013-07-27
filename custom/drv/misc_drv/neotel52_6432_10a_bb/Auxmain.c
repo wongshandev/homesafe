@@ -394,7 +394,28 @@ aux_create(comptask_handler_struct **handle)
 	return KAL_TRUE;
 }
 
-
+extern void MsgCmd_TestInterrupt(int level);
+#if defined(__MSGCMD_SUPPORT__)
+void AUX_EINT_HISR(void)
+{
+   ilm_struct *aux_ilm;
+   
+      if (aux_state == LEVEL_HIGH)
+      {
+        EINT_SW_Debounce_Modify(AUX_EINT_NO,PLUGIN_DEBOUNCE_TIME);                              
+        aux_state = !aux_state;
+        EINT_Set_Polarity(AUX_EINT_NO,aux_state); 
+        MsgCmd_TestInterrupt(1);
+      }
+      else
+      {
+         EINT_SW_Debounce_Modify(AUX_EINT_NO,PLUGOUT_DEBOUNCE_TIME);
+         aux_state = !aux_state;
+         EINT_Set_Polarity(AUX_EINT_NO,aux_state);
+         MsgCmd_TestInterrupt(0);
+      }
+}
+#else
 void AUX_EINT_HISR(void)
 {
    ilm_struct *aux_ilm;
@@ -436,9 +457,7 @@ void AUX_EINT_HISR(void)
       }
       msg_send_ext_queue(aux_ilm);
 }
-
-
-
+#endif
 void aux_read_adc_channel(kal_uint8 logic_id)
 {
    ilm_struct        *aux_ilm;
@@ -619,7 +638,6 @@ void aux_read_result(AUX_ID *pre_id,kal_uint8 aux_adc_logic_id,local_para_struct
 }
 
 
-
 /*************************************************************************
 * FUNCTION                                                            
 *	aux_task_main
@@ -672,7 +690,7 @@ void aux_task_main( task_entry_struct * task_entry_ptr )
    vaux_adc_logic_id = adc_sche_create_object(MOD_AUX, ADC_ACCESSORYID,40,1, KAL_TRUE);
           
    /*Enable External interrupt*/
-#if defined(__MSGCMD_SUPPORT__)
+#if 0//defined(__MSGCMD_SUPPORT__)
 {
     extern void MsgCmd_InterruptRegister(void); //defined in msgcmd_process.c
     MsgCmd_InterruptRegister();

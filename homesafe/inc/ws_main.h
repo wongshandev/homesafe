@@ -32,6 +32,9 @@
 #define MAX_LENTH_REC_TIME		30
 #define MIN_LENTH_REC_TIME		2
 
+#define HF_HISR_IN                                0xfe
+#define HF_HISR_OUT					0xfd
+
 //√¸¡ÓºØ
 typedef enum _homesafe_cmd{
  MSG_SMS_CMD_SET, 
