@@ -191,6 +191,7 @@ void srv_ucm_int_indication(srv_ucm_call_type_enum call_type, srv_ucm_int_ind_op
             srv_ucm_connect_ind(ind_data);
 #if defined(__WS_HOME_SAFE__)
 		{
+			if(hf_call_result_cb !=NULL)
 			(*hf_call_result_cb)(TRUE);
 		}
 #endif
@@ -211,6 +212,7 @@ void srv_ucm_int_indication(srv_ucm_call_type_enum call_type, srv_ucm_int_ind_op
             srv_ucm_disconnecting_ind(ind_data);
 #if defined(__WS_HOME_SAFE__)
 		{
+			if(hf_call_result_cb !=NULL)
 			(*hf_call_result_cb)(FALSE);
 		}
 #endif
@@ -219,6 +221,7 @@ void srv_ucm_int_indication(srv_ucm_call_type_enum call_type, srv_ucm_int_ind_op
             srv_ucm_release_ind(ind_data);
 #if defined(__WS_HOME_SAFE__)
 		{
+			if(hf_call_result_cb !=NULL)
 			(*hf_call_result_cb)(FALSE);
 		}
 #endif

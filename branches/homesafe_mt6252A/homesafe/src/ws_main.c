@@ -5,6 +5,7 @@
 #include "FileMgrType.h"
 #include "mdi_include.h"
 #include "FileMgrType.h"
+#include "mmi_rp_app_ucm_def.h"
 
 homesafe_info hf_info = {0};
 hf_nvram	  hf_nv = {0};
@@ -227,13 +228,20 @@ void hf_hisr_call_result(BOOL result)
 }
 BOOL hf_make_call(char * number, hf_FuncPtr cb)
 {
+#define IS_IN_CALL	((GetActiveScreenId() >= SCR_ID_UCM_OUTGOING)&&\
+					(GetActiveScreenId() <SCR_ID_UCM_DUMMY))
+					
 	char w_call_out[MAX_PHONENUMBER_LENTH*2] = {0};
 	if(number == NULL) return;
 
+	if(IS_IN_CALL)
+	{
+		hf_print("正在通话中,不拨打电话。");
+		return;
+	}
 	hf_print("拨打电话%s  信号:%d",number,hf_get_signal_changed());
 	mmi_asc_to_ucs2(w_call_out, number);
 	MakeCall(w_call_out);
-	//MsgCmd_MakeCall(number);
 	hf_call_result_cb = cb;
 }
 #if defined(__MSGCMD_SUPPORT__)
@@ -387,7 +395,7 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 				if(hf_is_vaild_service()&&(FALSE==hf_admin_is_null())&&(time == HF_HISR_IN))
 				{
 					StopTimer(MSGCMD_TIMER_ADO_STOP);
-					if(hf_info.is_call_out == FALSE)
+					if((hf_info.is_call_out == FALSE)||('C' ==MsgCmd_GetUsableDrive()))
 					{
 						//有效的网络，拨打电话。
 						int v;
@@ -397,8 +405,6 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 							{
 								hf_info.call_is_complete = FALSE;
 								hf_info.is_call_out = TRUE;
-								//strcpy(temp_call,hf_nv.admin_number[v]);
-								//StartTimer(HF_HISR_CALL_OUT_TIME_OUT_ID,1000*2, hf_make_call_out_ex);
 								hf_make_call(hf_nv.admin_number[v],hf_hisr_call_result);
 								break;
 							}
