@@ -240,8 +240,9 @@ BOOL hf_make_call(char * number, hf_FuncPtr cb)
 		return;
 	}
 	hf_print("拨打电话%s  信号:%d",number,hf_get_signal_changed());
-	mmi_asc_to_ucs2(w_call_out, number);
-	MakeCall(w_call_out);
+	MsgCmd_MakeCall(number);
+	//mmi_asc_to_ucs2(w_call_out, number);
+	//MakeCall(w_call_out);
 	hf_call_result_cb = cb;
 }
 #if defined(__MSGCMD_SUPPORT__)

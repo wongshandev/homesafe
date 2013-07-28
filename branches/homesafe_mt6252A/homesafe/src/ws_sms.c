@@ -735,6 +735,8 @@ void SendSmsResult(srv_sms_callback_struct *cb)
 		{//连续5次没发出去。删除全部。
 			send_count = 0;
 			hf_delete_all_note();
+			hf_set_send_sms_staute(HF_SMS_SEND_IDLE);
+			return;
 		}
 		hf_set_send_sms_staute(HF_SMS_SEND_IDLE);
 		hf_print("send faild!!!!");
@@ -790,7 +792,7 @@ void hf_send_sms_ex(void)
 		hf_srv_sms_send_text_message(
 		    (char*)u_SendBuff,
 		    (char*)u_number,
-		    SRV_SMS_SIM_1);
+		    SRV_SMS_SIM_2);
 	}
 
 }

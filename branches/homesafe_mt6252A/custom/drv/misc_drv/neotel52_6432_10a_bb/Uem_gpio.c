@@ -173,9 +173,9 @@ kal_uint8 custom_cfg_outward_gpio_port(  kal_uint8  gpio_device_id /* gpio_devic
 void MsgCmd_isink(kal_bool open)
 {
 	if(!open)
-		pmic_adpt2_bl_enable(KAL_FALSE);
+		pmic_adpt2_kpled_enable(KAL_FALSE);
 	else
-		pmic_adpt2_bl_enable(KAL_TRUE);
+		pmic_adpt2_kpled_enable(KAL_TRUE);
     
 	PWM3_level(LED_LIGHT_LEVEL2);
 }
@@ -248,7 +248,8 @@ kal_bool custom_cfg_gpio_set_level(kal_uint8 gpio_dev_type, kal_uint8 gpio_dev_l
             pmic_adpt2_vibr_enable(KAL_TRUE);
         //PWM3_level(gpio_dev_level);  /* Vibrator in 53EL don't have PWM mode */
         break;
-    
+  #if !defined(__MSGCMD_SUPPORT__)
+  
     case GPIO_DEV_LED_KEY:
         if(gpio_dev_level ==LED_LIGHT_LEVEL0)
             pmic_adpt2_kpled_enable(KAL_FALSE);
@@ -256,7 +257,7 @@ kal_bool custom_cfg_gpio_set_level(kal_uint8 gpio_dev_type, kal_uint8 gpio_dev_l
             pmic_adpt2_kpled_enable(KAL_TRUE);
         PWM_level(gpio_dev_level);
         break;
-    
+#endif    
     default:
         break;
         /* error undefine */
