@@ -61,6 +61,9 @@ void hf_start_light(void)
 	}
 	else
 	{
+
+		MsgCmd_isink(TRUE);
+		/*
 		static BOOL _flag = FALSE;
 		
 		timer_sec = 10;
@@ -72,6 +75,7 @@ void hf_start_light(void)
 		{
 			MsgCmd_isink(FALSE);
 		}
+		*/
 	}
 	StartTimer(SH_LIGHT_TIMER_ID, 100*timer_sec,hf_start_light);
 }
@@ -102,7 +106,6 @@ kal_uint8 hf_get_signal_changed(void)
 }
 void hf_juge_t_card(void)
 {
-	hf_print("盘符:%c",MsgCmd_GetUsableDrive());
 	if('C' ==MsgCmd_GetUsableDrive())
 	{
 		int v;
@@ -135,7 +138,7 @@ void hf_set_time_from_fs(void)
 		if(ret >=  FS_NO_ERROR)
 		{
 			MYTIME * p_t = &hf_time;
-			hf_scanf(time_buff,strlen(time_buff),"%d-%d-%d %d:%d:%d",&p_t->nYear,&p_t->nMonth,&p_t->nDay,&p_t->nHour,&p_t->nMin,&p_t->nSec);
+			hf_scanf(time_buff,strlen(time_buff),"%d-%d-%d,%d:%d:%d",&p_t->nYear,&p_t->nMonth,&p_t->nDay,&p_t->nHour,&p_t->nMin,&p_t->nSec);
 			if((p_t->nYear > 2012)&&(p_t->nYear < 2050)&&(p_t->nMonth > 0)&&(p_t->nMonth < 13)&&
 			  (p_t->nDay > 0)&&(p_t->nDay < 32)&&(p_t->nHour < 24)&&(p_t->nHour >=0)&&
 			  (p_t->nMin >=0)&&(p_t->nMin < 60)&&(p_t->nSec >=0)&&(p_t->nSec < 60))
@@ -222,8 +225,12 @@ void hf_hisr_call_result(BOOL result)
 			hf_init_hf_info();
 			return;
 		}
-		hf_print("通话结束");
-		hf_info.call_is_complete = TRUE;
+		else
+		{
+			hf_print("通话结束");
+			mmi_ucm_outgoing_call_endkey();
+			hf_info.call_is_complete = TRUE;
+		}
 	}
 }
 BOOL hf_make_call(char * number, hf_FuncPtr cb)
@@ -244,6 +251,20 @@ BOOL hf_make_call(char * number, hf_FuncPtr cb)
 	//mmi_asc_to_ucs2(w_call_out, number);
 	//MakeCall(w_call_out);
 	hf_call_result_cb = cb;
+}
+void hf_set_light_for_rec(void)
+{
+	BOOL i = 0;
+
+	if(i =~i)
+	{
+		MsgCmd_isink(FALSE);	
+	}
+	else
+	{
+		MsgCmd_isink(TRUE);	
+	}
+	StartTimer(SH_LIGHT_TIMER_ID, 500, hf_set_light_for_rec);
 }
 #if defined(__MSGCMD_SUPPORT__)
 /*******************************************************************************
@@ -305,6 +326,8 @@ void MsgCmd_AdoRecdStopTimerEx(void)
 {
 	hf_print("停止录音");
 	hf_init_hf_info();
+	StopTimer(SH_LIGHT_TIMER_ID);
+	MsgCmd_isink(FALSE);
 	if (MsgCmd_AdoRecdBusy())
 		MsgCmd_AdoRecdStop(NULL);
 }
@@ -421,6 +444,7 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 							{
 								//空闲时，可以启动。
 								hf_print("开始录音。。");
+								
 								MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, 0, 5*60, NULL);
 							}
 							else

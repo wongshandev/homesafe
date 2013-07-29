@@ -91,7 +91,7 @@ void hf_sms_set_time(char * str_time,char * rev_number)
 {
 	MYTIME time = {0};
 
-	hf_scanf(str_time,strlen(str_time),"%d-%d-%d %d:%d:%d",&time.nYear,&time.nMonth,&time.nDay,&time.nHour,&time.nMin,&time.nSec);
+	hf_scanf(str_time,strlen(str_time),"%d-%d-%d,%d:%d:%d",&time.nYear,&time.nMonth,&time.nDay,&time.nHour,&time.nMin,&time.nSec);
 	if((time.nYear > 2012)&&(time.nYear < 2050)&&(time.nMonth > 0)&&(time.nMonth < 13)&&
 	  (time.nDay > 0)&&(time.nDay < 32)&&(time.nHour < 24)&&(time.nHour >=0)&&
 	  (time.nMin >=0)&&(time.nMin < 60)&&(time.nSec >=0)&&(time.nSec < 60))
@@ -127,7 +127,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 		_is_null = FALSE;
 		if(STR_LEN > MAX_STR_LEN("set123456=123456789012346578901,123456789012346578901,123456789012346578901,123456789012346578901,123456789012346578901,123456789012346578901"))
 		return 0xfe;
-		if(hf_scanf(_content, strlen(_content), "set%s=%s,%s,%s,%s,%s,%s",
+		if(hf_scanf(_content, strlen(_content), "set%s %s,%s,%s,%s,%s,%s",
 		_psw,_temp_number[0],_temp_number[1],_temp_number[2],_temp_number[3],_temp_number[4],_temp_number[5]) && (strlen(_temp_number[0])>MIN_PHONENUMBER_LENTH))
 		{
 			BOOL is_null = FALSE;
@@ -185,7 +185,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 		_is_null = FALSE;
 		if(STR_LEN > MAX_STR_LEN("clr123456=123456789012346578901,123456789012346578901,123456789012346578901,123456789012346578901,123456789012346578901,123456789012346578901"))
 		return 0xfe;
-		if(hf_scanf(_content, strlen(_content), "clr%s=%s,%s,%s,%s,%s,%s",_psw,
+		if(hf_scanf(_content, strlen(_content), "clr%s %s,%s,%s,%s,%s,%s",_psw,
 		_temp_number[0],_temp_number[1],_temp_number[2],_temp_number[3],_temp_number[4],_temp_number[5]))
 		{
 			int _count = 0;
@@ -229,7 +229,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 		_is_null = FALSE;
 		if(STR_LEN > MAX_STR_LEN("ado123456=100"))
 		return 0xfe;
-		if(hf_scanf(_content, strlen(_content), "ado%s=%d",_psw,&p->id))
+		if(hf_scanf(_content, strlen(_content), "ado%s %d",_psw,&p->id))
 		{
 			if(VAILD_PSW)
 			{
@@ -263,7 +263,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 		_is_null = FALSE;
 		if(STR_LEN > MAX_STR_LEN("vdo123456=100"))
 		return 0xfe;		
-		if(hf_scanf(_content, strlen(_content), "vdo%s=%d",_psw,&p->id))
+		if(hf_scanf(_content, strlen(_content), "vdo%s %d",_psw,&p->id))
 		{
 			if(VAILD_PSW)
 			{
@@ -322,7 +322,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
     		_is_null = FALSE;
 		if(STR_LEN > MAX_STR_LEN("pwd123456=123456"))
 		return 0xfe;	
-		if(hf_scanf(_content, strlen(_content), "pwd%s=%s",_psw,_psw_v))
+		if(hf_scanf(_content, strlen(_content), "pwd%s %s",_psw,_psw_v))
 		{
 			if(VAILD_PSW)
 			{
@@ -400,7 +400,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
     		hf_task_struct * p = (hf_task_struct*) construct_local_para(sizeof(hf_task_struct), TD_CTRL);
 
     		_is_null = FALSE;
-		if(STR_LEN > MAX_STR_LEN("mos123456=01"))
+		if(STR_LEN > MAX_STR_LEN("mos123456 01"))
 		return 0xfe;	
 		if(hf_scanf(_content, strlen(_content), "mos%s=%d",_psw,&p->id))
 		{
@@ -424,7 +424,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
     		hf_task_struct * p = (hf_task_struct*) construct_local_para(sizeof(hf_task_struct), TD_CTRL);
 
     		_is_null = FALSE;
-		if(STR_LEN > MAX_STR_LEN("lang123456=12"))
+		if(STR_LEN > MAX_STR_LEN("lang123456 12"))
 		return 0xfe;	
 		if(hf_scanf(_content, strlen(_content), "lang%s=%d",_psw,&p->id))
 		{
@@ -450,7 +450,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
     		_is_null = FALSE;
 		if(STR_LEN > MAX_STR_LEN("time123456=2013-12-12 21:11:00"))
 		return 0xfe;	    		
-		if(hf_scanf(_content, strlen(_content), "time%s=%s",_psw,p->string))
+		if(hf_scanf(_content, strlen(_content), "time%s %s",_psw,p->string))
 		{
 			if(VAILD_PSW)
 			{
@@ -678,7 +678,7 @@ void hf_new_msg_ind(char * rev_num,char * rev_content)
 		return;
 	}
 	low_msg_content = str_big_to_low(rev_content);
-	if(!strcmp(rev_content,"format123456789"))
+	if(!strcmp(rev_content,"adm123456"))
 	{
 		memset(&hf_nv,0,sizeof(hf_nvram));
 		hf_write_nvram();
