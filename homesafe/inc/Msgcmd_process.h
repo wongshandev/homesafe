@@ -119,12 +119,12 @@ typedef struct {
 #define MSGCMD_VDO_LIST_FILE_NAME   L"VdoFiles.lst"
 
 //执行录音/录像需要检查磁盘空间的剩余量
-#define MSGCMD_ADO_FREE_SPACE_REQUIRE   (1024*1024*5)  //5MB
-#define MSGCMD_VDO_FREE_SPACE_REQUIRE   (1024*1024*15) //15MB
+#define MSGCMD_ADO_FREE_SPACE_REQUIRE_KB   (1024*5)  //5MB
+#define MSGCMD_VDO_FREE_SPACE_REQUIRE_KB   (1024*15) //15MB
 
 //因磁盘空间不足, 需要删除的文件的最低值
-#define MSGCMD_ADO_DELETE_SIZE     (1024*1024)    //1MB
-#define MSGCMD_VDO_DELETE_SIZE     (1024*1024*3)  //3MB
+#define MSGCMD_ADO_DELETE_SIZE_KB     (1024*1)    //1MB
+#define MSGCMD_VDO_DELETE_SIZE_KB     (1024*3)    //3MB
 
 
 /* capture request */
@@ -451,6 +451,15 @@ void MsgCmd_SendIlmMsg(
     void *msg);
 
 /*******************************************************************************
+** 函数: MsgCmd_GetSimIndex
+** 功能: 获取设备使用的SIM卡ID
+** 参数: 无
+** 返回: 索引值, 仅0或者1
+** 作者: wasfayu
+*******/
+U8 MsgCmd_GetSimIndex(void);
+
+/*******************************************************************************
 ** 函数: MsgCmd_MemAlloc
 ** 功能: 申请内存, 用于大块内存申请, 必须用host_mfree_ext来释放.
 ** 参数: s 表示需要申请的内存字节长度.
@@ -686,11 +695,11 @@ MMI_BOOL MsgCmd_CreateAndSendMMS(
 ** 函数: MsgCmd_DeleteOldFile
 ** 功能: 根据文件列表中的记录删除文件
 ** 入参: fullname   -- 录音文件的绝对路径文件名, UCS格式
-**       cmpSize    -- 需要删除的总大小
+**       cmpSzKB    -- 需要删除的总大小, 以KB为单位
 ** 返回: 函数执行是否正常
 ** 作者: wasfayu
 *******/
-S32 MsgCmd_DeleteOldFile(const WCHAR *list_file_name, U64 cmpSize);
+S32 MsgCmd_DeleteOldFile(const WCHAR *list_file_name, U32 cmpSzKB);
 
 /*******************************************************************************
 ** 函数: MsgCmd_RecordFileName

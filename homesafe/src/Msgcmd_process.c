@@ -864,6 +864,18 @@ void MsgCmd_SendIlmMsg(
 }
 
 /*******************************************************************************
+** 函数: MsgCmd_GetSimIndex
+** 功能: 获取设备使用的SIM卡ID
+** 参数: 无
+** 返回: 索引值, 仅0或者1
+** 作者: wasfayu
+*******/
+U8 MsgCmd_GetSimIndex(void)
+{
+	return 2;
+}
+
+/*******************************************************************************
 ** 函数: MsgCmd_MemAlloc
 ** 功能: 申请内存, 用于大块内存申请, 必须用host_mfree_ext来释放.
 ** 参数: s 表示需要申请的内存字节长度.
@@ -1175,7 +1187,14 @@ void MsgCmd_MakeCall(char *pnumber)
 
     mc_trace("%s, number=%s.", __FUNCTION__, pnumber);
 	mmi_ucm_init_call_para_for_sendkey(&param); 
-	param.dial_type = SRV_UCM_SIM2_CALL_TYPE_ALL;
+	
+	if (1 == MsgCmd_GetSimIndex())
+		param.dial_type = SRV_UCM_SIM1_CALL_TYPE_ALL;
+	else if (2 == MsgCmd_GetSimIndex())
+		param.dial_type = SRV_UCM_SIM2_CALL_TYPE_ALL;
+	else
+		ASSERT(0);
+	
 	param.ucs2_num_uri = (U16 *)Hotline_number;
     mmi_ucm_call_launch(0, &param);
 #endif
@@ -1346,9 +1365,8 @@ static void msgcmd_InterruptRespond(void *p)
 	//发消息到hf_mmi_task_process() 统一处理。响应的消息ID还是HF_MSG_ID_ADO或者HF_MSG_ID_VDO
 
 	{
-	  extern void hf_task_sent_hisr(BOOL level);
-	
-hf_task_sent_hisr(rsp->level);
+		extern void hf_task_sent_hisr(BOOL level);
+		hf_task_sent_hisr(rsp->level);
 	}
 }
 
@@ -1956,7 +1974,7 @@ static void msgcmd_CreateAndSendMMSCb(
         
 		req.msg_id       = rsp->msg_id;
 		req.send_setting = SRV_MMS_SETTING_SEND_ONLY;
-		req.sim_id       = MMI_SIM_ID_SIM2;//(usd->sim==MMA_SIM_ID_SIM2) ? MMI_SIM_ID_SIM2 : MMI_SIM_ID_SIM1;
+		req.sim_id       = (usd->sim==MMA_SIM_ID_SIM2) ? MMI_SIM_ID_SIM2 : MMI_SIM_ID_SIM1;
 		req.storage_type = MMA_MSG_STORAGE_CARD1;
 		req.is_rr        = MMI_TRUE;
 		srv_mms_send(&req);
@@ -2015,16 +2033,16 @@ MMI_BOOL MsgCmd_CreateAndSendMMS(
 ** 函数: MsgCmd_DeleteOldFile
 ** 功能: 根据文件列表中的记录删除文件
 ** 入参: fullname   -- 录音文件的绝对路径文件名, UCS格式
-**       cmpSize    -- 需要删除的总大小
+**       cmpSzKB    -- 需要删除的总大小, 以KB为单位
 ** 返回: 函数执行是否正常
 ** 作者: wasfayu
 *******/
-S32 MsgCmd_DeleteOldFile(const WCHAR *list_file_name, U64 cmpSize)
+S32 MsgCmd_DeleteOldFile(const WCHAR *list_file_name, U32 cmpSzKB)
 {
     U32       bufsz;
     WCHAR    *buffer;
     U32       line_len, tmpSz=0;
-    U64       total_size = 0;
+    U32       total_size = 0;
     S32       ret = 0;
     FS_HANDLE main_fd, fd;
 
@@ -2049,7 +2067,7 @@ S32 MsgCmd_DeleteOldFile(const WCHAR *list_file_name, U64 cmpSize)
 		line_len = 0;
         applib_file_read_line(main_fd, (U8 *)buffer, bufsz, &line_len, &ret);
 
-        //mc_trace("%s,L:%d. ret=%d. line_len=%d. tmpSz=%d.", __FUNCTION__, __LINE__, ret,line_len,tmpSz);
+        mc_trace("%s,L:%d. ret=%d. line_len=%d. tmpSz=%d.", __FUNCTION__, __LINE__, ret,line_len,tmpSz);
 		if (line_len == 0)
 			break;
 		
@@ -2076,7 +2094,7 @@ S32 MsgCmd_DeleteOldFile(const WCHAR *list_file_name, U64 cmpSize)
             if(fd >= FS_NO_ERROR)
             {
                 if(FS_GetFileSize(fd, &fsz) >= 0)
-                    total_size += (U64)fsz;
+                    total_size += fsz>>10;
                     
                 FS_Close(fd);
                 FS_Delete((const WCHAR*)buffer);
@@ -2084,7 +2102,7 @@ S32 MsgCmd_DeleteOldFile(const WCHAR *list_file_name, U64 cmpSize)
                 mc_trace("%s,L:%d, total_size=%d.", __FUNCTION__, __LINE__, total_size);
             }
 
-            if(total_size >= cmpSize)
+            if(total_size >= cmpSzKB)
                 ret = 1;
         }
         
@@ -2242,6 +2260,30 @@ mmi_ret MsgCmd_EvtProcEntry(mmi_event_struct *evp)
 
 #if 1//audio record
 static AdoRecdMngr *arm;
+
+/*******************************************************************************
+** 函数: msgcmd_AdoRecdCheckFreeSpace
+** 功能: 检查剩余空间
+** 参数: 无
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void msgcmd_AdoRecdCheckFreeSpace(void)
+{
+	U32 left;
+	
+    //磁盘剩余空间小于5M则删除就的录音文件
+    left = MsgCmd_GetDiskFreeSize(MsgCmd_GetUsableDrive()) >> 10;
+	mc_trace("%s, left=%dKB.", __FUNCTION__, left);
+//    if (left <= MSGCMD_ADO_FREE_SPACE_REQUIRE_KB)
+//    {
+//        MsgCmd_DeleteOldFile(MSGCMD_ADO_LIST_FILE_NAME, MSGCMD_ADO_DELETE_SIZE_KB);
+//    }
+
+	if (left <= 6*MsgCmd_GetAdoRecdArgs()->save_gap)
+		MsgCmd_DeleteOldFile(MSGCMD_ADO_LIST_FILE_NAME, 5*MsgCmd_GetAdoRecdArgs()->save_gap);
+
+}
 
 /*******************************************************************************
 ** 函数: msgcmd_AdoRecdDoingCb
@@ -2490,10 +2532,7 @@ MMI_BOOL MsgCmd_AdoRecdStart(
         return MMI_FALSE;
     
     //磁盘剩余空间小于5M则删除就的录音文件
-    if (MsgCmd_GetDiskFreeSize(drive) <= MSGCMD_ADO_FREE_SPACE_REQUIRE)
-    {
-        MsgCmd_DeleteOldFile(MSGCMD_ADO_LIST_FILE_NAME, MSGCMD_ADO_DELETE_SIZE);
-    }
+    msgcmd_AdoRecdCheckFreeSpace();
     
     //MsgCmd_isink(MMI_TRUE);
     arm = (AdoRecdMngr*)MsgCmd_Malloc(sizeof(AdoRecdMngr), 0);
@@ -2780,7 +2819,7 @@ MMI_BOOL MsgCmd_CaptureEntry(char *replay_number)
 		if (result && NULL != replay_number)
 		{
 			//send MMS
-            req->sim = MMA_SIM_ID_SIM1;
+            req->sim = MsgCmd_GetSimIndex() == 2 ? MMA_SIM_ID_SIM2 : MMA_SIM_ID_SIM1;
 		    strcpy(req->sendto, replay_number);            
             kal_wsprintf(req->subject, "%w", req->picname);
             MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_SEND_MMS_REQ, (void *)req);
@@ -2802,6 +2841,7 @@ MMI_BOOL MsgCmd_CaptureEntry(char *replay_number)
 
 static WCHAR *msgcmd_VdoRecdGetSavePath(WCHAR *buffer, U32 length_in_byte);
 static WCHAR *msgcmd_VdoRecdGetFilePath(WCHAR *buffer, U32 length_in_byte);
+static void msgcmd_VdoRecdCheckFreeSpace(void);
 static void msgcmd_VdoRecdSaveCb(MDI_RESULT result);
 static void msgcmd_VdoRecdDoingCb(MDI_RESULT result);
 static void msgcmd_VdoRecdLayerMngr(MMI_BOOL create, gdi_handle *layer);
@@ -2866,6 +2906,29 @@ static WCHAR *msgcmd_VdoRecdGetFilePath(WCHAR *buffer, U32 length_in_byte)
         );
 
     return buffer;
+}
+
+/*******************************************************************************
+** 函数: msgcmd_VdoRecdCheckFreeSpace
+** 功能: 检查剩余空间
+** 参数: 无
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void msgcmd_VdoRecdCheckFreeSpace(void)
+{
+	U32 left;
+	//一秒钟就是110KB, 如果要计算剩余空间的话, 必须要比这个大
+    //磁盘剩余空间小于5M则删除就的录音文件
+    left = MsgCmd_GetDiskFreeSize(MsgCmd_GetUsableDrive()) >> 10;
+	mc_trace("%s, left=%dKB.", __FUNCTION__, left);
+//    if (left <= MSGCMD_VDO_FREE_SPACE_REQUIRE_KB)
+//    {
+//        MsgCmd_DeleteOldFile(MSGCMD_VDO_LIST_FILE_NAME, MSGCMD_VDO_DELETE_SIZE_KB);
+//    }
+
+	if (left <= 130*MsgCmd_GetVdoRecdArgs()->save_gap)
+		MsgCmd_DeleteOldFile(MSGCMD_VDO_LIST_FILE_NAME, 110*MsgCmd_GetVdoRecdArgs()->save_gap);
 }
 
 /*******************************************************************************
@@ -3185,10 +3248,7 @@ static MMI_BOOL msgcmd_VdoRecdDoing(WCHAR *filepath)
     MDI_RESULT ret;
 
     //磁盘剩余空间小于15M则删除就的视频文件
-    if (MsgCmd_GetDiskFreeSize(MsgCmd_GetUsableDrive()) <= MSGCMD_VDO_FREE_SPACE_REQUIRE)
-    {
-        MsgCmd_DeleteOldFile(MSGCMD_VDO_LIST_FILE_NAME, MSGCMD_ADO_DELETE_SIZE);
-    }
+    msgcmd_VdoRecdCheckFreeSpace();
     
     ret = mdi_video_rec_record_start((S8*)filepath, msgcmd_VdoRecdDoingCb);
     mc_trace("%s, ret=%d.", __FUNCTION__, ret);
@@ -3284,6 +3344,8 @@ static void msgcmd_VdoRecdTimerCyclic(void)
     vrm->timeCount = (U32)(time/1000);
 #endif
     mc_trace("%s, timeCount=%dS. saveGap=%dS.", __FUNCTION__, vrm->timeCount, vrm->saveGap);
+	MsgCmd_isink(vrm->timeCount%2);
+
     if (vrm->timeCount >= vrm->saveGap)
     {
         //save
