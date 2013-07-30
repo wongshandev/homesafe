@@ -239,7 +239,7 @@ BOOL hf_make_call(char * number, hf_FuncPtr cb)
 					(GetActiveScreenId() <SCR_ID_UCM_DUMMY))
 					
 	char w_call_out[MAX_PHONENUMBER_LENTH*2] = {0};
-	if(number == NULL) return;
+	if(number == NULL) return FALSE;
 
 	if(IS_IN_CALL)
 	{

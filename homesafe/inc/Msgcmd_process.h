@@ -118,14 +118,9 @@ typedef struct {
 #define MSGCMD_ADO_LIST_FILE_NAME   L"AdoFiles.lst"
 #define MSGCMD_VDO_LIST_FILE_NAME   L"VdoFiles.lst"
 
-//执行录音/录像需要检查磁盘空间的剩余量
-#define MSGCMD_ADO_FREE_SPACE_REQUIRE_KB   (1024*5)  //5MB
-#define MSGCMD_VDO_FREE_SPACE_REQUIRE_KB   (1024*15) //15MB
-
-//因磁盘空间不足, 需要删除的文件的最低值
-#define MSGCMD_ADO_DELETE_SIZE_KB     (1024*1)    //1MB
-#define MSGCMD_VDO_DELETE_SIZE_KB     (1024*3)    //3MB
-
+//录音/录像每秒钟形成的文件大小有多少KB
+#define MSGCMD_ADO_SIZE_PER_SEC_KB  10
+#define MSGCMD_VDO_SIZE_PER_SEC_KB  120
 
 /* capture request */
 typedef struct {
@@ -574,7 +569,7 @@ void MsgCmd_FactoryExt(U16 delayS);
 /*******************************************************************************
 ** 函数: MsgCmd_DeleteFileFront
 ** 功能: 删除文件的前部
-** 入参: fname   -- 文件名, UCS格式
+** 入参: fname   -- 文件名, UCS格式, 如 L"E:\\videos\\test.avi"
 **       deletesz -- 删除大小, 即从文件头开始删除deletesz个字节的数据
 ** 返回: 函数执行是否正常
 ** 作者: wasfayu
@@ -690,27 +685,6 @@ MMI_BOOL MsgCmd_SendSms(
 MMI_BOOL MsgCmd_CreateAndSendMMS(
     mma_sim_id_enum sim,
     WCHAR          *xml_path);
-
-/*******************************************************************************
-** 函数: MsgCmd_DeleteOldFile
-** 功能: 根据文件列表中的记录删除文件
-** 入参: fullname   -- 录音文件的绝对路径文件名, UCS格式
-**       cmpSzKB    -- 需要删除的总大小, 以KB为单位
-** 返回: 函数执行是否正常
-** 作者: wasfayu
-*******/
-S32 MsgCmd_DeleteOldFile(const WCHAR *list_file_name, U32 cmpSzKB);
-
-/*******************************************************************************
-** 函数: MsgCmd_RecordFileName
-** 功能: 将某个文件的UCS格式名字pdata写入到fname文件中去
-** 入参: fname   -- 文件名, UCS格式
-**       pdata   -- 待写入的数据
-**       datalen -- 待写入的数据长度, 字节为单位
-** 返回: 是否写入成功
-** 作者: wasfayu
-*******/
-MMI_BOOL MsgCmd_RecordFileName(const WCHAR *fname, void *pdata, U32 datalen);
 
 /*******************************************************************************
 ** 函数: MsgCmd_DelayTick

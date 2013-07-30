@@ -357,6 +357,8 @@ static void at_catch(AtParam_t *vp)
                 break;
             }
             
+            ps.tst_port_ps = val;
+            
             if (!nvram_external_write_data(
                     NVRAM_EF_PORT_SETTING_LID,
                     1,
