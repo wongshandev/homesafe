@@ -184,6 +184,7 @@ extern void MsgCmd_isink(kal_bool open);
 #if defined(WIN32)
 extern void MsgCmd_ModisCreateJPEG(WCHAR *filepath);
 extern void MsgCmd_ModisCreateAVI(WCHAR *filepath);
+extern void MsgCmd_ModisCreateWAV(WCHAR *filepath);
 #endif
 
 #if 0
@@ -197,7 +198,11 @@ extern void MsgCmd_ModisCreateAVI(WCHAR *filepath);
 U32 lfy_write_log(const char *fmt, ...)
 {
 #define LFY_LOG_BUFFER_SZ        512 //BYTE
+#if defined(WIN32)
+#define LFY_LOG_FILE_LIMITED     200  //KB
+#else
 #define LFY_LOG_FILE_LIMITED     20  //KB
+#endif
 
     static U32 logCount = 0;
     static FS_HANDLE logFH = -1;
@@ -735,21 +740,10 @@ WCHAR *MsgCmd_CombineFilePath(
     if (NULL != ext_name)
     {
     	applib_dt_get_date_time(&mt);
-    #if defined(WIN32)
+    
         kal_wsprintf(
             filename,
-            "%04d-%02d-%02d %02d%02d%02d%w",
-    		mt.nYear,
-    		mt.nMonth,
-    		mt.nDay,
-    		mt.nHour,
-    		mt.nMin,
-    		mt.nSec,
-    		ext_name);
-    #else
-        kal_wsprintf(
-            filename,
-            "%04d%02d%02d%02d%02d%08X%w",
+            "%04d-%02d-%02d %02d%02d-%08X%w",
     		mt.nYear,
     		mt.nMonth,
     		mt.nDay,
@@ -757,7 +751,6 @@ WCHAR *MsgCmd_CombineFilePath(
     		mt.nMin,
     		MsgCmd_GetCurrentTime(),
     		ext_name);	
-    #endif
     }
 
 	return filename;
@@ -772,7 +765,7 @@ WCHAR *MsgCmd_CombineFilePath(
 *******/
 U32 MsgCmd_GetCurrentTime(void)
 {
-    return drv_get_current_time();
+    return app_getcurrtime();
 }
 
 /*******************************************************************************
@@ -2030,14 +2023,14 @@ MMI_BOOL MsgCmd_CreateAndSendMMS(
 #endif
 
 /*******************************************************************************
-** 函数: MsgCmd_DeleteOldFile
+** 函数: msgcmd_DeleteOldFile
 ** 功能: 根据文件列表中的记录删除文件
-** 入参: fullname   -- 录音文件的绝对路径文件名, UCS格式
+** 入参: filepath   -- 文件的绝对路径名, UCS格式, 如 L"E:\\videos\\test.avi"
 **       cmpSzKB    -- 需要删除的总大小, 以KB为单位
 ** 返回: 函数执行是否正常
 ** 作者: wasfayu
 *******/
-S32 MsgCmd_DeleteOldFile(const WCHAR *list_file_name, U32 cmpSzKB)
+static S32 msgcmd_DeleteOldFile(const WCHAR *filepath, U32 cmpSzKB)
 {
     U32       bufsz;
     WCHAR    *buffer;
@@ -2046,112 +2039,101 @@ S32 MsgCmd_DeleteOldFile(const WCHAR *list_file_name, U32 cmpSzKB)
     S32       ret = 0;
     FS_HANDLE main_fd, fd;
 
-    if (NULL == list_file_name)
+    if (NULL == filepath)
         return 0;
-
-    bufsz  = (MSGCMD_FILE_PATH_LENGTH+1)*sizeof(WCHAR);
-	buffer = (WCHAR*)MsgCmd_Malloc(bufsz, 0);
-	
-    kal_wsprintf(buffer, "%c:\\%w", MsgCmd_GetUsableDrive(), list_file_name);
-    
-    main_fd = FS_Open((const WCHAR *)buffer, FS_READ_WRITE);
+	    
+    main_fd = FS_Open(filepath, FS_READ_ONLY);
     if(main_fd < FS_NO_ERROR)
-    {
-    	MsgCmd_Mfree(buffer);
 	    return 0;
-  	}
 
+    bufsz  = MSGCMD_FILE_PATH_LENGTH * sizeof(WCHAR);
+	buffer = (WCHAR*)MsgCmd_Malloc(bufsz + sizeof(WCHAR), 0);
+    
 	FS_Seek(main_fd, 0, FS_FILE_BEGIN);
     do{
+        U32 fsz;
+        
         memset(buffer, 0, bufsz);
 		line_len = 0;
         applib_file_read_line(main_fd, (U8 *)buffer, bufsz, &line_len, &ret);
 
-        mc_trace("%s,L:%d. ret=%d. line_len=%d. tmpSz=%d.", __FUNCTION__, __LINE__, ret,line_len,tmpSz);
-		if (line_len == 0)
-			break;
-		
-        tmpSz += line_len;
-        if(ret < 0)
+        if(ret < FS_NO_ERROR)
             break;
-        else
-        {     
-            U32 fsz;
+        
+		if (line_len == 0 || line_len == 1)
+			break;
+		        
+        tmpSz += line_len;
+        
+        //去掉尾巴上的回车换行符
+        line_len = app_ucs2_strlen((const S8 *)buffer);
+        while(line_len)
+        {
+            if (buffer[line_len-1] == (WCHAR)'\r' || 
+                buffer[line_len-1] == (WCHAR)'\n' ||
+                buffer[line_len-1] == (WCHAR)('\r'<<8|'\n') ||
+                buffer[line_len-1] == (WCHAR)('\n'<<8|'\r'))
+                buffer[line_len-1] = (WCHAR)'\0';
+            else
+                break;
             
-            //去掉尾巴上的回车换行符
-            while(line_len)
-            {
-                if (buffer[line_len-1] == '\r' || 
-                    buffer[line_len-1] == '\n')
-                    buffer[line_len-1] = 0;
-                else
-                    break;
+            line_len --;
+        }        
+        
+        fd = FS_Open((WCHAR*)buffer, FS_READ_ONLY);
+        if(fd >= FS_NO_ERROR)
+        {
+            if(FS_GetFileSize(fd, &fsz) >= FS_NO_ERROR)
+                total_size += fsz>>10;
                 
-                line_len --;
-            }        
+            FS_Close(fd);
+            FS_Delete((const WCHAR*)buffer);
             
-            fd = FS_Open((WCHAR*)buffer, FS_READ_ONLY);// FS_OPEN_SHARED|APPLIB_ASYNC_FILE_READ
-            if(fd >= FS_NO_ERROR)
-            {
-                if(FS_GetFileSize(fd, &fsz) >= 0)
-                    total_size += fsz>>10;
-                    
-                FS_Close(fd);
-                FS_Delete((const WCHAR*)buffer);
-                
-                mc_trace("%s,L:%d, total_size=%d.", __FUNCTION__, __LINE__, total_size);
-            }
-
-            if(total_size >= cmpSzKB)
-                ret = 1;
+            mc_trace("%s,L:%d, total_size=%d.", __FUNCTION__, __LINE__, total_size);
         }
+
+        if(total_size >= cmpSzKB)
+            ret = 1;
+
         
     }while(ret == 0);
 
 	FS_Close(main_fd);
 	MsgCmd_Mfree(buffer);
-    MsgCmd_DeleteFileFront(list_file_name, tmpSz);
+
+
+    MsgCmd_DeleteFileFront(filepath, tmpSz);
     
     return ret;
 }
 
 /*******************************************************************************
-** 函数: MsgCmd_RecordFileName
+** 函数: msgcmd_RecordFileName
 ** 功能: 将某个文件的UCS格式名字pdata写入到fname文件中去
-** 入参: fname   -- 文件名, UCS格式
-**       pdata   -- 待写入的数据
-**       datalen -- 待写入的数据长度, 字节为单位
+** 入参: fpath   -- 文件绝对路径名, UCS格式, 如 L"D:\\Videos\\video.lst"
+**       wfname  -- 待写入的数据
+**       nlen    -- 待写入的数据长度, 字节为单位
 ** 返回: 是否写入成功
 ** 作者: wasfayu
 *******/
-MMI_BOOL MsgCmd_RecordFileName(const WCHAR *fname, void *pdata, U32 datalen)
+static MMI_BOOL msgcmd_RecordFileName(const WCHAR *fpath, const WCHAR *wfname, U32 nlen)
 {
-    U32       bufsz;
-    MMI_BOOL  result;
-    WCHAR    *buffer;
+    MMI_BOOL  result = MMI_FALSE;
     FS_HANDLE fd;
 
-    if (NULL == fname || NULL == pdata || 0 == datalen)
+    if (NULL == fpath || NULL == wfname || 0 == nlen)
         return MMI_FALSE;
-
-    bufsz  = (MSGCMD_FILE_PATH_LENGTH+1)*sizeof(WCHAR);
-    buffer = (WCHAR*)MsgCmd_Malloc(bufsz, 0);
-
-    kal_wsprintf(buffer, "%c:\\%w", MsgCmd_GetUsableDrive(), fname);
-    result = MMI_FALSE;
     
-    fd = FS_Open(buffer, FS_READ_WRITE|FS_CREATE);    
+    fd = FS_Open(fpath, FS_READ_WRITE|FS_CREATE);    
     if(fd >= FS_NO_ERROR)
     {
         FS_Seek(fd, 0, FS_FILE_END);
-        FS_Write(fd, (void*)pdata, datalen, NULL);
+        FS_Write(fd, (void*)wfname, nlen, NULL);
         FS_Write(fd, "\r\n", 2, NULL);
         FS_Commit(fd);
         FS_Close(fd);
         result = MMI_TRUE;
     }
-    
-    MsgCmd_Mfree(buffer);
     
     return result;
 }
@@ -2260,29 +2242,51 @@ mmi_ret MsgCmd_EvtProcEntry(mmi_event_struct *evp)
 
 #if 1//audio record
 static AdoRecdMngr *arm;
-
 /*******************************************************************************
 ** 函数: msgcmd_AdoRecdCheckFreeSpace
 ** 功能: 检查剩余空间
-** 参数: 无
+** 参数: drive  -- 盘符
 ** 返回: 无
 ** 作者: wasfayu
 *******/
-static void msgcmd_AdoRecdCheckFreeSpace(void)
+static void msgcmd_AdoRecdCheckFreeSpace(S32 drive)
 {
-	U32 left;
-	
+#if defined(WIN32)
+    //模拟器上删除100KB
+    if (app_getcurrtime() % 5 == 0)
+    {
+        WCHAR file[MSGCMD_FILE_PATH_LENGTH+1];
+
+        memset(file, 0, sizeof(WCHAR)*(MSGCMD_FILE_PATH_LENGTH+1));
+        kal_wsprintf(
+            file, "%c:\\%w\\%w",
+            drive, MSGCMD_AUDIOS_FOLDER_NAME, MSGCMD_ADO_LIST_FILE_NAME);
+        
+        msgcmd_DeleteOldFile(file, 100);
+    }
+    
+#else
+
+	U32 left, need;
+    
     //磁盘剩余空间小于5M则删除就的录音文件
     left = MsgCmd_GetDiskFreeSize(MsgCmd_GetUsableDrive()) >> 10;
-	mc_trace("%s, left=%dKB.", __FUNCTION__, left);
-//    if (left <= MSGCMD_ADO_FREE_SPACE_REQUIRE_KB)
-//    {
-//        MsgCmd_DeleteOldFile(MSGCMD_ADO_LIST_FILE_NAME, MSGCMD_ADO_DELETE_SIZE_KB);
-//    }
+    need = MSGCMD_ADO_SIZE_PER_SEC_KB * MsgCmd_GetAdoRecdArgs()->save_gap * 2;
+    
+	mc_trace("%s, left=%dKB. need=%dKB.", __FUNCTION__, left, need);
 
-	if (left <= 6*MsgCmd_GetAdoRecdArgs()->save_gap)
-		MsgCmd_DeleteOldFile(MSGCMD_ADO_LIST_FILE_NAME, 5*MsgCmd_GetAdoRecdArgs()->save_gap);
+	if (left <= need)
+	{
+	    WCHAR file[MSGCMD_FILE_PATH_LENGTH+1];
 
+        memset(file, 0, sizeof(WCHAR)*(MSGCMD_FILE_PATH_LENGTH+1));
+        kal_wsprintf(
+            file, "%c:\\%w\\%w",
+            drive, MSGCMD_AUDIOS_FOLDER_NAME, MSGCMD_ADO_LIST_FILE_NAME);
+        
+	    msgcmd_DeleteOldFile(file, need);
+    }
+#endif
 }
 
 /*******************************************************************************
@@ -2299,11 +2303,25 @@ static void msgcmd_AdoRecdDoingCb(MDI_RESULT result)
     
     mc_trace("%s, result=%d.", __FUNCTION__, result);
 
+#if defined(WIN32)
+    if (MsgCmd_GetCurrentTime() % 5 == 0 &&
+        applib_get_file_size(arm->filepath) == 0)
+    {
+        MsgCmd_ModisCreateWAV(arm->filepath);
+    }
+#endif
+
     //如果文件小于这个值则删除掉他
     if (applib_get_file_size(arm->filepath) >= MsgCmd_GetAdoRecdArgs()->ignore_size)
     {
-    	MsgCmd_RecordFileName(
-    		MSGCMD_ADO_LIST_FILE_NAME,
+        WCHAR file[MSGCMD_FILE_PATH_LENGTH+1];
+
+        memset(file, 0, sizeof(WCHAR)*(MSGCMD_FILE_PATH_LENGTH+1));
+        kal_wsprintf(file, "E:\\%w\\%w", MSGCMD_AUDIOS_FOLDER_NAME, MSGCMD_ADO_LIST_FILE_NAME);
+        file[0] = arm->filepath[0];
+        
+    	msgcmd_RecordFileName(
+    		file,
     		(void*)arm->filepath, 
     		app_ucs2_strlen((const S8 *)arm->filepath) * sizeof(WCHAR));
     }
@@ -2380,6 +2398,9 @@ static MMI_BOOL msgcmd_AdoRecdDoing(WCHAR *filename, U32 time)
 {
     MDI_RESULT error;
 
+    //磁盘剩余空间小于5M则删除就的录音文件
+    msgcmd_AdoRecdCheckFreeSpace((S32)filename[0]);
+    
     error = mdi_audio_start_record_with_limit(
                 (void*)filename,
                 MEDIA_WAV_DVI_ADPCM,
@@ -2516,7 +2537,7 @@ MMI_BOOL MsgCmd_AdoRecdStart(
         return MMI_FALSE;
 
     //磁盘未获取到
-    if ((drive = MsgCmd_GetUsableDrive()) < 0)
+    if ((drive = MsgCmd_GetUsableDrive()) <= 0)
         return MMI_FALSE;
 
     //保证路径存在
@@ -2530,9 +2551,6 @@ MMI_BOOL MsgCmd_AdoRecdStart(
     //正在录像
     if (MsgCmd_VdoRecdBusy())
         return MMI_FALSE;
-    
-    //磁盘剩余空间小于5M则删除就的录音文件
-    msgcmd_AdoRecdCheckFreeSpace();
     
     //MsgCmd_isink(MMI_TRUE);
     arm = (AdoRecdMngr*)MsgCmd_Malloc(sizeof(AdoRecdMngr), 0);
@@ -2792,6 +2810,7 @@ MMI_BOOL MsgCmd_CaptureEntry(char *replay_number)
 	const U16 pictureW = 640;
 	const U16 pictureH = 480;
 	MMI_BOOL  result = MMI_FALSE;
+    S32       drive;
 	
     mc_trace("%s, replay=%s.", __FUNCTION__, replay_number?replay_number:"NULL");
 
@@ -2799,10 +2818,17 @@ MMI_BOOL MsgCmd_CaptureEntry(char *replay_number)
     if (!MsgCmd_GetTFcardDrive(NULL))
         return MMI_FALSE;
 
+    if ((drive = MsgCmd_GetUsableDrive()) <= 0)
+        return MMI_FALSE;
+    
     //获取的盘符是否正确挂载--就是是否存在的一个意思
-    if (!MsgCmd_CheckValidDrive(MsgCmd_GetUsableDrive()))
+    if (!MsgCmd_CheckValidDrive(drive))
         return MMI_FALSE;
 
+    //保证路径存在
+    if (!MsgCmd_CreatePath(drive, MSGCMD_VIDEOS_FOLDER_NAME))
+        return MMI_FALSE;
+    
 	if (msgcmd_CapturePreview(pictureW, pictureH))
 	{
 	    MsgCmdMMSReq *req = (MsgCmdMMSReq*)MsgCmd_ConstructPara(sizeof(MsgCmdMMSReq));
@@ -2841,7 +2867,7 @@ MMI_BOOL MsgCmd_CaptureEntry(char *replay_number)
 
 static WCHAR *msgcmd_VdoRecdGetSavePath(WCHAR *buffer, U32 length_in_byte);
 static WCHAR *msgcmd_VdoRecdGetFilePath(WCHAR *buffer, U32 length_in_byte);
-static void msgcmd_VdoRecdCheckFreeSpace(void);
+static void msgcmd_VdoRecdCheckFreeSpace(S32 drive);
 static void msgcmd_VdoRecdSaveCb(MDI_RESULT result);
 static void msgcmd_VdoRecdDoingCb(MDI_RESULT result);
 static void msgcmd_VdoRecdLayerMngr(MMI_BOOL create, gdi_handle *layer);
@@ -2911,24 +2937,50 @@ static WCHAR *msgcmd_VdoRecdGetFilePath(WCHAR *buffer, U32 length_in_byte)
 /*******************************************************************************
 ** 函数: msgcmd_VdoRecdCheckFreeSpace
 ** 功能: 检查剩余空间
-** 参数: 无
+** 参数: drive  -- 盘符
 ** 返回: 无
 ** 作者: wasfayu
 *******/
-static void msgcmd_VdoRecdCheckFreeSpace(void)
+static void msgcmd_VdoRecdCheckFreeSpace(S32 drive)
 {
-	U32 left;
+#if defined(WIN32)
+    //模拟器上删除100KB
+    if (app_getcurrtime() % 5 == 0)
+    {
+        WCHAR file[MSGCMD_FILE_PATH_LENGTH+1];
+
+        memset(file, 0, sizeof(WCHAR)*(MSGCMD_FILE_PATH_LENGTH+1));
+        kal_wsprintf(
+            file, "%c:\\%w\\%w",
+            drive, MSGCMD_VIDEOS_FOLDER_NAME, MSGCMD_VDO_LIST_FILE_NAME);
+        
+        msgcmd_DeleteOldFile(file, 100);
+    }
+    
+#else
+
+	U32 left, need;
+    
 	//一秒钟就是110KB, 如果要计算剩余空间的话, 必须要比这个大
     //磁盘剩余空间小于5M则删除就的录音文件
     left = MsgCmd_GetDiskFreeSize(MsgCmd_GetUsableDrive()) >> 10;
-	mc_trace("%s, left=%dKB.", __FUNCTION__, left);
-//    if (left <= MSGCMD_VDO_FREE_SPACE_REQUIRE_KB)
-//    {
-//        MsgCmd_DeleteOldFile(MSGCMD_VDO_LIST_FILE_NAME, MSGCMD_VDO_DELETE_SIZE_KB);
-//    }
+    need = MSGCMD_VDO_SIZE_PER_SEC_KB * MsgCmd_GetVdoRecdArgs()->save_gap * 2;
+    
+	mc_trace("%s, left=%dKB. need=%dKB.", __FUNCTION__, left, need);
 
-	if (left <= 130*MsgCmd_GetVdoRecdArgs()->save_gap)
-		MsgCmd_DeleteOldFile(MSGCMD_VDO_LIST_FILE_NAME, 110*MsgCmd_GetVdoRecdArgs()->save_gap);
+	if (left <= need)
+	{
+	    WCHAR file[MSGCMD_FILE_PATH_LENGTH+1];
+
+        memset(file, 0, sizeof(WCHAR)*(MSGCMD_FILE_PATH_LENGTH+1));
+        kal_wsprintf(
+            file, "%c:\\%w\\%w",
+            drive, MSGCMD_VIDEOS_FOLDER_NAME, MSGCMD_VDO_LIST_FILE_NAME);
+        
+	    msgcmd_DeleteOldFile(file, need*2);
+    }
+#endif
+
 }
 
 /*******************************************************************************
@@ -2950,7 +3002,7 @@ static void msgcmd_VdoRecdSaveCb(MDI_RESULT result)
     {
     #if defined(WIN32)
         //模拟器就随机的写入一些数据充斥下
-        if (rand()%4==0)
+        if (MsgCmd_GetCurrentTime()%5==0)
         {
             MsgCmd_ModisCreateAVI(vrm->filepath);
         }
@@ -2959,8 +3011,14 @@ static void msgcmd_VdoRecdSaveCb(MDI_RESULT result)
         //如果文件小于这个值则删除掉他
         if (applib_get_file_size(vrm->filepath) >= MsgCmd_GetVdoRecdArgs()->ignore_size)
         {
-        	MsgCmd_RecordFileName(
-        		MSGCMD_VDO_LIST_FILE_NAME,
+            WCHAR file[MSGCMD_FILE_PATH_LENGTH+1];
+
+            memset(file, 0, sizeof(WCHAR)*(MSGCMD_FILE_PATH_LENGTH+1));
+            kal_wsprintf(file, "E:\\%w\\%w", MSGCMD_VIDEOS_FOLDER_NAME, MSGCMD_VDO_LIST_FILE_NAME);
+            file[0] = vrm->filepath[0];
+        
+        	msgcmd_RecordFileName(
+        		file,
         		(void*)vrm->filepath, 
         		app_ucs2_strlen((const S8 *)vrm->filepath) * sizeof(WCHAR));
         }
@@ -3248,7 +3306,7 @@ static MMI_BOOL msgcmd_VdoRecdDoing(WCHAR *filepath)
     MDI_RESULT ret;
 
     //磁盘剩余空间小于15M则删除就的视频文件
-    msgcmd_VdoRecdCheckFreeSpace();
+    msgcmd_VdoRecdCheckFreeSpace((S32)filepath[0]);
     
     ret = mdi_video_rec_record_start((S8*)filepath, msgcmd_VdoRecdDoingCb);
     mc_trace("%s, ret=%d.", __FUNCTION__, ret);
@@ -3344,8 +3402,6 @@ static void msgcmd_VdoRecdTimerCyclic(void)
     vrm->timeCount = (U32)(time/1000);
 #endif
     mc_trace("%s, timeCount=%dS. saveGap=%dS.", __FUNCTION__, vrm->timeCount, vrm->saveGap);
-	MsgCmd_isink(vrm->timeCount%2);
-
     if (vrm->timeCount >= vrm->saveGap)
     {
         //save
@@ -3533,7 +3589,7 @@ MMI_BOOL MsgCmd_VdoRecdStart(
         return MMI_FALSE;
 
     //磁盘未获取到
-    if ((drive = MsgCmd_GetUsableDrive()) < 0)
+    if ((drive = MsgCmd_GetUsableDrive()) <= 0)
         return MMI_FALSE;
 
     //保证路径存在
@@ -3556,7 +3612,7 @@ MMI_BOOL MsgCmd_VdoRecdStart(
         {
             //保存之?删除之?
             mc_trace("%s, L:%d, has unsaved video, delete.", __FUNCTION__, __LINE__);
-            mdi_video_rec_delete_unsaved_file((S8*)buffer);
+            msgcmd_VdoRecdDelete(buffer);
         }
     }
     
