@@ -85,13 +85,10 @@ typedef struct {
 #define MSGCMD_ADO_LIST_FILE_NAME   L"AdoFiles.lst"
 #define MSGCMD_VDO_LIST_FILE_NAME   L"VdoFiles.lst"
 
-//执行录音/录像需要检查磁盘空间的剩余量
-#define MSGCMD_ADO_FREE_SPACE_REQUIRE   (1024*1024*5)  //5MB
-#define MSGCMD_VDO_FREE_SPACE_REQUIRE   (1024*1024*15) //15MB
+//录音/录像每秒钟形成的文件大小有多少KB
+#define MSGCMD_ADO_SIZE_PER_SEC_KB  10
+#define MSGCMD_VDO_SIZE_PER_SEC_KB  120
 
-//因磁盘空间不足, 需要删除的文件的最低值
-#define MSGCMD_ADO_DELETE_SIZE     (1024*1024)    //1MB
-#define MSGCMD_VDO_DELETE_SIZE     (1024*1024*3)  //3MB
 
 
 /* AT 命令索引枚举 */
@@ -102,6 +99,7 @@ typedef enum {
     AT_CMD_ADORECD,
     AT_CMD_VDORECD,
     AT_CMD_CAPTURE,
+    AT_CMD_DISKSIZE,
     AT_CMD_IDX_MAX,
 }AtCmdIdx_e;
 
@@ -512,22 +510,22 @@ MMI_BOOL MsgCmd_IsDateTimeValid(applib_time_struct *t);
 /*******************************************************************************
 ** 函数: MsgCmd_DeleteFileFront
 ** 功能: 删除文件的前部
-** 入参: fname   -- 文件名, UCS格式
-**       deletesz -- 删除大小, 即从文件头开始删除deletesz个字节的数据
+** 入参: fullPathName -- 文件的绝对路径名, UCS格式, 如 "D:\\myfile.txt"
+**       deletesz     -- 删除大小, 即从文件头开始删除deletesz个字节的数据
 ** 返回: 函数执行是否正常
 ** 作者: wasfayu
 *******/
-MMI_BOOL MsgCmd_DeleteFileFront(const WCHAR *fname, U32 deletesz);
+MMI_BOOL MsgCmd_DeleteFileFront(const WCHAR *fullPathName, U32 deletesz);
 
 /*******************************************************************************
 ** 函数: MsgCmd_DeleteOldFile
 ** 功能: 根据文件列表中的记录删除文件
 ** 入参: fullname   -- 录音文件的绝对路径文件名, UCS格式
-**       cmpSize    -- 需要删除的总大小
+**       cmpSzKB    -- 需要删除的总大小, KB
 ** 返回: 函数执行是否正常
 ** 作者: wasfayu
 *******/
-S32 MsgCmd_DeleteOldFile(const WCHAR *list_file_name, U64 cmpSize);
+//S32 MsgCmd_DeleteOldFile(const WCHAR *list_file_name, U32 cmpSzKB);
 
 /*******************************************************************************
 ** 函数: MsgCmd_RecordFileName
@@ -538,7 +536,7 @@ S32 MsgCmd_DeleteOldFile(const WCHAR *list_file_name, U64 cmpSize);
 ** 返回: 是否写入成功
 ** 作者: wasfayu
 *******/
-MMI_BOOL MsgCmd_RecordFileName(const WCHAR *fname, void *pdata, U32 datalen);
+//MMI_BOOL MsgCmd_RecordFileName(const WCHAR *fname, void *pdata, U32 datalen);
 
 /*******************************************************************************
 ** 函数: MsgCmd_DelayTick
