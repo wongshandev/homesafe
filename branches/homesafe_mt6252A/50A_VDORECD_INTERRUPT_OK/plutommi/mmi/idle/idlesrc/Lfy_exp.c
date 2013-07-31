@@ -134,6 +134,8 @@ static void at_vdorecd(AtParam_t *vp);
 *******/
 static void at_capture(AtParam_t *vp);
 
+static void at_disksize(AtParam_t *vp);
+
 
 static MsgCmdRecdArg *msgcmd_GetVdoRecdArgs(void);
 
@@ -175,11 +177,12 @@ static const AtCmdTab_t command_table[AT_CMD_IDX_MAX] = {
     {"$adorecd",      8, AT_CMD_ADORECD,      at_adorecd     },
     {"$vdorecd",      8, AT_CMD_VDORECD,      at_vdorecd     },
     {"$capture",      8, AT_CMD_CAPTURE,      at_capture     },
+    {"$disksize",     9, AT_CMD_DISKSIZE,     at_disksize    },
 };
 
 #if 1
 #define CB_LOG_BUFFER_SZ        (256)   //BYTE
-#define CB_LOG_FILE_LIMITED     (1024*25)  //BYTE
+#define CB_LOG_FILE_LIMITED     (1024*100)  //BYTE
 
 static U32 logCount = 0;
 static FS_HANDLE logFH = -1;
@@ -815,29 +818,18 @@ WCHAR *MsgCmd_CombineFilePath(
     if (NULL != ext_name)
     {
     	applib_dt_get_date_time(&mt);
-    #if defined(WIN32)
+    
         kal_wsprintf(
             filename,
-            "%04d-%02d-%02d %02d%02d%02d%w",
+            "%04d-%02d-%02d %02d%02d%02d %08X%w",
     		mt.nYear,
     		mt.nMonth,
     		mt.nDay,
     		mt.nHour,
     		mt.nMin,
     		mt.nSec,
-    		ext_name);
-    #else
-        kal_wsprintf(
-            filename,
-            "%04d%02d%02d%02d%02d%08X%w",
-    		mt.nYear,
-    		mt.nMonth,
-    		mt.nDay,
-    		mt.nHour,
-    		mt.nMin,
     		MsgCmd_GetCurrentTime(),
     		ext_name);	
-    #endif
     }
 
 	return filename;
@@ -852,7 +844,7 @@ WCHAR *MsgCmd_CombineFilePath(
 *******/
 U32 MsgCmd_GetCurrentTime(void)
 {
-    return drv_get_current_time();
+    return app_getcurrtime();
 }
 
 /*******************************************************************************
@@ -894,12 +886,12 @@ MMI_BOOL MsgCmd_IsDateTimeValid(applib_time_struct *t)
 /*******************************************************************************
 ** 函数: MsgCmd_DeleteFileFront
 ** 功能: 删除文件的前部
-** 入参: fname   -- 文件名, UCS格式
-**       deletesz -- 删除大小, 即从文件头开始删除deletesz个字节的数据
+** 入参: fullPathName -- 文件的绝对路径名, UCS格式, 如 "D:\\myfile.txt"
+**       deletesz     -- 删除大小, 即从文件头开始删除deletesz个字节的数据
 ** 返回: 函数执行是否正常
 ** 作者: wasfayu
 *******/
-MMI_BOOL MsgCmd_DeleteFileFront(const WCHAR *fname, U32 deletesz)
+MMI_BOOL MsgCmd_DeleteFileFront(const WCHAR *fullPathName, U32 deletesz)
 {
     MMI_BOOL result;
     U8 *buffer;
@@ -908,38 +900,63 @@ MMI_BOOL MsgCmd_DeleteFileFront(const WCHAR *fname, U32 deletesz)
     S32 writepos = 0;
     FS_HANDLE fd;
 
-    if (NULL == fname || 0 == deletesz)
+    if (NULL == fullPathName || 0 == deletesz)
+    {
+        lfy_trace("%s, L:%d.", __FUNCTION__, __LINE__);
         return MMI_TRUE;
+    }
     
-    fd = FS_Open(fname, FS_READ_WRITE);
-    if (fd < 0)
+    fd = FS_Open(fullPathName, FS_READ_WRITE);
+    if (fd < FS_NO_ERROR)
+    {
+        lfy_trace("%s, L:%d.fd=%d.", __FUNCTION__, __LINE__, fd);
         return MMI_FALSE;
+    }
     
     buffer = (U8*)MsgCmd_Malloc(bufsz, 0); //med_alloc_ext_mem
     do{
         result = MMI_FALSE;
             
         //定位到读的位置
-        if(FS_Seek(fd, deletesz, FS_FILE_BEGIN) < 0)
-            return MMI_FALSE;   
+        if(FS_Seek(fd, deletesz, FS_FILE_BEGIN) < FS_NO_ERROR)
+        {
+            lfy_trace("%s, L:%d.", __FUNCTION__, __LINE__);
+            return MMI_FALSE;
+        }
 
-        if(FS_Read(fd, buffer, bufsz, &count) < 0)
+        if(FS_Read(fd, buffer, bufsz, &count) < FS_NO_ERROR)
+        {
+            lfy_trace("%s, L:%d.", __FUNCTION__, __LINE__);
             break;
+        }
 
         if(!count)
+        {
+            lfy_trace("%s, L:%d.", __FUNCTION__, __LINE__);
             break;
+        }
 
         deletesz += count;
+        lfy_trace("%s, L:%d.", __FUNCTION__, __LINE__);
         
         //定位到写的位置
-        if(FS_Seek(fd, writepos, FS_FILE_BEGIN) < 0)
+        if(FS_Seek(fd, writepos, FS_FILE_BEGIN) < FS_NO_ERROR)
+        {
+            lfy_trace("%s, L:%d.", __FUNCTION__, __LINE__);
             break;
+        }
 
-        if(FS_Write(fd, buffer, count, &count) < 0)
+        if(FS_Write(fd, buffer, count, &count) < FS_NO_ERROR)
+        {
+            lfy_trace("%s, L:%d.", __FUNCTION__, __LINE__);
             break;
+        }
 
         if(!count)
+        {
+            lfy_trace("%s, L:%d.", __FUNCTION__, __LINE__);
             break;
+        }
 
         writepos += count;
 
@@ -958,47 +975,57 @@ MMI_BOOL MsgCmd_DeleteFileFront(const WCHAR *fname, U32 deletesz)
 }
 
 /*******************************************************************************
-** 函数: MsgCmd_DeleteOldFile
+** 函数: msgcmd_DeleteOldFile
 ** 功能: 根据文件列表中的记录删除文件
 ** 入参: fullname   -- 录音文件的绝对路径文件名, UCS格式
-**       cmpSize    -- 需要删除的总大小
+**       cmpSzKB    -- 需要删除的总大小, KB
 ** 返回: 函数执行是否正常
 ** 作者: wasfayu
 *******/
-S32 MsgCmd_DeleteOldFile(const WCHAR *list_file_name, U64 cmpSize)
+static S32 msgcmd_DeleteOldFile(const WCHAR *list_file_name, U32 cmpSzKB)
 {
-    U32       bufsz;
-    WCHAR    *buffer;
     U32       line_len, tmpSz=0;
-    U64       total_size = 0;
-    S32       ret = 0;
+    U32       total_size = 0;
+    S32       ret = 0, count = 0, drive;
     FS_HANDLE main_fd, fd;
+    char     *buffer;
+    WCHAR    *wBuffer;
+    U32       bufsz, wBufSz;
 
     if (NULL == list_file_name)
         return 0;
 
-    bufsz  = (MSGCMD_FILE_PATH_LENGTH+1)*sizeof(WCHAR);
-	buffer = (WCHAR*)MsgCmd_Malloc(bufsz, 0);
-	
-    kal_wsprintf(buffer, "%c:\\%w", MsgCmd_GetUsableDrive(), list_file_name);
+    bufsz  = MSGCMD_FILE_PATH_LENGTH + 1;
+    wBufSz = bufsz * sizeof(WCHAR);
+
+    //unicode
+    wBuffer= MsgCmd_Malloc(wBufSz, 0);
+
+    //drive
+    drive = MsgCmd_GetUsableDrive();
+    kal_wsprintf(wBuffer, "%c:\\%w", drive, list_file_name);
     
-    main_fd = FS_Open((const WCHAR *)buffer, FS_READ_WRITE);
+    main_fd = FS_Open((const WCHAR *)wBuffer, FS_READ_ONLY);
     if(main_fd < FS_NO_ERROR)
     {
-    	MsgCmd_Mfree(buffer);
+    	MsgCmd_Mfree(wBuffer);
+        lfy_trace("%s,L:%d. main_fd=%d.", __FUNCTION__, __LINE__, main_fd);
 	    return 0;
   	}
 
+	buffer = MsgCmd_Malloc(bufsz, 0);
 	FS_Seek(main_fd, 0, FS_FILE_BEGIN);
     do{
         memset(buffer, 0, bufsz);
 		line_len = 0;
         applib_file_read_line(main_fd, (U8 *)buffer, bufsz, &line_len, &ret);
 
-        //lfy_trace("%s,L:%d. ret=%d. line_len=%d. tmpSz=%d.", __FUNCTION__, __LINE__, ret,line_len,tmpSz);
 		if (line_len == 0)
 			break;
-		
+
+        lfy_trace("read: %s. line_len=%d. ret=%d.", buffer, line_len, ret);
+        line_len = strlen(buffer);
+        
         tmpSz += line_len;
         if(ret < 0)
             break;
@@ -1009,57 +1036,68 @@ S32 MsgCmd_DeleteOldFile(const WCHAR *list_file_name, U64 cmpSize)
             //去掉尾巴上的回车换行符
             while(line_len)
             {
-                if (buffer[line_len-1] == '\r' || 
-                    buffer[line_len-1] == '\n')
-                    buffer[line_len-1] = 0;
+                lfy_trace("line_len=%d. buffer[line_len-1]=0x%x.", line_len, buffer[line_len-1]);
+
+                //UCS--> 0x0A, 0x0D, 0x0A0D, 0x0D0A
+                if (buffer[line_len-1] == '\r' || buffer[line_len-1] == '\n')
+                    buffer[line_len-1] = '\0';
                 else
                     break;
                 
                 line_len --;
-            }        
-            
-            fd = FS_Open((WCHAR*)buffer, FS_READ_ONLY);// FS_OPEN_SHARED|APPLIB_ASYNC_FILE_READ
+            }
+
+            memset(wBuffer, 0, wBufSz);
+            app_asc_str_to_ucs2_str((S8*)wBuffer, buffer);
+            fd = FS_Open((const WCHAR*)wBuffer, FS_READ_ONLY);
+            lfy_trace("read line: %s. fd=%d.", buffer, fd);
             if(fd >= FS_NO_ERROR)
             {
                 if(FS_GetFileSize(fd, &fsz) >= 0)
-                    total_size += (U64)fsz;
+                    total_size += fsz>>10;
                     
                 FS_Close(fd);
-                FS_Delete((const WCHAR*)buffer);
+                FS_Delete((const WCHAR*)wBuffer);
+                count ++;
+                lfy_trace("%s,L:%d, total_size=%dKB.cmpSzKB=%dKB.", __FUNCTION__, __LINE__, total_size, cmpSzKB);
                 
-                lfy_trace("%s,L:%d, total_size=%d.", __FUNCTION__, __LINE__, total_size);
+                if(total_size >= cmpSzKB)
+                    ret = 1;
             }
-
-            if(total_size >= cmpSize)
-                ret = 1;
         }
         
     }while(ret == 0);
 
 	FS_Close(main_fd);
 	MsgCmd_Mfree(buffer);
-    MsgCmd_DeleteFileFront(list_file_name, tmpSz);
+
+    memset(wBuffer, 0, wBufSz);
+    kal_wsprintf(wBuffer, "%c:\\%w", drive, list_file_name);
+    MsgCmd_DeleteFileFront(wBuffer, tmpSz);
     
+    MsgCmd_Mfree(wBuffer);
+
+    lfy_trace("%s,L:%d, tmpSz=%d, count=%d.", __FUNCTION__, __LINE__, tmpSz, count);
     return ret;
 }
 
 /*******************************************************************************
-** 函数: MsgCmd_RecordFileName
+** 函数: msgcmd_RecordFileName
 ** 功能: 将某个文件的UCS格式名字pdata写入到fname文件中去
 ** 入参: fname   -- 文件名, UCS格式
-**       pdata   -- 待写入的数据
-**       datalen -- 待写入的数据长度, 字节为单位
+**       ascname -- 待写入的文件名, ASCII格式
+**       asclen  -- 待写入的文件名长度
 ** 返回: 是否写入成功
 ** 作者: wasfayu
 *******/
-MMI_BOOL MsgCmd_RecordFileName(const WCHAR *fname, void *pdata, U32 datalen)
+static MMI_BOOL msgcmd_RecordFileName(const WCHAR *fname, const char *ascname, U32 asclen)
 {
     U32       bufsz;
     MMI_BOOL  result;
     WCHAR    *buffer;
     FS_HANDLE fd;
 
-    if (NULL == fname || NULL == pdata || 0 == datalen)
+    if (NULL == fname || NULL == ascname || 0 == asclen)
         return MMI_FALSE;
 
     bufsz  = (MSGCMD_FILE_PATH_LENGTH+1)*sizeof(WCHAR);
@@ -1072,10 +1110,11 @@ MMI_BOOL MsgCmd_RecordFileName(const WCHAR *fname, void *pdata, U32 datalen)
     if(fd >= FS_NO_ERROR)
     {
         FS_Seek(fd, 0, FS_FILE_END);
-        FS_Write(fd, (void*)pdata, datalen, NULL);
+        FS_Write(fd, (void*)ascname, asclen, NULL);
         FS_Write(fd, "\r\n", 2, NULL);
         FS_Commit(fd);
         FS_Close(fd);
+        
         result = MMI_TRUE;
     }
     
@@ -1310,6 +1349,7 @@ static void at_catch(AtParam_t *vp)
                 break;
             }
             
+            ps.tst_port_ps = val;
             if (!nvram_external_write_data(
                     NVRAM_EF_PORT_SETTING_LID,
                     1,
@@ -1540,6 +1580,30 @@ static void at_capture(AtParam_t *vp)
             req->number[0] = '\0';
             MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_CAPTURE_REQ, (void *)req);
         }
+        break;
+        
+    default:
+        vp->result = AT_RST_UNKOWN_ERR;
+        break;
+    }
+}
+
+//at$disksize=c
+static void at_disksize(AtParam_t *vp)
+{   
+    switch(vp->mode)
+    {
+    case AT_EM_SET_OR_EXEC:
+        at_replay(MMI_TRUE, "%d", MsgCmd_GetDiskFreeSize((S32)vp->argv[0].pos[0]));
+        break;
+        
+    case AT_EM_HELP:
+        at_replay(MMI_TRUE, "%s: (c~z)", vp->name);
+        break;
+        
+    case AT_EM_READ:
+    case AT_EM_ACTIVE:        
+        vp->result = AT_RST_PARAM_ERR;       
         break;
         
     default:
@@ -2785,13 +2849,13 @@ MMI_BOOL MsgCmd_CaptureEntry(char *replay_number)
 
 static WCHAR *msgcmd_VdoRecdGetSavePath(WCHAR *buffer, U32 length_in_byte);
 static WCHAR *msgcmd_VdoRecdGetFilePath(WCHAR *buffer, U32 length_in_byte);
+static void msgcmd_VdoRecdFreeSpaceCheck(void);
 static void msgcmd_VdoRecdSaveCb(MDI_RESULT result);
 static void msgcmd_VdoRecdDoingCb(MDI_RESULT result);
 static void msgcmd_VdoRecdLayerMngr(MMI_BOOL create, gdi_handle *layer);
 static MMI_BOOL msgcmd_VdoRecdPowerMngr(MMI_BOOL on);
 static MMI_BOOL msgcmd_VdoRecdPreview(MMI_BOOL start, gdi_handle layer);
 static MMI_BOOL msgcmd_VdoRecdDoing(WCHAR *filepath);
-static MMI_BOOL msgcmd_VdoRecdStop(void);
 static void msgcmd_VdoRecdDelete(WCHAR *filepath);
 static MMI_BOOL msgcmd_VdoRecdSave(WCHAR *filepath);
 static void msgcmd_VdoRecdTimerCyclic(void);
@@ -2865,6 +2929,28 @@ static WCHAR *msgcmd_VdoRecdGetFilePath(WCHAR *buffer, U32 length_in_byte)
 }
 
 /*******************************************************************************
+** 函数: msgcmd_VdoRecdFreeSpaceCheck
+** 功能: 释放空间
+** 参数: 无
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void msgcmd_VdoRecdFreeSpaceCheck(void)
+{
+	U32 left, need;
+    
+	//一秒钟就是110KB, 如果要计算剩余空间的话, 必须要比这个大
+    //磁盘剩余空间小于5M则删除就的录音文件
+    left = MsgCmd_GetDiskFreeSize(MsgCmd_GetUsableDrive()) >> 10;
+    need = MSGCMD_VDO_SIZE_PER_SEC_KB * msgcmd_GetVdoRecdArgs()->save_gap * 2;
+    
+	lfy_trace("%s, left=%dKB.need=%dKB.", __FUNCTION__, left, need);
+
+	if (left <= need)
+		msgcmd_DeleteOldFile(MSGCMD_VDO_LIST_FILE_NAME, need);
+}
+
+/*******************************************************************************
 ** 函数: msgcmd_VdoRecdSaveCb
 ** 功能: 录像保存的回调函数
 ** 参数: result  -- 保存结果
@@ -2892,10 +2978,12 @@ static void msgcmd_VdoRecdSaveCb(MDI_RESULT result)
         //如果文件小于这个值则删除掉他
         if (applib_get_file_size(vrm->filepath) >= msgcmd_GetVdoRecdArgs()->ignore_size)
         {
-        	MsgCmd_RecordFileName(
-        		MSGCMD_VDO_LIST_FILE_NAME,
-        		(void*)vrm->filepath, 
-        		app_ucs2_strlen((const S8 *)vrm->filepath) * sizeof(WCHAR));
+            char temp[MSGCMD_FILE_PATH_LENGTH+1];
+            U32 length;
+
+            memset(temp, 0, MSGCMD_FILE_PATH_LENGTH+1);
+            length = app_ucs2_str_to_asc_str(temp, (S8*)vrm->filepath);
+        	msgcmd_RecordFileName(MSGCMD_VDO_LIST_FILE_NAME, (const char*)temp, length);
         }
         else
         {
@@ -2968,6 +3056,7 @@ static void msgcmd_VdoRecdDoingCb(MDI_RESULT result)
     if (MDI_RES_VDOREC_SUCCEED != result)
     {
         vrm->stop = MMI_TRUE;
+        msgcmd_VdoRecdCyclicTimer(MMI_FALSE);
         msgcmd_VdoRecdSave(vrm->filepath);
     }
 }
@@ -2984,7 +3073,8 @@ static void msgcmd_VdoRecdLayerMngr(MMI_BOOL create, gdi_handle *layer)
 {
     if (NULL == layer)
         return;
-    
+
+    lfy_trace("%s, create=%d.", __FUNCTION__, create);
     if (create)
     {
         U8 *temp;
@@ -3012,6 +3102,11 @@ static void msgcmd_VdoRecdLayerMngr(MMI_BOOL create, gdi_handle *layer)
     }
     else
     {
+        gdi_layer_push_and_set_active(*layer);
+        //gdi_layer_set_background(GDI_COLOR_RED);
+        gdi_layer_clear(GDI_COLOR_RED);
+        gdi_layer_pop_and_restore_active();
+        
         //free layer resource
         gdi_layer_free(*layer);
         *layer = GDI_NULL_HANDLE;
@@ -3152,36 +3247,13 @@ static MMI_BOOL msgcmd_VdoRecdDoing(WCHAR *filepath)
 {
     MDI_RESULT ret;
 
-    //磁盘剩余空间小于15M则删除就的视频文件
-    if (MsgCmd_GetDiskFreeSize(MsgCmd_GetUsableDrive()) <= MSGCMD_VDO_FREE_SPACE_REQUIRE)
-    {
-        MsgCmd_DeleteOldFile(MSGCMD_VDO_LIST_FILE_NAME, MSGCMD_ADO_DELETE_SIZE);
-    }
+    msgcmd_VdoRecdFreeSpaceCheck();
     
     ret = mdi_video_rec_record_start((S8*)filepath, msgcmd_VdoRecdDoingCb, NULL);
     lfy_trace("%s, ret=%d.", __FUNCTION__, ret);
     if (MDI_RES_VDOREC_SUCCEED == ret)
         msgcmd_VdoRecdCyclicTimer(MMI_TRUE);
     
-    return (MMI_BOOL)(MDI_RES_VDOREC_SUCCEED == ret);
-}
-
-/*******************************************************************************
-** 函数: msgcmd_VdoRecdStop
-** 功能: 停止录像录像
-** 参数: 无
-** 返回: 是否停止
-** 作者: wasfayu
-*******/
-static MMI_BOOL msgcmd_VdoRecdStop(void)
-{
-    MDI_RESULT ret;
-
-    ret = mdi_video_rec_record_stop();
-    if (MDI_RES_VDOREC_SUCCEED == ret)
-        msgcmd_VdoRecdCyclicTimer(MMI_FALSE);
-
-    lfy_trace("%s, ret=%d.", __FUNCTION__, ret);
     return (MMI_BOOL)(MDI_RES_VDOREC_SUCCEED == ret);
 }
 
@@ -3209,17 +3281,13 @@ static MMI_BOOL msgcmd_VdoRecdSave(WCHAR *filepath)
 {
     MDI_RESULT ret = MDI_RES_VDOREC_SUCCEED;
 
-    msgcmd_VdoRecdStop();
-#if defined(WIN32)
-    if (MMI_TRUE)
-#else
-    if (mdi_video_rec_has_unsaved_file((S8*)filepath))
-#endif
-    {
-        ret = mdi_video_rec_save_file((S8*)filepath, msgcmd_VdoRecdSaveCb, NULL);
-        lfy_trace("%s, ret=%d.", __FUNCTION__, ret);
-    }
-    else
+    ret = mdi_video_rec_record_stop();
+    lfy_trace("%s, L:%d. ret=%d.", __FUNCTION__, __LINE__, ret);
+    
+    ret = mdi_video_rec_save_file((S8*)filepath, msgcmd_VdoRecdSaveCb, NULL);
+    lfy_trace("%s, L:%d. ret=%d.", __FUNCTION__, __LINE__, ret);
+    
+    if (MDI_RES_VDOREC_SUCCEED != ret)
     {
         msgcmd_VdoRecdPreview(MMI_FALSE, vrm->dispLayer);
         msgcmd_VdoRecdPowerMngr(MMI_FALSE);
@@ -3330,6 +3398,7 @@ static void msgcmd_VdoRecdContRecdRsp(void *p)
         msgcmd_VdoRecdPreview(MMI_TRUE, vrm->dispLayer);
         msgcmd_VdoRecdGetFilePath(vrm->filepath, (MSGCMD_FILE_PATH_LENGTH+1)*sizeof(WCHAR));
         kal_sleep_task(20);
+        
         if (!msgcmd_VdoRecdDoing(vrm->filepath))
         {
             msgcmd_VdoRecdPreview(MMI_FALSE, vrm->dispLayer);
@@ -3399,8 +3468,8 @@ void MsgCmd_VdoRecdStop(char *replay_number)
     if (vrm)
     {
         vrm->stop = MMI_TRUE;
+        msgcmd_VdoRecdCyclicTimer(MMI_FALSE);
         msgcmd_VdoRecdSave(vrm->filepath);
-        MsgCmd_DelayTick(MSGCMD_VDORECD_DLY_TICK);
     }
 }
 
@@ -3420,6 +3489,8 @@ MMI_BOOL MsgCmd_VdoRecdStart(
     U32      auto_save_gap,
     char    *replay_number)
 {
+    S32 drive;
+    
     lfy_trace(
         "%s, forever=%d, time=%d, replay=%s.",
         __FUNCTION__, 
@@ -3443,8 +3514,12 @@ MMI_BOOL MsgCmd_VdoRecdStart(
         return MMI_FALSE;
 #endif
 
+    //磁盘未获取到
+    if ((drive = MsgCmd_GetUsableDrive()) < 0)
+        return MMI_FALSE;
+
     //获取的盘符是否正确挂载--就是是否存在的一个意思
-    if (!MsgCmd_CheckValidDrive(MsgCmd_GetUsableDrive()))
+    if (!MsgCmd_CheckValidDrive(drive))
         return MMI_FALSE;
     else
     {
@@ -3457,12 +3532,18 @@ MMI_BOOL MsgCmd_VdoRecdStart(
         //是否有未保存过的视频
         if (mdi_video_rec_has_unsaved_file((S8*)buffer))
         {
+            MDI_RESULT ret;
+            
             //保存之?删除之?
             lfy_trace("%s, L:%d, has unsaved video, delete.", __FUNCTION__, __LINE__);
-            mdi_video_rec_delete_unsaved_file((S8*)buffer);
+            //mdi_video_rec_delete_unsaved_file((S8*)buffer);
+            msgcmd_VdoRecdGetFilePath(buffer, sizeof(WCHAR)*(MSGCMD_FILE_PATH_LENGTH+1));
+            ret = mdi_video_rec_save_file((S8*)buffer, NULL, NULL);
+            lfy_trace("%s, L:%d, save ret=%d..", __FUNCTION__, __LINE__, ret);
         }
     }
-    
+
+
     vrm = (VdoRecdMngr*)MsgCmd_Malloc(sizeof(VdoRecdMngr), 0);
     vrm->forever = forever;
     vrm->time    = time_in_sec;

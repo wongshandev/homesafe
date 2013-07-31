@@ -29,15 +29,23 @@ if ($line eq "1")
     chomp($line);
     if ($line ne "")
     {
+        my $outputlistfile = "~toBinFileList.txt";
+        
         ##创建文件
         open(TOBIN, ">$toBin") or die "can not create file.\n";
-        print TOBIN "for /R %%i IN ($line) DO type \"%%i\" > \"%%i.bin\" && del /S /Q \"%%i\"";
+        unlink $outputlistfile;
+        print TOBIN "for /R %%i IN ($line) DO echo %%i >>$outputlistfile && type \"%%i\" > \"%%i.bin\" && del /S /Q \"%%i\"";
         close TOBIN;
         ##执行内容
+        
+        &print_system_time();
+        
         my $cmd = "start /wait cmd /c \"$toBin\"";
         system($cmd);
         ##删除文件
         unlink $toBin;
+        
+        &print_system_time();
     }
     else
     {
@@ -48,8 +56,10 @@ elsif ($line eq "2")
 {
     print "You are choose restore form \".bin\".\n";
     
+    &print_system_time();
+    
     my $findBin = "~findBin.bat";
-    my $listFile = "~file.lst";
+    my $listFile = "~fromBinFileList.txt";
     
     if (-e $listFile)
     {
@@ -85,7 +95,9 @@ elsif ($line eq "2")
         }
     }
     close LFH;
-    unlink $listFile;
+    #unlink $listFile;
+    
+    &print_system_time();
 }
 else
 {
@@ -93,3 +105,16 @@ else
 }
 
 print "\n----process finish----\n";
+
+system("pause");
+
+sub print_system_time()
+{
+    my ($sec,$min,$hour,$day,$mon,$year,$wday,$yday,$isdst)=localtime(time);
+    
+    $day=($day<10)?"0$day":$day;
+    $mon=($mon<9)?"0".($mon+1):($mon+1);
+    $year+=1900;
+    
+    print "$year-$mon-$day, $hour:$min:$sec\n";
+}
