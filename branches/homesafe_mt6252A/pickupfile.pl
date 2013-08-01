@@ -21,7 +21,31 @@ my $destPath = ${ARGV[2]}; ##输出文件的存放目录
 
 if ($rsltFile eq "" || $workPath eq "")
 {
-    die "\nParameter error!\n[USAGE] $0 souceInsight_SearchResults_file work_path [output_path]\n";
+    print "\nParameter error!\n[USAGE] $0 souceInsight_SearchResults_file work_path [output_path]\n";
+    print "Please enter souceInsight_SearchResults_file:\n";
+    $rsltFile = <STDIN>;
+    chomp($rsltFile);
+    if ($rsltFile eq "")
+    {
+        die "souceInsight_SearchResults_file can\'t be empty!\n";	
+    }
+    
+    if (!($rsltFile =~ m/^*.SearchResults$/i))
+    {
+        die "file format error.\n";	
+    }
+    
+    print "Please enter work_path:\n";
+    $workPath = <STDIN>;
+    chomp($workPath);
+    if ($workPath eq "")
+    {
+        die "workPath can\'t be empty!\n";	
+    }
+    
+    print "Please enter output_path:\n";
+    $destPath = <STDIN>;
+    chomp($destPath);
 }
 
 print "\n----Process begin----\n\n";

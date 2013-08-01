@@ -627,6 +627,16 @@ MMI_BOOL MsgCmd_WriteImei(char *num, U16 strl, U8 sim, U8 (*rsp)(void*));
 MMI_BOOL MsgCmd_CreatePath(S32 drive, const WCHAR *folder);
 
 /*******************************************************************************
+** 函数: MsgCmd_CreateMultiPath
+** 功能: 创建路径, 可以是多重路径
+** 参数: dirve     -- 盘符
+**       UcsFolder -- 文件夹
+** 返回: 无
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_CreateMultiPath(char drive, const WCHAR *UcsFolder);
+
+/*******************************************************************************
 ** 函数: MsgCmd_InterruptMask
 ** 功能: 屏蔽/打开外部中断
 ** 参数: mask  -- 屏蔽

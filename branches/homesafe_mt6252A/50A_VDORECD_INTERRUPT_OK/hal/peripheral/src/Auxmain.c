@@ -713,23 +713,23 @@ void aux_task_main( task_entry_struct * task_entry_ptr )
    adc_handle_vcharger = aux_open_and_create(DCL_VCHARGER_ADC_CHANNEL);
    adc_handle_vbattemp = aux_open_and_create(DCL_VBATTMP_ADC_CHANNEL);
 
-	#if (!defined(__ACCDET_SUPPORT__)&& !defined(__DRV_EXT_ACCESSORY_DETECTION__))
-	stack_init_timer(&aux_timer, "AUX_TIMER", MOD_AUX);
-   adc_handle_aux = aux_open_and_create(DCL_AUX_ADC_CHANNEL);
-   adc_handle_vaux = aux_open_and_create(DCL_AUX_ADC_CHANNEL);
+#if (!defined(__ACCDET_SUPPORT__)&& !defined(__DRV_EXT_ACCESSORY_DETECTION__))
+    stack_init_timer(&aux_timer, "AUX_TIMER", MOD_AUX);
+    adc_handle_aux = aux_open_and_create(DCL_AUX_ADC_CHANNEL);
+    adc_handle_vaux = aux_open_and_create(DCL_AUX_ADC_CHANNEL);
 
-
-#if !defined(__ACCDET_HYBRID_SOLUTION_SUPPORT__)
-#if defined(__LEIFAYU__)
-{
-    extern void MsgCmd_InterruptRegister(void); //defined in lfy_exp.c
-    MsgCmd_InterruptRegister();
-}
-#else
-	EINT_Registration(AUX_EINT_NO,KAL_TRUE,aux_state,AUX_EINT_HISR, KAL_TRUE);
+    #if !defined(__ACCDET_HYBRID_SOLUTION_SUPPORT__)
+        #if defined(__LEIFAYU__)
+        {
+            extern void MsgCmd_InterruptRegister(void); //defined in lfy_exp.c
+            MsgCmd_InterruptRegister();
+        }
+        #else
+        	EINT_Registration(AUX_EINT_NO,KAL_TRUE,aux_state,AUX_EINT_HISR, KAL_TRUE);
+        #endif
+    #endif
 #endif
-	
-	#endif
+    
 #if (defined(__PHONE_CLAMSHELL__) || defined(__PHONE_SLIDE__))
     EINT_Registration(CLAMDET_EINT_NO,KAL_TRUE,clam_state,CLAM_EINT_HISR, KAL_TRUE);		//zsl 20120827
 #endif

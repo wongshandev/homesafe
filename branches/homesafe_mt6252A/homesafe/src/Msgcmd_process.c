@@ -211,7 +211,12 @@ U32 lfy_write_log(const char *fmt, ...)
     U32 length, written = 0;
     char buffer[LFY_LOG_BUFFER_SZ] = {0};
     va_list list;
-    
+
+#if defined(__MMI_USB_SUPPORT__) && defined(__USB_IN_NORMAL_MODE__)
+    if (srv_usb_is_in_mass_storage_mode())
+        return;
+#endif
+
     if (-1 == logFH)
     {
         logFile[0] = SRV_FMGR_CARD_DRV;
@@ -1082,7 +1087,7 @@ void MsgCmd_IntRecheckTimer(MMI_BOOL open, U16 dlyS)
 /*******************************************************************************
 ** 函数: MsgCmd_DeleteFileFront
 ** 功能: 删除文件的前部
-** 入参: fname   -- 文件名, UCS格式
+** 入参: fname   -- 文件名, UCS格式, 如 L"E:\\videos\\test.avi"
 **       deletesz -- 删除大小, 即从文件头开始删除deletesz个字节的数据
 ** 返回: 函数执行是否正常
 ** 作者: wasfayu
@@ -1323,6 +1328,11 @@ MMI_BOOL MsgCmd_CreatePath(S32 drive, const WCHAR *folder)
 {
     FS_HANDLE h;
     WCHAR buffer[MSGCMD_FILE_PATH_LENGTH+1] = {0};
+
+    if (!isalpha(drive) || 
+        !srv_fmgr_drv_is_accessible(drive) ||
+        NULL == folder)
+        return MMI_FALSE;
     
     kal_wsprintf(buffer, "%c:\\%w\\", drive, folder);
 	if ((h = FS_Open((const WCHAR*)buffer, FS_OPEN_DIR|FS_READ_ONLY)) >= FS_NO_ERROR)
@@ -1334,6 +1344,94 @@ MMI_BOOL MsgCmd_CreatePath(S32 drive, const WCHAR *folder)
     {
         return (MMI_BOOL)(FS_CreateDir((const WCHAR*)buffer) >= FS_NO_ERROR);
     }
+}
+
+/*******************************************************************************
+** 函数: MsgCmd_CreateMultiPath
+** 功能: 创建路径, 可以是多重路径
+** 参数: dirve     -- 盘符
+**       UcsFolder -- 文件夹
+** 返回: 无
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_CreateMultiPath(char drive, const WCHAR *UcsFolder)
+{
+    U32 i, slash;
+    WCHAR *path, ch;
+    FS_HANDLE fd;
+ 
+    
+    if (!isalpha(drive) || 
+        !srv_fmgr_drv_is_accessible(drive) ||
+        NULL == UcsFolder)
+        return MMI_FALSE;
+
+    path    = (WCHAR*)MsgCmd_Malloc(256*sizeof(WCHAR), 0);
+    path[0] = (WCHAR)drive;
+    path[1] = ':';
+    path[2] = '\\';
+
+    i       = 0;
+    fd      = FS_NO_ERROR;
+    
+    do {
+        //  d:\a\b\c\d\e
+        //  d:\\a\b\c\\
+
+        slash   = 1;
+        
+        while((ch = *UcsFolder++) != (WCHAR)'\0')
+        {
+            if (ch == '\\' || ch == '/')
+            {
+                if (0 == slash)
+                {
+                    path[3+i] = ch;
+                    slash = 2;
+                    i ++;
+                    break;
+                }
+                continue;
+            }
+            else
+            {
+                if (2 == slash)
+                {
+                    i ++;
+                    break;
+                }
+                
+                path[3+i] = ch;
+                slash = 0;
+            }
+
+            i ++;
+            
+            if (3+i >= 254)
+                break;
+        }
+
+        if (ch != '\\' && ch != '/' && path[3+i-1] != '\\' && path[3+i-1] != '/')
+        {
+            path[3+i] = '/';
+            i ++;
+        }
+        
+        //create
+        fd = FS_Open((const WCHAR*)path, FS_OPEN_DIR|FS_READ_ONLY);
+        if (fd >= FS_NO_ERROR)
+            FS_Close(fd);
+    	else if ((fd = FS_CreateDir((const WCHAR*)path)) < FS_NO_ERROR)
+            break;
+        
+        if (ch == (WCHAR)'\0')
+            break;
+            
+    }while(3+i < 254);
+
+    MsgCmd_Mfree(path);
+    
+    return (MMI_BOOL)(fd >= FS_NO_ERROR);
 }
 
 #if 1

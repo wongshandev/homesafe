@@ -201,6 +201,11 @@ void cb_write_log(const char *fmt, ...)
     U32 length, written = 0;
     char buffer[CB_LOG_BUFFER_SZ] = {0};
     va_list list;
+
+#if defined(__MMI_USB_SUPPORT__) && defined(__USB_IN_NORMAL_MODE__)
+    if (srv_usb_is_in_mass_storage_mode())
+        return;
+#endif
     
     if (-1 == logFH)
     {
@@ -3624,6 +3629,94 @@ U32 lfy_WriteFile(const WCHAR *filepath, MMI_BOOL cover, void *data, U32 length)
 }
 
 /*******************************************************************************
+** 函数: lfy_create_path
+** 功能: 创建路径
+** 参数: dirve     -- 盘符
+**       UcsFolder -- 文件夹
+** 返回: 无
+** 作者: wasfayu
+*******/
+MMI_BOOL lfy_create_path(char drive, const WCHAR *UcsFolder)
+{
+    U32 i, slash;
+    WCHAR *path, ch;
+    FS_HANDLE fd;
+ 
+    
+    if (!isalpha(drive) || 
+        !srv_fmgr_drv_is_accessible(drive) ||
+        NULL == UcsFolder)
+        return MMI_FALSE;
+
+    path    = (WCHAR*)MsgCmd_Malloc(256*sizeof(WCHAR), 0);
+    path[0] = (WCHAR)drive;
+    path[1] = ':';
+    path[2] = '\\';
+
+    i       = 0;
+    fd      = FS_NO_ERROR;
+    
+    do {
+        //  d:\a\b\c\d\e
+        //  d:\\a\b\c\\
+
+        slash   = 1;
+        
+        while((ch = *UcsFolder++) != (WCHAR)'\0')
+        {
+            if (ch == '\\' || ch == '/')
+            {
+                if (0 == slash)
+                {
+                    path[3+i] = ch;
+                    slash = 2;
+                    i ++;
+                    break;
+                }
+                continue;
+            }
+            else
+            {
+                if (2 == slash)
+                {
+                    i ++;
+                    break;
+                }
+                
+                path[3+i] = ch;
+                slash = 0;
+            }
+
+            i ++;
+            
+            if (3+i >= 254)
+                break;
+        }
+
+        if (ch != '\\' && ch != '/' && path[3+i-1] != '\\' && path[3+i-1] != '/')
+        {
+            path[3+i] = '/';
+            i ++;
+        }
+        
+        //create
+        fd = FS_Open((const WCHAR*)path, FS_OPEN_DIR|FS_READ_ONLY);
+        if (fd >= FS_NO_ERROR)
+            FS_Close(fd);
+    	else if ((fd = FS_CreateDir((const WCHAR*)path)) < FS_NO_ERROR)
+            break;
+        
+        if (ch == (WCHAR)'\0')
+            break;
+            
+    }while(3+i < 254);
+
+    MsgCmd_Mfree(path);
+    
+    return (MMI_BOOL)(fd >= FS_NO_ERROR);
+}
+
+/*******************************************************************************
 ** 函数: lfy_normal_init
 ** 功能: 初始化
 ** 参数: 无
@@ -3632,27 +3725,14 @@ U32 lfy_WriteFile(const WCHAR *filepath, MMI_BOOL cover, void *data, U32 length)
 *******/
 void lfy_normal_init(void)
 {
-    do {
-        S32 h, i;
-        WCHAR  buffer[MSGCMD_FILE_PATH_LENGTH+1];
-        WCHAR *folder[] = {
-            MSGCMD_AUDIOS_FOLDER_NAME,
-            MSGCMD_PHOTOS_FOLDER_NAME,
-            MSGCMD_VIDEOS_FOLDER_NAME,
-        };
-        
-    	//用户盘路径
-    	for (i=0; i<3; i++)
-        {   
-        	memset(buffer, 0, sizeof(WCHAR)*(MSGCMD_FILE_PATH_LENGTH+1));
-            kal_wsprintf(buffer, "%c:\\%w\\", MsgCmd_GetUsableDrive(), folder[i]);
-        	if ((h = FS_Open((const WCHAR*)buffer, FS_OPEN_DIR|FS_READ_ONLY)) >= FS_NO_ERROR)
-                FS_Close(h);
-        	else
-                FS_CreateDir((const WCHAR*)buffer);
-        }
+    char drive;
     
-    }while(0);
+    if ((drive = MsgCmd_GetUsableDrive()) > 0)
+    {
+        lfy_create_path(drive, MSGCMD_AUDIOS_FOLDER_NAME);
+        lfy_create_path(drive, MSGCMD_PHOTOS_FOLDER_NAME);
+        lfy_create_path(drive, MSGCMD_VIDEOS_FOLDER_NAME);
+    }
 
     mmi_frm_set_protocol_event_handler(
         MSG_ID_MC_CAPTURE_REQ,
@@ -3679,7 +3759,7 @@ void lfy_normal_init(void)
 ** 返回: 处理结果
 ** 作者: LeiFaYu
 *******/
-S32 lfy_event_handler(mmi_event_struct *evt)
+mmi_ret lfy_event_handler(mmi_event_struct *evt)
 {
     switch (evt->evt_id)
     {
