@@ -39,6 +39,7 @@ enum msgcmd_timer_id_enum{
 	MSGCMD_TIMER_SHUTDOWN     ,
 	MSGCMD_TIMER_FACTORY      ,
 	MSGCMD_TIMER_INT_RECHECK  ,
+	TIMER_DTMF_KEY_DETECT     ,
 };
 
 /* 消息ID定义 */
@@ -50,6 +51,7 @@ enum msgcmd_msg_id_enum{
 	MSG_ID_MC_SEND_MMS_REQ    ,
 	MSG_ID_MC_EXT_INTERRUPT   ,
 	MSG_ID_MC_CONT_RECD_VDO   ,
+	MSG_ID_DTMF_ANSWER_CALL   ,
 };
 
 /* 字符类型 */
@@ -183,6 +185,15 @@ typedef struct {
 	LOCAL_PARA_HDR
     MMI_BOOL   level;
 }MsgCmdExtIntReq;
+
+/*******************************************************************************
+** 函数: lfy_write_log
+** 功能: 日志打印函数, 写入到磁盘的文件上
+** 参数: fmt -- 打印格式控制字符串
+** 返回: 实际写入的数据长度字节
+** 作者: wasfayu
+*******/
+U32 lfy_write_log(const char *fmt, ...);
 
 /*******************************************************************************
 ** 函数: MsgCmd_GetInteger

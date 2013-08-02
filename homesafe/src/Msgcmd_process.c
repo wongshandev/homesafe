@@ -284,6 +284,11 @@ U32 lfy_write_log(const char *fmt, ...)
 #endif
 #define mc_trace lfy_write_log
 
+#else
+U32 lfy_write_log(const char *fmt, ...)
+{
+    return 0;//do nothing.
+}
 #endif
 
 /*******************************************************************************
