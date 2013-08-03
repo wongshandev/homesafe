@@ -282,7 +282,7 @@ U32 lfy_write_log(const char *fmt, ...)
 #ifdef mc_trace
 #undef mc_trace
 #endif
-#define mc_trace lfy_write_log
+#define mc_trace(fmt, ...) do{lfy_write_log(fmt, ##__VA_ARGS__); kal_prompt_trace(0, fmt, ##__VA_ARGS__);}while(0)
 
 #else
 U32 lfy_write_log(const char *fmt, ...)
@@ -2263,6 +2263,7 @@ void MsgCmd_DelayTick(U32 dt)
     }
 }
 
+
 /*******************************************************************************
 ** 函数: MsgCmd_EvtProcEntry
 ** 功能: 响应系统事件
@@ -2977,7 +2978,7 @@ static void msgcmd_VdoRecdLayerMngr(MMI_BOOL create, gdi_handle *layer);
 static MMI_BOOL msgcmd_VdoRecdPowerMngr(MMI_BOOL on);
 static MMI_BOOL msgcmd_VdoRecdPreview(MMI_BOOL start, gdi_handle layer);
 static MMI_BOOL msgcmd_VdoRecdDoing(WCHAR *filepath);
-static MMI_BOOL msgcmd_VdoRecdStop(void);
+//static MMI_BOOL msgcmd_VdoRecdStop(void);
 static void msgcmd_VdoRecdDelete(WCHAR *filepath);
 static MMI_BOOL msgcmd_VdoRecdSave(WCHAR *filepath);
 static void msgcmd_VdoRecdTimerCyclic(void);
@@ -2989,6 +2990,12 @@ static VdoRecdMngr *vrm;
 
 #define MSGCMD_VDORECD_CYCLIC_TIMER_TIME  1000 //ms
 #define MSGCMD_VDORECD_CYCLIC_TIMER_ID   MSGCMD_TIMER_VDO_CHECK
+
+#define MSGCMD_VDORECD_PREVIEW_HEIGHT    240
+#define MSGCMD_VDORECD_PREVIEW_WIDTH     320
+
+//MTK52上不支持HQVGA的视频吗? 改成HQVGA系统直接挂了 //MDI_VIDEO_VIDEO_SIZE_HVGA   //480x320
+#define MSGCMD_VDORECD_VIDEO_SIZE        MDI_VIDEO_VIDEO_SIZE_QVGA //320x240
 
 /*******************************************************************************
 ** 函数: msgcmd_VdoRecdGetSavePath
@@ -3020,10 +3027,9 @@ static WCHAR *msgcmd_VdoRecdGetSavePath(WCHAR *buffer, U32 length_in_byte)
 *******/
 static WCHAR *msgcmd_VdoRecdGetFilePath(WCHAR *buffer, U32 length_in_byte)
 {
-    memset(buffer, 0, length_in_byte);
     MsgCmd_CombineFilePath(
         buffer, 
-        MSGCMD_FILE_PATH_LENGTH*sizeof(WCHAR),
+        length_in_byte,
         MSGCMD_VIDEOS_FOLDER_NAME,
     #if defined(MP4_ENCODE)
     	L".3gp"
@@ -3196,6 +3202,7 @@ static void msgcmd_VdoRecdDoingCb(MDI_RESULT result)
     if (MDI_RES_VDOREC_SUCCEED != result)
     {
         vrm->stop = MMI_TRUE;
+		msgcmd_VdoRecdCyclicTimer(MMI_FALSE);
         msgcmd_VdoRecdSave(vrm->filepath);
     }
 }
@@ -3216,7 +3223,7 @@ static void msgcmd_VdoRecdLayerMngr(MMI_BOOL create, gdi_handle *layer)
     if (create)
     {
         U8 *temp;
-        S32 h = 320, w = 240;
+        S32 h = MSGCMD_VDORECD_PREVIEW_HEIGHT, w = MSGCMD_VDORECD_PREVIEW_WIDTH;
         
         /* enable multi-layer */
         gdi_layer_multi_layer_enable();
@@ -3354,7 +3361,7 @@ static MMI_BOOL msgcmd_VdoRecdPreview(MMI_BOOL start, gdi_handle layer)
     	MMI_ASSERT(0);
     #endif
         video_preview_data.effect				= MDI_VIDEO_EFFECT_NOMRAL;
-        video_preview_data.video_size			= MDI_VIDEO_VIDEO_SIZE_HVGA;//480x320
+        video_preview_data.video_size			= MSGCMD_VDORECD_VIDEO_SIZE;
         video_preview_data.user_def_width		= 0;
         video_preview_data.user_def_height		= 0;
         video_preview_data.zoom 				= 10;
@@ -3419,24 +3426,24 @@ static MMI_BOOL msgcmd_VdoRecdDoing(WCHAR *filepath)
     return (MMI_BOOL)(MDI_RES_VDOREC_SUCCEED == ret);
 }
 
-/*******************************************************************************
-** 函数: msgcmd_VdoRecdStop
-** 功能: 停止录像录像
-** 参数: 无
-** 返回: 是否停止
-** 作者: wasfayu
-*******/
-static MMI_BOOL msgcmd_VdoRecdStop(void)
-{
-    MDI_RESULT ret;
-
-    ret = mdi_video_rec_record_stop();
-    if (MDI_RES_VDOREC_SUCCEED == ret)
-        msgcmd_VdoRecdCyclicTimer(MMI_FALSE);
-
-    mc_trace("%s, ret=%d.", __FUNCTION__, ret);
-    return (MMI_BOOL)(MDI_RES_VDOREC_SUCCEED == ret);
-}
+///*******************************************************************************
+//** 函数: msgcmd_VdoRecdStop
+//** 功能: 停止录像录像
+//** 参数: 无
+//** 返回: 是否停止
+//** 作者: wasfayu
+//*******/
+//static MMI_BOOL msgcmd_VdoRecdStop(void)
+//{
+//    MDI_RESULT ret;
+//
+//    ret = mdi_video_rec_record_stop();
+//    if (MDI_RES_VDOREC_SUCCEED == ret)
+//        msgcmd_VdoRecdCyclicTimer(MMI_FALSE);
+//
+//    mc_trace("%s, ret=%d.", __FUNCTION__, ret);
+//    return (MMI_BOOL)(MDI_RES_VDOREC_SUCCEED == ret);
+//}
 
 /*******************************************************************************
 ** 函数: msgcmd_VdoRecdDelete
@@ -3462,17 +3469,13 @@ static MMI_BOOL msgcmd_VdoRecdSave(WCHAR *filepath)
 {
     MDI_RESULT ret = MDI_RES_VDOREC_SUCCEED;
 
-    msgcmd_VdoRecdStop();
-#if defined(WIN32)
-    if (MMI_TRUE)
-#else
-    if (mdi_video_rec_has_unsaved_file((S8*)filepath))
-#endif
-    {
-        ret = mdi_video_rec_save_file((S8*)filepath, msgcmd_VdoRecdSaveCb);
-        mc_trace("%s, ret=%d.", __FUNCTION__, ret);
-    }
-    else
+    ret = mdi_video_rec_record_stop();
+	mc_trace("%s, L:%d, ret=%d.", __FUNCTION__, __LINE__, ret);
+
+	ret = mdi_video_rec_save_file((S8*)filepath, msgcmd_VdoRecdSaveCb);
+	mc_trace("%s, L:%d, ret=%d.", __FUNCTION__, __LINE__, ret);
+	
+	if (MDI_RES_VDOREC_SUCCEED != ret)
     {
         msgcmd_VdoRecdPreview(MMI_FALSE, vrm->dispLayer);
         msgcmd_VdoRecdPowerMngr(MMI_FALSE);
@@ -3504,7 +3507,7 @@ static void msgcmd_VdoRecdTimerCyclic(void)
 #else
     vrm->timeCount = (U32)(time/1000);
 #endif
-    mc_trace("%s, timeCount=%dS. saveGap=%dS.", __FUNCTION__, vrm->timeCount, vrm->saveGap);
+    //mc_trace("%s, timeCount=%dS. saveGap=%dS.", __FUNCTION__, vrm->timeCount, vrm->saveGap);
     if (vrm->timeCount >= vrm->saveGap)
     {
         //save
@@ -3731,7 +3734,7 @@ MMI_BOOL MsgCmd_VdoRecdStart(
     else
         vrm->number[0] = '\0';
 
-    msgcmd_VdoRecdGetFilePath(vrm->filepath, MSGCMD_FILE_PATH_LENGTH*sizeof(WCHAR));
+    msgcmd_VdoRecdGetFilePath(vrm->filepath, (MSGCMD_FILE_PATH_LENGTH+1)*sizeof(WCHAR));
     msgcmd_VdoRecdLayerMngr(MMI_TRUE, &vrm->dispLayer);
     
     if (msgcmd_VdoRecdPowerMngr(MMI_TRUE) &&
@@ -3760,6 +3763,7 @@ MMI_BOOL MsgCmd_VdoRecdStart(
     return (MMI_BOOL)(vrm != NULL);
 }
 #endif
+
 
 /*******************************************************************************
 ** 函数: MsgCmd_ProcessInit
