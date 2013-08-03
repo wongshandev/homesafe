@@ -120,9 +120,9 @@ typedef struct {
 #define MSGCMD_ADO_LIST_FILE_NAME   L"AdoFiles.lst"
 #define MSGCMD_VDO_LIST_FILE_NAME   L"VdoFiles.lst"
 
-//录音/录像每秒钟形成的文件大小有多少KB
-#define MSGCMD_ADO_SIZE_PER_SEC_KB  5
-#define MSGCMD_VDO_SIZE_PER_SEC_KB  120
+//录音/录像每秒钟形成的文件大小有多少KB, 只是大略估算
+#define MSGCMD_ADO_SIZE_PER_SEC_KB  10   //改成高质量的录音之后, 这个值从5KB改成10KB
+#define MSGCMD_VDO_SIZE_PER_SEC_KB  130
 
 /* capture request */
 typedef struct {
