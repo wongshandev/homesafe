@@ -181,7 +181,7 @@ OBIGO_FEATURE    =  WAP2         # WAP, WAP2, WAP_SEC, WAP2_SEC, NONE
 
 IRDA_SUPPORT      =  FALSE       # IRDA support feature
 
-INPUT_METHOD = MMI_CSTAR_V2_DEMO #MMI_CSTAR_V2_DEMO	 # Input methods: NONE, MMI_T9, MMI_ZI, MMI_T9_V7_4
+INPUT_METHOD = NONE #MMI_CSTAR_V2_DEMO	 # Input methods: NONE, MMI_T9, MMI_ZI, MMI_T9_V7_4
 
 HAND_WRITING 		= 	NONE      # NONE, MMI_HANWANG, MMI_PENPOWER, MMI_PENPOWER_DEMO, MMI_HANWANG_DEMO, MMI_DECUMA, MMI_DECUMA_DEMO
 
@@ -454,7 +454,7 @@ LOW_COST_SUPPORT = COMMON  # NONE, COMMON, ULC
 
 SUB_LCD_SIZE = NONE # NONE, 48X64BW, 64X96, 96X64BW, 96X64, 128X128
 
-MAIN_LCD_SIZE = 240X320 #240X320                              # To distinguish the main lcd size. 
+MAIN_LCD_SIZE = 128X128 #240X320                              # To distinguish the main lcd size. 
                                                                         # We can use it to copy the matching resources, such themecomponents.h, Fontres.c, L_xxx.h, etc, to PLUTO_MMI folder
 
 

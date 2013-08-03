@@ -59,6 +59,7 @@
 #include "ucsrv.h"
 #include "nwusabsrvgprot.h"
 #include "Eint.h"
+#include "lcd_sw_inc.h"
 #if defined(__ACCDET_SUPPORT__) || defined(__ACCDET_HYBRID_SOLUTION_SUPPORT__)
 #include "drv_hisr.h"
 #include "accdet_hw.h"
@@ -2991,8 +2992,8 @@ static VdoRecdMngr *vrm;
 #define MSGCMD_VDORECD_CYCLIC_TIMER_TIME  1000 //ms
 #define MSGCMD_VDORECD_CYCLIC_TIMER_ID   MSGCMD_TIMER_VDO_CHECK
 
-#define MSGCMD_VDORECD_PREVIEW_HEIGHT    240
-#define MSGCMD_VDORECD_PREVIEW_WIDTH     320
+#define MSGCMD_VDORECD_PREVIEW_HEIGHT    LCD_HEIGHT
+#define MSGCMD_VDORECD_PREVIEW_WIDTH     LCD_WIDTH
 
 //MTK52上不支持HQVGA的视频吗? 改成HQVGA系统直接挂了 //MDI_VIDEO_VIDEO_SIZE_HVGA   //480x320
 #define MSGCMD_VDORECD_VIDEO_SIZE        MDI_VIDEO_VIDEO_SIZE_QVGA //320x240

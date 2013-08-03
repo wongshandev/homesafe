@@ -13865,8 +13865,9 @@ endif
 ## HOME SAFE
 ##
 WS_HOME_SAFE = TRUE
-WS_HOME_SAFE_VER = ADO_VER   #Â¼Ïñ°æ±¾VDO_VER
-                                                     #ÓïÒô°æ±¾ADO_VER
+WS_HOME_SAFE_VER = ADO_VDO_VER   #Â¼Ïñ°æ±¾VDO_VER
+                             #ÓïÒô°æ±¾ADO_VER
+                             #ÓïÒôºÍÂ¼Ïñ¶¼¿ªÆô ADO_VDO_VER
 													
 ifeq ($(strip $(WS_HOME_SAFE)),TRUE)
   COM_DEFS += __WS_HOME_SAFE__ __MSGCMD_SUPPORT__
@@ -13879,4 +13880,7 @@ ifeq ($(strip $(WS_HOME_SAFE_VER)),ADO_VER)
 endif
 ifeq ($(strip $(WS_HOME_SAFE_VER)),VDO_VER)
   COM_DEFS += __VDO_VER__ 
+endif
+ifeq ($(strip $(WS_HOME_SAFE_VER)),ADO_VDO_VER)
+  COM_DEFS += __VDO_VER__ __VDO_VER__
 endif
