@@ -2509,7 +2509,7 @@ static MMI_BOOL msgcmd_AdoRecdDoing(WCHAR *filename, U32 time)
     error = mdi_audio_start_record_with_limit(
                 (void*)filename,
                 MEDIA_WAV_DVI_ADPCM,
-                0,
+                1, //0-low, >0-high
                 NULL,
                 msgcmd_AdoRecdDoingCb,
                 0,
