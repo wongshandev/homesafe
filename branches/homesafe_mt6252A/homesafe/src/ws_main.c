@@ -6,6 +6,7 @@
 #include "mdi_include.h"
 #include "FileMgrType.h"
 #include "mmi_rp_app_ucm_def.h"
+#include "mtpnp_sdk_common_if.h"
 
 homesafe_info hf_info = {0};
 hf_nvram	  hf_nv = {0};
@@ -13,8 +14,10 @@ hf_FuncPtr		hf_call_result_cb;
 extern void PhnsetSendSetTimeReqMessage(void);
 extern const unsigned char AUX_EINT_NO;
 extern void MsgCmd_isink(MMI_BOOL open);
+extern pBOOL mmi_bootup_is_sim2_valid(void);
 BOOL hf_make_call(char * number, hf_FuncPtr cb);
 void hf_hisr_call_result(BOOL result);
+void hf_set_light_for_rec(void);
 
 void hf_nvram_init(void)
 {
@@ -36,20 +39,20 @@ void hf_start_light(void)
 	int timer_sec = 0;
 	static int count = 0;
 
-	if(++count > 10)
+	if(++count > 20)
 	{
 		count = 0;
 		MsgCmd_isink(FALSE);
 		StopTimer(SH_LIGHT_TIMER_ID);
 		return;
 	}
-	if(mmi_idle_is_active()&&!mmi_bootup_is_network_service_available())
+	if(mmi_idle_is_active()&&!mmi_bootup_is_sim2_valid())
 	{
 		static int _count = 0;
 		
 		timer_sec = 1;
 		//hf_print("无信号或者无卡。已经进入待机界面");
-		if(!((++_count)%5))
+		if(!((++_count)%3))
 		{
 			_count = 0;
 			MsgCmd_isink(TRUE);
@@ -161,7 +164,6 @@ void hf_init_hf_info(void)
 {
 	hf_print("初始化hf_init_hf_info");
 	hf_info.is_call_out = FALSE;
-	hf_info.call_result_is_connet = FALSE;
 	hf_info.call_result_time = 0;
 	hf_info.call_is_complete = TRUE;
 }
@@ -212,6 +214,31 @@ void hf_call_out_timer_out(void)
 	{
 		hf_print("通话结束,主动挂断!");
 		mmi_ucm_outgoing_call_endkey();
+#if defined(__ADO_VER__)
+		if(hf_info.io_statue == TRUE && hf_info.is_call_out == TRUE)
+		{
+			if (!MsgCmd_AdoRecdBusy())
+#else
+		if( hf_info.is_call_out == TRUE)
+		{
+			if (!MsgCmd_VdoRecdBusy())
+#endif
+			{
+				//空闲时，可以启动。
+				hf_print("开始录音。。");
+				hf_set_light_for_rec();
+#if defined(__ADO_VER__)				
+				MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, 0, 5*60, NULL);
+				hf_init_hf_info();
+#else
+				MsgCmd_VdoRecdStart(
+				MMI_TRUE, 
+				5*60,
+				MsgCmd_GetVdoRecdArgs()->save_gap,
+				NULL);
+#endif
+			}
+		}
 	}
 }
 void hf_hisr_call_result(BOOL result)
@@ -236,10 +263,23 @@ void hf_hisr_call_result(BOOL result)
 		else
 		{
 			hf_print("通话结束");
-			mmi_ucm_outgoing_call_endkey();
 			hf_info.call_is_complete = TRUE;
 		}
 	}
+#if defined(__VDO_VER__)
+	if(FALSE==is_connet)
+	{
+		if (!MsgCmd_VdoRecdBusy())
+		{
+			hf_set_light_for_rec();
+			MsgCmd_VdoRecdStart(
+			MMI_TRUE, 
+			5*60,
+			MsgCmd_GetVdoRecdArgs()->save_gap,
+			NULL);
+		}
+	}
+#endif
 }
 BOOL hf_make_call(char * number, hf_FuncPtr cb)
 {
@@ -262,7 +302,15 @@ BOOL hf_make_call(char * number, hf_FuncPtr cb)
 void hf_set_light_for_rec(void)
 {
 	static BOOL i = 0;
+	static int count = 0;
 
+	//hf_print("录音的灯%d",count);
+	if(++count > 9)
+	{
+		StopTimer(SH_LIGHT_TIMER_ID);
+		MsgCmd_isink(FALSE);	
+		return;
+	}
 	if(i =~i)
 	{
 		MsgCmd_isink(FALSE);	
@@ -275,8 +323,19 @@ void hf_set_light_for_rec(void)
 }
 void hf_set_light_stop_rec(void)
 {
-	StopTimer(SH_LIGHT_TIMER_ID);
-	MsgCmd_isink(FALSE);	
+	static int count = 0;
+
+	//hf_print("停止录音 count %d",count);
+	if(TRUE == count)
+	{
+		count = FALSE;
+		StopTimer(SH_LIGHT_TIMER_ID);
+		MsgCmd_isink(FALSE);	
+		return;
+	}
+	count=TRUE;;
+	MsgCmd_isink(TRUE);	
+	StartTimer(SH_LIGHT_TIMER_ID, 500, hf_set_light_stop_rec);
 }
 #if defined(__MSGCMD_SUPPORT__)
 /*******************************************************************************
@@ -338,14 +397,11 @@ MsgCmdRecdArg *MsgCmd_GetVdoRecdArgs(void)
 void MsgCmd_AdoRecdStopTimerEx(void)
 {
 	hf_print("停止录音");
-//	hf_init_hf_info();
-	StopTimer(SH_LIGHT_TIMER_ID);
-	MsgCmd_isink(FALSE);
+	hf_set_light_stop_rec();
 	if (MsgCmd_AdoRecdBusy())
 		MsgCmd_AdoRecdStop(NULL);
-	//超时停止录音后，在一段时间内是不允许再拨电话出去的。
-	//作法:HF_HISR_CALL_OUT_TIME_OUT_ID 超时后，再初始化hf_init_hf_info
-	StartTimer(HF_HISR_CALL_OUT_TIME_OUT_ID, 1000*60*5,hf_init_hf_info);	
+	hf_init_hf_info();
+	mmi_ucm_outgoing_call_endkey();
 }
 #endif
 void hf_enit_hisr(void)
@@ -387,6 +443,11 @@ void hf_make_call_out_ex(void)
 {
 	hf_make_call(temp_call,hf_hisr_call_result);
 }
+void hf_vdo_rec_stop(void)
+{
+	MsgCmd_VdoRecdStop(NULL);
+	hf_init_hf_info();
+}
 void hf_mmi_task_process(ilm_struct *current_ilm)
 {
 	#define TASK_ID   		((hf_task_struct *)current_ilm->local_para_ptr)->id
@@ -401,40 +462,65 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 			U32 time  = TASK_ID;
 			hf_print("task vdo :%d",time);
         #if defined(__MSGCMD_SUPPORT__)
+              if((time == HF_HISR_IN)||(time == HF_HISR_OUT))
+		{
+			if(hf_is_vaild_service()&&(FALSE==hf_admin_is_null()))
+			{
+				int v;
+				for(v=0;v<MAX_ADMIN_NUMBER;v++)
+				{
+					if(strlen(hf_nv.admin_number[v]) > MIN_PHONENUMBER_LENTH)
+					{
+						if(hf_info.is_call_out == FALSE)
+						{
+							hf_info.is_call_out = TRUE;
+							hf_make_call(hf_nv.admin_number[v],hf_hisr_call_result);
+							break;
+						}
+					}
+				}
+			}
+			StartTimer(HF_HISR_VDO_STOP_TIMER_ID, 1000*60*5, hf_vdo_rec_stop);
+		}
+		else
+		{
 			if (MsgCmd_VdoRecdBusy())
 			{
 				//replay system busy
 				if (time)
-                {
-                    MsgCmd_VdoRecdGetContext()->forever = MMI_FALSE;
-                    MsgCmd_VdoRecdGetContext()->time += time*60;
-                }
-                else
-                    MsgCmd_VdoRecdGetContext()->forever = MMI_TRUE;
+		                {
+		                    MsgCmd_VdoRecdGetContext()->forever = MMI_FALSE;
+		                    MsgCmd_VdoRecdGetContext()->time += time*60;
+		                }
+	                	else 
+	                    	MsgCmd_VdoRecdGetContext()->forever = MMI_TRUE;
 			}
 			else
 			{
+				hf_set_light_for_rec();
 				MsgCmd_VdoRecdStart(
-                    time ? MMI_FALSE : MMI_TRUE, 
-                    time*60, 
-                    MsgCmd_GetVdoRecdArgs()->save_gap,
-                    NULL);
+				    time ? MMI_FALSE : MMI_TRUE, 
+				    time*60, 
+				    MsgCmd_GetVdoRecdArgs()->save_gap,
+				    NULL);
 			}
+		}
         #endif
 		}break;
 		case HF_MSG_ID_ADO:
 		{
 			U16 time =TASK_ID;
-			hf_print("task Ado :%d",time);
+			//hf_print("task Ado :%d",time);
 			
         #if defined(__MSGCMD_SUPPORT__)
+        
         //中断过来的time 为0xfe吧。
         	if((time == HF_HISR_IN)||(time == HF_HISR_OUT))
         	{
 				//中断触发的
 				if(hf_is_vaild_service()&&(FALSE==hf_admin_is_null())&&(time == HF_HISR_IN))
 				{
-					StopTimer(MSGCMD_TIMER_ADO_STOP);
+					hf_info.io_statue = TRUE;
 					if((hf_info.is_call_out == FALSE)||('C' ==MsgCmd_GetUsableDrive()))
 					{
 						//有效的网络，拨打电话。
@@ -474,19 +560,19 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 				}
 				else
 				{
-						//直到第4分钟之后，检测如果没有消息过来触发，就停止录音了。
-					if(time == HF_HISR_IN)	
+					if(HF_HISR_OUT == time)
 					{
-						if (!MsgCmd_AdoRecdBusy())
-						{
-							//空闲时，可以启动。
-							hf_print("开始录音。。");
-							hf_set_light_for_rec();
-							MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, 0, 5*60, NULL);
-						}
+						StopTimer(MSGCMD_TIMER_ADO_STOP);
+						hf_info.io_statue = FALSE;
+						//应该是马上挂断电话和停止录音
+						MsgCmd_AdoRecdStopTimerEx();
 					}
-					else
-					StartTimer(MSGCMD_TIMER_ADO_STOP,1000*3,MsgCmd_AdoRecdStopTimerEx);
+					else if(hf_is_vaild_service()||(FALSE==hf_admin_is_null()))
+					{
+						hf_print("白卡开始录音。。");
+						hf_set_light_for_rec();
+						MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, 0, 5*60, NULL);
+					}
 				}
         	}
         	else
