@@ -13865,7 +13865,7 @@ endif
 ## HOME SAFE
 ##
 WS_HOME_SAFE = TRUE
-WS_HOME_SAFE_VER = ADO_VER   #录像版本VDO_VER
+WS_HOME_SAFE_VER = VDO_VER   #录像版本VDO_VER
                              #语音版本ADO_VER
                              #语音和录像都开启 ADO_VDO_VER
 													
