@@ -165,7 +165,7 @@ typedef struct _homesafe_info
 	kal_uint8 		signal;
 
 	U16				call_result_time;
-	BOOL			call_result_is_connet;
+	BOOL			io_statue;
 	BOOL                    is_call_out;
 	BOOL                   call_is_complete;
 	
