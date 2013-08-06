@@ -2264,6 +2264,45 @@ void MsgCmd_DelayTick(U32 dt)
     }
 }
 
+/*******************************************************************************
+** 函数: msgcmd_NetworkAttachedEventHdlr
+** 功能: 网络服务事件处理入口
+** 说明: 从这个入口处判断是否有网络服务, 然后启动系统.
+** 参考: [1] DmSelfRegister.c, mmi_dm_sr_nw_availability_changed_notify
+** 作者: LeiFaYu
+*******/
+static mmi_ret msgcmd_NetworkAttachedEventHdlr(mmi_event_struct *evt)
+{
+    srv_nw_info_service_availability_changed_evt_struct *pevt;
+    
+    pevt = (srv_nw_info_service_availability_changed_evt_struct*)evt;	
+
+    
+    switch (pevt->new_status)
+    {
+    case SRV_NW_INFO_SA_FULL_SERVICE:
+        //注销本事件的回调
+        mmi_frm_cb_dereg_event( \
+            EVT_ID_SRV_NW_INFO_SERVICE_AVAILABILITY_CHANGED, \
+            msgcmd_NetworkAttachedEventHdlr, \
+            NULL);
+        
+        mc_trace("network attached!");
+        break;
+    case SRV_NW_INFO_SA_NO_SERVICE:
+        mc_trace("network no service!");
+        break;
+    case SRV_NW_INFO_SA_LIMITED_SERVICE:
+        mc_trace("network limited service!");
+        break;
+        
+    case SRV_NW_INFO_SA_SEARCHING:
+    default:
+        break;
+    }
+
+    return MMI_RET_OK;
+}
 
 /*******************************************************************************
 ** 函数: MsgCmd_EvtProcEntry
@@ -2291,6 +2330,10 @@ mmi_ret MsgCmd_EvtProcEntry(mmi_event_struct *evp)
         break;
     case EVT_ID_SRV_BOOTUP_EARLY_INIT:
         hf_main_init();
+        mmi_frm_cb_reg_event(\
+            EVT_ID_SRV_NW_INFO_SERVICE_AVAILABILITY_CHANGED, \
+            msgcmd_NetworkAttachedEventHdlr, \
+            NULL);
         //MsgCmd_isink(MMI_TRUE);
         break;
     case EVT_ID_IDLE_ENTER:

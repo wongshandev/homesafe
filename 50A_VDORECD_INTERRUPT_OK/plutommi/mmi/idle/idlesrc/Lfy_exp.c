@@ -25,6 +25,7 @@
 #include "mmi_rp_app_umms_mms_def.h"
 #include "mmi_rp_app_idle_def.h"
 #include "mmi_rp_srv_reminder_def.h"
+#include "mmi_rp_app_usbsrv_def.h"
 #include "phbsrvgprot.h"
 #include "simctrlsrvgprot.h"
 #include "nwinfosrvgprot.h"
@@ -40,12 +41,15 @@
 #include "SmsAppGprot.h"
 #include "stack_ltlcom.h"
 #include "nvram_struct.h"
+#include "gpiosrvgprot.h"
 #include "fs_func.h"
 #include "TimerEvents.h"
 #include "med_api.h"
 #include "drv_hisr.h"
+#if !defined(WIN32)
 #include "accdet_hw.h"
 #include "accdet_sw.h"
+#endif
 #include "Eint_internal.h"
 #include <ctype.h>
 #include <string.h>
@@ -149,6 +153,7 @@ static MsgCmdRecdArg *msgcmd_GetVdoRecdArgs(void);
 #define MSGCMD_TIMER_FACTORY      (TIMER_ID_LFY_BASE + 2)
 #define MSGCMD_TIMER_INT_RECHECK  (TIMER_ID_LFY_BASE + 3)
 #define MSGCMD_TIMER_VDO_CHECK    (TIMER_ID_LFY_BASE + 4)
+#define TIMER_DTMF_KEY_DETECT     (TIMER_ID_LFY_BASE + 5)
 
 /* 消息ID定义 */
 #define MSG_ID_MC_VDORECD_REQ     (MSG_ID_LFY_BASE + 0)
@@ -157,6 +162,8 @@ static MsgCmdRecdArg *msgcmd_GetVdoRecdArgs(void);
 #define MSG_ID_MC_SEND_MMS_REQ    (MSG_ID_LFY_BASE + 3)
 #define MSG_ID_MC_CONT_RECD_VDO   (MSG_ID_LFY_BASE + 4)
 #define MSG_ID_MC_EXT_INTERRUPT   (MSG_ID_LFY_BASE + 5)
+#define MSG_ID_DTMF_ANSWER_CALL   (MSG_ID_LFY_BASE + 6)
+
 
 #ifndef lfy_trace
 #define lfy_trace(fmt, ...)  kal_prompt_trace(0, fmt, ##__VA_ARGS__)
@@ -188,6 +195,20 @@ static U32 logCount = 0;
 static FS_HANDLE logFH = -1;
 static WCHAR logFile[] = {L"C:\\cb_log.txt"};
 
+/*******************************************************************************
+** 函数: cb_close_log_file
+** 功能: 关闭日志函数
+** 参数: 无
+** 返回: 无
+** 作者: wasfayu
+*******/
+void cb_close_log_file(void)
+{
+    if (logFH >= FS_NO_ERROR)
+        FS_Close(logFH);
+
+    logFH = -1;
+}
 
 /*******************************************************************************
 ** 函数: cb_write_log
@@ -1854,6 +1875,10 @@ static void msgcmd_InterruptRespond(void *p)
 *******/
 static void msgcmd_InterruptEntrance(void)
 {
+#if defined(WIN32)
+    return;
+#else
+
 #if defined(__ACCDET_SUPPORT__) || defined(__ACCDET_HYBRID_SOLUTION_SUPPORT__)
     MsgCmdExtIntReq *req;
     U32 iA,iB;
@@ -1888,6 +1913,7 @@ static void msgcmd_InterruptEntrance(void)
 	MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_EXT_INTERRUPT, (void *)req);
     EINT_UnMask(MC_EINT_NO);
 #endif
+#endif
 }
 
 /*******************************************************************************
@@ -1899,6 +1925,7 @@ static void msgcmd_InterruptEntrance(void)
 *******/
 void MsgCmd_InterruptMask(MMI_BOOL mask)
 {
+    #if !defined(WIN32)
     if (mask)
     {
     #if defined(__ACCDET_SUPPORT__) || defined(__ACCDET_HYBRID_SOLUTION_SUPPORT__)
@@ -1917,7 +1944,7 @@ void MsgCmd_InterruptMask(MMI_BOOL mask)
     		MSG_ID_MC_EXT_INTERRUPT,
     		(PsIntFuncPtr)msgcmd_InterruptRespond,
     		MMI_FALSE);
-        
+
     #if defined(__ACCDET_SUPPORT__) || defined(__ACCDET_HYBRID_SOLUTION_SUPPORT__)
         IRQClearInt(IRQ_ACCDET_CODE);
         IRQUnmask(IRQ_ACCDET_CODE);
@@ -1925,15 +1952,18 @@ void MsgCmd_InterruptMask(MMI_BOOL mask)
         EINT_UnMask(MC_EINT_NO);
     #endif
     }
+#endif
     
     lfy_trace("%s, mask=%d.", __FUNCTION__, mask);
 }
 
 static void msgcmd_interrupt_lisr(void)
 {
+#if !defined(WIN32)
    DRV_ACCDET_WriteReg32(ACCDET_IRQ_STS, ACCDET_IRQ_CLR); //pause the IRQ
    IRQMask(IRQ_ACCDET_CODE);
    drv_active_hisr(DRV_ACCDET_HISR_ID);
+#endif
 }
 
 /*******************************************************************************
@@ -1946,6 +1976,7 @@ static void msgcmd_interrupt_lisr(void)
 *******/
 void MsgCmd_InterruptRegister(void)
 {
+#if !defined(WIN32)
 #if defined(__ACCDET_SUPPORT__) || defined(__ACCDET_HYBRID_SOLUTION_SUPPORT__)
     DRV_Register_HISR(DRV_ACCDET_HISR_ID, msgcmd_InterruptEntrance);
     IRQ_Register_LISR(IRQ_ACCDET_CODE, msgcmd_interrupt_lisr, "MSGCMD handler");
@@ -1961,6 +1992,7 @@ void MsgCmd_InterruptRegister(void)
 
     //最开始是屏蔽状态, 待初始化之后再打开
     EINT_Mask(MC_EINT_NO);
+#endif
 #endif
 }
 
@@ -3593,6 +3625,395 @@ MMI_BOOL MsgCmd_VdoRecdStart(
 }
 #endif
 
+
+#if 1//defined(__MSGCMD_DTMF__)
+#if !defined(__KEY_TONE_DETECTION__)
+#error "Please define __KEY_TONE_DETECTION__"
+#endif
+
+static void dtmf_StopKeyDetect(void);
+
+#define dtmf_trace lfy_trace
+
+static void dtmf_KeyDetectTimeoutCb(void);
+static void dtmf_SwitchFSMStatus(void);
+static void dtmf_KeyDetectCallback(S16 key);
+static void dtmf_StartKeyDetect(U32 timeout);
+static void dtmf_StopKeyDetect(void);
+static WCHAR *dtmf_CombineVoiceFilePath(WCHAR *output, DtmfVoiceIndex index);
+static void dtmf_PlayPromptVoiceFileCb(mdi_result result, void *usd);
+static mdi_result dtmf_PlayPromptVoiceFile(DtmfVoiceIndex idx, mdi_ext_callback cbf);
+static void dtmf_AutoAnswerResponse(void *p);
+
+static DtmfControl dtmfContext;
+
+const static VoiceAttr voiceTab[] = {
+    {DTMF_VOC_NO_VOICE       , L""},
+    {DTMF_VOC_PRESS_TO_ENTRY , L"1Entry"},
+    {DTMF_VOC_INPUT_PASSWORD , L"2Password"},
+    {DTMF_VOC_CHOOSE_OPTION  , L"3Option"},
+    {DTMF_VOC_RETRY_INPUT    , L"4Retry"},
+    {DTMF_VOC_ERROR_TO_EXIT  , L"5Warn"},
+    {DTMF_VOC_ACCEPT_REQUEST , L"6Accept"},
+    {DTMF_VOC_INPUT_PARAM    , L"7Param"},
+};
+
+/*******************************************************************************
+** 函数: Dtmf_Reset
+** 功能: 参数复位
+** 参数: 无
+** 返回: 无
+** 作者: wasfayu
+*******/
+void Dtmf_Reset(void)
+{
+    memset(&dtmfContext, 0, sizeof(DtmfControl));
+    dtmfContext.hotKey        = DTMF_HOT_KEY_VALUE;
+    dtmfContext.repeateTimes  = DTMF_MAX_REPEAT_TIMES;
+    dtmfContext.detectTime    = DTMF_DEF_DETECT_TIME;
+}
+
+/*******************************************************************************
+** 函数: Dtmf_Initialize
+** 功能: 初始化
+** 参数: 无
+** 返回: 无
+** 作者: wasfayu
+*******/
+void Dtmf_Initialize(void)
+{
+    Dtmf_Reset();
+    mmi_frm_set_protocol_event_handler(
+        MSG_ID_DTMF_ANSWER_CALL,
+        (PsIntFuncPtr)dtmf_AutoAnswerResponse,
+        MMI_FALSE);
+}
+
+/*******************************************************************************
+** 函数: dtmf_KeyDetectTimeoutCb
+** 功能: 按键检测超时回调函数
+** 参数: 无
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void dtmf_KeyDetectTimeoutCb(void)
+{
+    dtmf_StopKeyDetect();
+
+    //重新播放提示语
+    switch (dtmfContext.state)
+    {
+    case DTMF_STATE_IDLE:
+        break;
+    case DTMF_STATE_WAITING_ENTRY:
+        break;
+    case DTMF_STATE_INPUT_PWD:
+        break;
+    case DTMF_STATE_CHOOSE_CMD:
+        break;
+    case DTMF_STATE_INPUT_PARAM:
+        break;
+    case DTMF_STATE_GOODBYE:
+        break;
+    case DTMF_STATE_UNDEFINED:
+    default:
+        break;
+    }
+}
+
+/*******************************************************************************
+** 函数: dtmf_SwitchFSMStatus
+** 功能: 切换状态机的状态
+** 参数: 无
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void dtmf_SwitchFSMStatus(void)
+{
+    mdi_result result;
+
+    dtmf_trace("%s: current state=%d.", __FUNCTION__,dtmfContext.state);
+    
+    switch (dtmfContext.state)
+    {
+    case DTMF_STATE_IDLE:
+        //播放提示语 1Entry.wav
+        result = dtmf_PlayPromptVoiceFile(DTMF_VOC_PRESS_TO_ENTRY, dtmf_PlayPromptVoiceFileCb);
+        dtmfContext.state = DTMF_STATE_WAITING_ENTRY;
+        //行不行都进入到下一个模式即按键检测模式
+        dtmf_StartKeyDetect(dtmfContext.detectTime);
+        break;
+    case DTMF_STATE_WAITING_ENTRY:
+        //播放提示语 2Password.wav
+        result = dtmf_PlayPromptVoiceFile(DTMF_VOC_INPUT_PARAM, dtmf_PlayPromptVoiceFileCb);
+        dtmfContext.state = DTMF_STATE_INPUT_PWD;
+        //行不行都进入到下一个模式即按键检测模式
+        dtmf_StartKeyDetect(dtmfContext.detectTime);
+        break;
+    case DTMF_STATE_INPUT_PWD:
+        //播放提示语 3Option.wav
+        result = dtmf_PlayPromptVoiceFile(DTMF_VOC_INPUT_PARAM, dtmf_PlayPromptVoiceFileCb);
+        dtmfContext.state = DTMF_STATE_CHOOSE_CMD;
+        //行不行都进入到下一个模式即按键检测模式
+        dtmf_StartKeyDetect(dtmfContext.detectTime);
+        break;
+    case DTMF_STATE_CHOOSE_CMD:
+        //播放提示语 7Param.wav
+        result = dtmf_PlayPromptVoiceFile(DTMF_VOC_INPUT_PARAM, dtmf_PlayPromptVoiceFileCb);
+        dtmfContext.state = DTMF_STATE_INPUT_PARAM;
+        //行不行都进入到下一个模式即按键检测模式
+        dtmf_StartKeyDetect(dtmfContext.detectTime);
+        break;
+    case DTMF_STATE_INPUT_PARAM:
+        break;
+    case DTMF_STATE_GOODBYE:
+        break;
+    case DTMF_STATE_UNDEFINED:
+    default:
+        break;
+    }
+}
+
+/*******************************************************************************
+** 函数: dtmf_KeyDetectCallback
+** 功能: 按键检测回调函数
+** 参数: 无
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void dtmf_KeyDetectCallback(S16 key)
+{
+	dtmf_trace("%s: key=0x%x, state=%d.", __FUNCTION__, key, dtmfContext.state);
+
+    if (!mdi_audio_snd_is_idle())
+    {
+        mdi_audio_snd_stop();
+    }
+
+    mdi_audio_stop_keytone_detect();
+    
+    switch (dtmfContext.state)
+    {
+    case DTMF_STATE_IDLE:
+        break;
+    case DTMF_STATE_WAITING_ENTRY:
+        if (dtmfContext.hotKey == (U8)key)
+        {
+            //输入密码状态
+            dtmf_SwitchFSMStatus();
+        }
+        else
+        {
+            //按键错误, 重新检测, 播放提示语
+            dtmfContext.repeateCount ++;
+        }
+        break;
+    case DTMF_STATE_INPUT_PWD:
+        if (dtmfContext.hotKey == (U8)key)
+        {
+            dtmf_SwitchFSMStatus();
+        }
+        else if (('0' <= (char)key && (char)key <= '9') || '*' <= (char)key)
+        {
+            U32 index = dtmfContext.param.password[7];
+
+            if (index < 6)
+            {
+                dtmfContext.param.password[index] = (char)key;
+            }
+            dtmfContext.param.password[7] ++;
+        }
+        else
+        {
+            //按键错误
+        }
+        break;
+    case DTMF_STATE_CHOOSE_CMD:
+        if (dtmfContext.hotKey == (U8)key)
+        {
+            dtmf_SwitchFSMStatus();
+        }
+        else if ((char)key < '0'+DTMF_CMD_UNDEFINED)
+        {
+            dtmfContext.command = (char)key - '0';
+            dtmf_SwitchFSMStatus();
+        }
+        else
+        {
+            
+        }
+        break;
+    case DTMF_STATE_INPUT_PARAM:
+        break;
+    case DTMF_STATE_GOODBYE:
+        break;
+    case DTMF_STATE_UNDEFINED:
+    default:
+        break;
+    }
+}
+
+/*******************************************************************************
+** 函数: dtmf_StartKeyDetect
+** 功能: 开始DTMF的按键检测
+** 参数: 无
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void dtmf_StartKeyDetect(U32 timeout)
+{
+    mdi_result ret;
+
+    ret = mdi_audio_start_keytone_detect(dtmf_KeyDetectCallback);
+    dtmf_trace("%s: time=%d. ret=%d.", __FUNCTION__, timeout, ret);
+    if (MDI_AUDIO_SUCCESS == ret)
+    {
+        StartTimer(TIMER_DTMF_KEY_DETECT, timeout, dtmf_KeyDetectTimeoutCb);
+        dtmfContext.start = MMI_TRUE;
+    }
+    else
+    {
+        //失败了, 重新提示
+    }
+}
+
+/*******************************************************************************
+** 函数: dtmf_StopKeyDetect
+** 功能: 停止DTMF按键检测
+** 参数: 无
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void dtmf_StopKeyDetect(void)
+{
+    StopTimer(TIMER_DTMF_KEY_DETECT);
+    if (dtmfContext.start)
+    {
+        mdi_audio_stop_keytone_detect();
+        dtmfContext.start = MMI_FALSE;
+    }
+}
+
+/*******************************************************************************
+** 函数: dtmf_CombineVoiceFilePath
+** 功能: 构建语音文件路径
+** 参数: output   -- 文件绝对路径输出
+**       fileindex-- 文件索引
+** 返回: output的地址
+** 作者: wasfayu
+*******/
+static WCHAR *dtmf_CombineVoiceFilePath(WCHAR *output, DtmfVoiceIndex index)
+{
+    ASSERT(NULL != output);
+
+    kal_wsprintf(output, "%c:\\%w\\%w.wav",
+        MsgCmd_GetUsableDrive(),DTMF_VOICE_MAIN_PATH,voiceTab[index].name);
+    
+    return output;    
+}
+
+/*******************************************************************************
+** 函数: dtmf_PlayPromptVoiceFileCb
+** 功能: 播放"欢迎使用, 请按'#'键进入系统"提示语的回调函数
+** 参数: result -- 播放结果
+**       usd    -- 用户数据
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void dtmf_PlayPromptVoiceFileCb(mdi_result result, void *usd)
+{
+    dtmf_trace("%s, L:%d, ret=%d. state=%d.", __FUNCTION__, __LINE__, result, dtmfContext.state);
+
+    //如果当前状态为xx状态则返回
+    
+    if (result == MDI_AUDIO_END_OF_FILE)
+    {
+        //等待按键检测
+    }
+    else
+    {
+        //播放失败, 重新播放系统自带的资源
+    }
+}
+
+/*******************************************************************************
+** 函数: dtmf_PlayPromptVoiceFile
+** 功能: 播放提示语
+** 参数: idx  -- 语音资源索引
+**       cbf  -- 回调函数
+** 返回: 无
+** 作者: wasfayu
+*******/
+static mdi_result dtmf_PlayPromptVoiceFile(DtmfVoiceIndex idx, mdi_ext_callback cbf)
+{
+    WCHAR filepath[MSGCMD_FILE_PATH_LENGTH+1];
+    mdi_result result;
+
+    if (!mdi_audio_snd_is_idle())
+    {
+        mdi_audio_snd_stop();
+    }
+    
+    memset(filepath, 0, sizeof(WCHAR)*(MSGCMD_FILE_PATH_LENGTH+1));
+    dtmf_CombineVoiceFilePath(filepath, idx);
+    result = mdi_audio_snd_check_file_format(filepath);
+
+    dtmf_trace("%s, 1, index=%d. ret=%d.", __FUNCTION__, idx, result);
+
+    if (result == MDI_AUDIO_SUCCESS)
+    {
+        result = mdi_audio_snd_play_file_with_vol_path(
+                (void*)filepath,
+                1,
+                cbf,
+                NULL,
+                6,
+                MDI_DEVICE_SPEAKER2);
+        
+        dtmf_trace("%s, 2, ret=%d.", __FUNCTION__, result);
+    }
+
+    return result;
+}
+
+/*******************************************************************************
+** 函数: dtmf_AutoAnswerResponse
+** 功能: 请求应答来电的消息响应函数
+** 参数: p  -- DtmfAutoAnswerReq
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void dtmf_AutoAnswerResponse(void *p)
+{
+    DtmfAutoAnswerReq *rsp = (DtmfAutoAnswerReq*)p;
+
+    Dtmf_Reset();
+    dtmf_SwitchFSMStatus();
+}
+
+/*******************************************************************************
+** 函数: Dtmf_AutoAnswerReqSend
+** 功能: 发送请求应答来电的消息
+** 参数: name  -- 来电号码
+**       number-- 显示名字
+** 返回: 无
+** 作者: wasfayu
+*******/
+void Dtmf_AutoAnswerReqSend(WCHAR *name, char *number)
+{
+    DtmfAutoAnswerReq *req = (DtmfAutoAnswerReq*)\
+            MsgCmd_ConstructPara(sizeof(DtmfAutoAnswerReq));
+
+    app_ucs2_strcpy((S8*)req->info.name, (const S8*)name);
+    strcpy(req->info.number, number);
+    
+    dtmf_trace("%s, number=%s.", __FUNCTION__, number);
+        
+    MsgCmd_SendIlm2Mmi(MSG_ID_DTMF_ANSWER_CALL, (void*)req);
+}
+
+#endif/*__MSGCMD_DTMF__*/
+
 /*******************************************************************************
 ** 函数: lfy_WriteFile
 ** 功能: 将数据写入文件
@@ -3749,6 +4170,8 @@ void lfy_normal_init(void)
         (PsIntFuncPtr)msgcmd_SendMMSResponse,
         MMI_FALSE);
 
+    Dtmf_Initialize();
+    
     lfy_trace("%s", __FUNCTION__);
 }
 

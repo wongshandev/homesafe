@@ -145,8 +145,10 @@ static void dtmf_KeyDetectCallback(S16 key)
 *******/
 static void dtmf_StartKeyDetect(U32 timeout)
 {
+    dtmf_trace("%s, L:%d.", __FUNCTION__, __LINE__);
     if (MDI_AUDIO_SUCCESS == mdi_audio_start_keytone_detect(dtmf_KeyDetectCallback))
     {
+        dtmf_trace("%s, L:%d.", __FUNCTION__, __LINE__);
         StartTimer(TIMER_DTMF_KEY_DETECT, timeout, dtmf_KeyDetectTimeoutCb);
         dtmfContext.start = MMI_TRUE;
     }
@@ -182,7 +184,7 @@ static WCHAR *dtmf_CombineVoiceFilePath(WCHAR *output, DtmfVoiceIndex index)
     ASSERT(NULL != output);
 
     kal_wsprintf(output, "%c:\\%w\\%w.wav",
-        MsgCmd_GetUsableDrive(),DTMF_VOICE_MAIN_PATH,voiceTab[index]);
+        MsgCmd_GetUsableDrive(),DTMF_VOICE_MAIN_PATH,voiceTab[index].name);
     
     return output;    
 }
@@ -334,7 +336,9 @@ static void dtmf_AutoAnswerResponse(void *p)
 {
     DtmfAutoAnswerReq *rsp = (DtmfAutoAnswerReq*)p;
     mdi_result result;
-   
+
+    dtmf_trace("%s", __FUNCTION__);
+    
     //≤•∑≈Ã· æ”Ô 1 press # to entry system
     result = dtmf_PlayPromptVoiceFile(DTMF_VOC_PRESS_TO_ENTRY, dtmf_AutoAnswerPlayVoiceCb);
 
