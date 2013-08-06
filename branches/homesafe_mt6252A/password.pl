@@ -31,6 +31,12 @@ if ($line eq "1")
     {
         my $outputlistfile = "~toBinFileList.txt";
         
+        ##防止bin文件在 "backup from *.bin" 的时候将bin文件的后缀名给搞没了
+        if (!($line =~ m/\*.bin/i))
+        {
+            $line .= " *.bin";	
+        }
+        	
         ##创建文件
         open(TOBIN, ">$toBin") or die "can not create file.\n";
         unlink $outputlistfile;

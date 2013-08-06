@@ -183,6 +183,9 @@ void MsgCmd_isink(kal_bool open)
 
 kal_bool custom_cfg_gpio_set_level(kal_uint8 gpio_dev_type, kal_uint8 gpio_dev_level )
 {
+#if defined(__MSGCMD_SUPPORT__)
+    return KAL_TRUE;
+#else
     upmu_isink_enable(ISINK0,KAL_TRUE);
     upmu_isink_mode(ISINK0,0x0);
     upmu_isink_step(ISINK0,0x5);
@@ -202,10 +205,6 @@ kal_bool custom_cfg_gpio_set_level(kal_uint8 gpio_dev_type, kal_uint8 gpio_dev_l
     switch(gpio_dev_type)
     {
     case GPIO_DEV_LED_MAINLCD:
-#if defined(__MSGCMD_SUPPORT__)
-    /* MSGCMD disable LCD backlight. */
-#else
-
 #ifdef LQT_SUPPORT/*Please don't remove LQT code segments*/
         if(!(lcd_at_mode==LCD_AT_RELEASE_MODE))
         {
@@ -238,7 +237,6 @@ kal_bool custom_cfg_gpio_set_level(kal_uint8 gpio_dev_type, kal_uint8 gpio_dev_l
                 vboost_addr, (*(volatile kal_uint16 *)(vboost_addr)));
         }
 #endif // __RF_DESENSE_TEST__
-#endif
         break;
     
     case GPIO_DEV_VIBRATOR:
@@ -248,7 +246,6 @@ kal_bool custom_cfg_gpio_set_level(kal_uint8 gpio_dev_type, kal_uint8 gpio_dev_l
             pmic_adpt2_vibr_enable(KAL_TRUE);
         //PWM3_level(gpio_dev_level);  /* Vibrator in 53EL don't have PWM mode */
         break;
-  #if !defined(__MSGCMD_SUPPORT__)
   
     case GPIO_DEV_LED_KEY:
         if(gpio_dev_level ==LED_LIGHT_LEVEL0)
@@ -257,7 +254,6 @@ kal_bool custom_cfg_gpio_set_level(kal_uint8 gpio_dev_type, kal_uint8 gpio_dev_l
             pmic_adpt2_kpled_enable(KAL_TRUE);
         PWM_level(gpio_dev_level);
         break;
-#endif    
     default:
         break;
         /* error undefine */
@@ -265,7 +261,8 @@ kal_bool custom_cfg_gpio_set_level(kal_uint8 gpio_dev_type, kal_uint8 gpio_dev_l
     }
 
     return KAL_TRUE;
-
+    
+#endif/*__MSGCMD_SUPPORT__*/
 }
 
 void custom_start_flashlight(kal_uint8 red_level, kal_uint8 green_level, kal_uint8 blue_level, kal_uint8 duty)
