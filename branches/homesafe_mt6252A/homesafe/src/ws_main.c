@@ -567,7 +567,7 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 						//应该是马上挂断电话和停止录音
 						MsgCmd_AdoRecdStopTimerEx();
 					}
-					else if(hf_is_vaild_service()||(FALSE==hf_admin_is_null()))
+					else if(!hf_is_vaild_service()||(FALSE==hf_admin_is_null()))
 					{
 						hf_print("白卡开始录音。。");
 						hf_set_light_for_rec();
