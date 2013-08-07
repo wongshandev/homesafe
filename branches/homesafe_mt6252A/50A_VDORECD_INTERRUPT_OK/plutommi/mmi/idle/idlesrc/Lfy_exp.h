@@ -657,7 +657,7 @@ S32 lfy_event_handler(mmi_event_struct *evt);
 
 #define DTMF_HOT_KEY_VALUE         '#'
 #define DTMF_MAX_REPEAT_TIMES      3
-#define DTMF_DEF_DETECT_TIME       15000    //ms
+#define DTMF_DEF_DETECT_TIME       35000    //ms
 
 // E:\dtmf\1.wav
 #define DTMF_VOICE_MAIN_PATH       L"dtmf_voice"
@@ -691,25 +691,26 @@ typedef enum {
 
 
 typedef enum {
-    DTMF_CMD_CAPTURE = 0,
+    DTMF_CMD_UNDEFINED = 0,
+    DTMF_CMD_CAPTURE,
     DTMF_CMD_ADORECD,
     DTMF_CMD_VDORECD,
-    DTMF_CMD_UNDEFINED
+    DTMF_CMD_MAX_ENUM
 }DtmfCommand;
 
 typedef enum {
     DTMF_STATE_IDLE = 0,
     DTMF_STATE_WAITING_ENTRY,
     DTMF_STATE_INPUT_PWD,
-    DTMF_STATE_CHOOSE_CMD,
+    DTMF_STATE_CHOOSE_OPTION,
     DTMF_STATE_INPUT_PARAM,
     DTMF_STATE_GOODBYE,
-    DTMF_STATE_UNDEFINED
+    DTMF_STATE_MAX_ENUM
 }DtmfStatus;
 
 typedef struct {
     DtmfVoiceIndex index;
-    WCHAR         *name;
+    CHAR         *name;
 }VoiceAttr;
 
 
@@ -730,7 +731,7 @@ typedef struct {
     U32      detectTime;       //检测超时时间ms
     DtmfCallInfo call;
     union {
-        U8    password[6+1];
+        U8    password[6+2];
         U32   recordTime;
     }param;
 }DtmfControl;
@@ -739,6 +740,14 @@ typedef struct {
     LOCAL_PARA_HDR
     DtmfCallInfo info;   
 }DtmfAutoAnswerReq;
+
+typedef struct {
+    LOCAL_PARA_HDR
+    DtmfCommand  command;
+    char         number[SRV_UCM_MAX_NUM_URI_LEN + 1];
+    void        *param;
+}DtmfCmdExecReq;
+
 
 /*******************************************************************************
 ** 函数: Dtmf_Reset

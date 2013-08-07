@@ -52,6 +52,7 @@ enum msgcmd_msg_id_enum{
 	MSG_ID_MC_EXT_INTERRUPT   ,
 	MSG_ID_MC_CONT_RECD_VDO   ,
 	MSG_ID_DTMF_ANSWER_CALL   ,
+	MSG_ID_DTMF_EXEC_CMD_REQ  ,
 };
 
 /* ×Ö·ûÀàÐÍ */
