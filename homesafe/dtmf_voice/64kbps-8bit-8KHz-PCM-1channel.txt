@@ -1,0 +1,11 @@
+64kbps-8bit-8KHz-PCM-1channel
+
+welcome to use, press # to entry.
+please enter password.
+Please choose option: 1 is capture, 2 is audio record, 3 is video record.
+please enter record time, unit in minutes.
+password error. please enter password.
+choose error. please choose option: 1 is capture, 2 is audio record, 3 is video record.
+enter error, please try again.
+your enter too many error times. thanks, goodbye.
+your request is accept. thanks. goodbye.

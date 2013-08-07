@@ -23,6 +23,7 @@
 #define DTMF_HOT_KEY_VALUE         '#'
 #define DTMF_MAX_REPEAT_TIMES      3
 #define DTMF_DEF_DETECT_TIME       15000    //ms
+#define DTMF_ENTRY_DETECT_TIME     10000
 
 // E:\dtmf\1.wav
 #define DTMF_VOICE_MAIN_PATH       L"dtmf_voice"
@@ -50,6 +51,8 @@ typedef enum {
     DTMF_VOC_ERROR_TO_EXIT  = 5,
     DTMF_VOC_ACCEPT_REQUEST = 6,
     DTMF_VOC_INPUT_PARAM    = 7,
+    DTMF_VOC_RETRY_PASSWORD = 8,
+    DTMF_VOC_RETRY_OPTIOIN  = 9,
     
     DTMF_VOC_NOT_DEFINED    = 0,
 }DtmfVoiceIndex;
@@ -104,6 +107,14 @@ typedef struct {
     LOCAL_PARA_HDR
     DtmfCallInfo info;   
 }DtmfAutoAnswerReq;
+
+typedef struct {
+    LOCAL_PARA_HDR
+    DtmfCommand  command;
+    char         number[SRV_UCM_MAX_NUM_URI_LEN + 1];
+    void        *param;
+}DtmfCmdExecReq;
+
 
 /*******************************************************************************
 ** º¯Êý: Dtmf_Reset

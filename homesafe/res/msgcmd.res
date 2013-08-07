@@ -12,6 +12,18 @@
 
     <!-----------------------------------------------------Image Resource Area------------------------------------------------------>
     //<IMAGE id="IMG_ID_NPPLG_AV_PLAY">CUST_IMG_PATH"\\\\MainLCD\\\\NPPlg\\\\Play_normal.png"</IMAGE>
+
+    <!-----------------------------------------------------Audio Resource Area------------------------------------------------------>
+    <AUDIO id="MC_DTMF_VOC_WELCOME">"..\\\\..\\\\..\\\\homesafe\\\\dtmf_voice\\\\welcome.wav"</AUDIO>
+    <AUDIO id="MC_DTMF_VOC_PASSWORD">"..\\\\..\\\\..\\\\homesafe\\\\dtmf_voice\\\\enterPwd.wav"</AUDIO>
+    <AUDIO id="MC_DTMF_VOC_OPTION">"..\\\\..\\\\..\\\\homesafe\\\\dtmf_voice\\\\chooseOpt.wav"</AUDIO>
+    <AUDIO id="MC_DTMF_VOC_PARAM">"..\\\\..\\\\..\\\\homesafe\\\\dtmf_voice\\\\enterParam.wav"</AUDIO>
+    <AUDIO id="MC_DTMF_VOC_ACCEPT">"..\\\\..\\\\..\\\\homesafe\\\\dtmf_voice\\\\accept.wav"</AUDIO>
+    <AUDIO id="MC_DTMF_VOC_ERROR">"..\\\\..\\\\..\\\\homesafe\\\\dtmf_voice\\\\error.wav"</AUDIO>
+    <AUDIO id="MC_DTMF_VOC_RETRY">"..\\\\..\\\\..\\\\homesafe\\\\dtmf_voice\\\\retry.wav"</AUDIO>
+    <AUDIO id="MC_DTMF_VOC_RETRY_PWD">"..\\\\..\\\\..\\\\homesafe\\\\dtmf_voice\\\\RetryPwd.wav"</AUDIO>
+    <AUDIO id="MC_DTMF_VOC_RETRY_OPT">"..\\\\..\\\\..\\\\homesafe\\\\dtmf_voice\\\\RetryOpt.wav"</AUDIO>
+    <AUDIO id="MC_DTMF_VOC_SILENCE">"..\\\\..\\\\..\\\\homesafe\\\\dtmf_voice\\\\silence.wav"</AUDIO>
     
     <!-----------------------------------------------------event handler area------------------------------------------------------>
     <RECEIVER id="EVT_ID_IDLE_ENTER" proc="MsgCmd_EvtProcEntry"/>

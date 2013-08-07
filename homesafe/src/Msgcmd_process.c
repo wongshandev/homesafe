@@ -2680,6 +2680,10 @@ MMI_BOOL MsgCmd_AdoRecdStart(
     if (!MsgCmd_GetTFcardDrive(NULL))
         return MMI_FALSE;
 
+    if (!forever && time_in_sec <= MsgCmd_GetAdoRecdArgs()->ignore_time)
+        return MMI_FALSE;
+
+
     //有电话在忙
     if (MsgCmd_GetCallCount() > 0)
         return MMI_FALSE;
@@ -2703,12 +2707,12 @@ MMI_BOOL MsgCmd_AdoRecdStart(
     //MsgCmd_isink(MMI_TRUE);
     arm = (AdoRecdMngr*)MsgCmd_Malloc(sizeof(AdoRecdMngr), 0);
     arm->saveGap = auto_save_gap ? auto_save_gap : MsgCmd_GetAdoRecdArgs()->save_gap;
-    arm->time    = time_in_sec;
+    arm->time    = time_in_sec ? time_in_sec : arm->saveGap;
     arm->forever = forever;
     if (!arm->forever && arm->time < arm->saveGap)
         arm->saveGap = arm->time;
     
-    if (replay_number)
+    if (replay_number && replay_number[0] != '\0')
         strcpy(arm->number, replay_number);
     else
         arm->number[0] = '\0';
@@ -2990,7 +2994,7 @@ MMI_BOOL MsgCmd_CaptureEntry(char *replay_number)
 		MsgCmd_DelayTick(MSGCMD_CAPTURE_DLY_TICK);
 		result = msgcmd_CaptureDoing((S8 *)req->picpath);
         
-		if (result && NULL != replay_number)
+		if (result && NULL != replay_number && replay_number[0] != '\0')
 		{
 			//send MMS
             req->sim = MsgCmd_GetSimIndex() == 2 ? MMA_SIM_ID_SIM2 : MMA_SIM_ID_SIM1;
@@ -3730,6 +3734,9 @@ MMI_BOOL MsgCmd_VdoRecdStart(
     if (MsgCmd_VdoRecdBusy())
         return MMI_FALSE;
 
+    if (!forever && time_in_sec <= MsgCmd_GetVdoRecdArgs()->ignore_time)
+        return MMI_FALSE;
+    
     //T卡不存在就返回
     if (!MsgCmd_GetTFcardDrive(NULL))
         return MMI_FALSE;
@@ -3768,12 +3775,13 @@ MMI_BOOL MsgCmd_VdoRecdStart(
     
     vrm = (VdoRecdMngr*)MsgCmd_Malloc(sizeof(VdoRecdMngr), 0);
     vrm->forever = forever;
-    vrm->time    = time_in_sec;
     vrm->saveGap = auto_save_gap ? auto_save_gap : MsgCmd_GetVdoRecdArgs()->save_gap;
+    vrm->time    = time_in_sec ? time_in_sec : vrm->saveGap;
+    
     if (!vrm->forever && vrm->time < vrm->saveGap)
         vrm->saveGap = vrm->time;
     
-    if (replay_number)
+    if (replay_number && replay_number[0] != '\0')
         strcpy(vrm->number, replay_number);
     else
         vrm->number[0] = '\0';
