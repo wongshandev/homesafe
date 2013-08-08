@@ -19,8 +19,16 @@
 #include "mdi_datatype.h"
 #include "ucmsrvgprot.h"
 
+//macro
+#define __NEED_CHECK_PASSWORD__
+#define __RECIVE_CMD_PARAMETER__
+#define __EXEC_IN_TIMER_CBF__
+#define __TEST_PLAY_AUDIO__
 
 #define DTMF_HOT_KEY_VALUE         '#'
+#if defined(__TEST_PLAY_AUDIO__)
+#define DTMF_TEST_KEY_VALUE        '*'
+#endif
 #define DTMF_MAX_REPEAT_TIMES      3
 #define DTMF_DEF_DETECT_TIME       15000    //ms
 #define DTMF_ENTRY_DETECT_TIME     10000
@@ -69,15 +77,15 @@ typedef enum {
     DTMF_STATE_IDLE = 0,
     DTMF_STATE_WAITING_ENTRY,
     DTMF_STATE_INPUT_PWD,
-    DTMF_STATE_CHOOSE_CMD,
+    DTMF_STATE_CHOOSE_OPTION,
     DTMF_STATE_INPUT_PARAM,
     DTMF_STATE_GOODBYE,
-    DTMF_STATE_UNDEFINED
+    DTMF_STATE_MAX_ENUM
 }DtmfStatus;
 
 typedef struct {
     DtmfVoiceIndex index;
-    WCHAR         *name;
+    CHAR          *name;
 }VoiceAttr;
 
 
@@ -92,9 +100,12 @@ typedef struct {
     DtmfStatus   state;         //当前状态
     DtmfCommand  command;       //选定的命令
     MMI_BOOL     start;
-    U8       repeateTimes;      //最大可重复次数
-    U8       repeateCount;      //已重复次数
+    U8       rptMax;      //最大可重复次数
+    U8       rptCount;      //已重复次数
     U8       hotKey;            //热键
+#if defined(__TEST_PLAY_AUDIO__)
+	U8       testKey;
+#endif
     U32      detectTime;       //检测超时时间ms
     DtmfCallInfo call;
     union {

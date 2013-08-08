@@ -65,6 +65,9 @@
 #include "accdet_hw.h"
 #include "accdet_sw.h"
 #endif
+#if defined(__MSGCMD_DTMF__)
+#include "./../inc/msgcmd_dtmf.h"
+#endif
 
 
 
@@ -3861,6 +3864,9 @@ void MsgCmd_ProcessInit(void)
         (PsIntFuncPtr)msgcmd_SendMMSRespond,
         MMI_TRUE);
 
+#if defined(__MSGCMD_DTMF__)
+	Dtmf_Initialize();
+#endif
 }
 
 #endif/*__MSGCMD_SUPPORT__*/

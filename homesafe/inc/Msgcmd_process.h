@@ -22,6 +22,8 @@
 #include "mma_struct.h"
 #include "ucsrvgprot.h"
 #include "umsrvdefs.h"
+#include "mmi_rp_app_msgcmd_def.h"
+
 
 /* 系统默认值 */
 #define MSGCMD_FILE_PATH_LENGTH   127
@@ -39,7 +41,10 @@ enum msgcmd_timer_id_enum{
 	MSGCMD_TIMER_SHUTDOWN     ,
 	MSGCMD_TIMER_FACTORY      ,
 	MSGCMD_TIMER_INT_RECHECK  ,
+#if defined(__MSGCMD_DTMF__)
 	TIMER_DTMF_KEY_DETECT     ,
+	TIMER_DTMF_DELAY_EXEC     ,
+#endif
 };
 
 /* 消息ID定义 */
@@ -51,8 +56,10 @@ enum msgcmd_msg_id_enum{
 	MSG_ID_MC_SEND_MMS_REQ    ,
 	MSG_ID_MC_EXT_INTERRUPT   ,
 	MSG_ID_MC_CONT_RECD_VDO   ,
+#if defined(__MSGCMD_DTMF__)
 	MSG_ID_DTMF_ANSWER_CALL   ,
 	MSG_ID_DTMF_EXEC_CMD_REQ  ,
+#endif
 };
 
 /* 字符类型 */
