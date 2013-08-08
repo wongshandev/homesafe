@@ -298,27 +298,58 @@ static void dtmf_CmdExecRsp(void *p)
     switch(rsp->command)
     {
     case DTMF_CMD_CAPTURE:
-        dtmf_trace("%s, CAPTURE.", __FUNCTION__);
-        MsgCmd_CaptureEntry(rsp->number);
+		{
+            MsgcmdCaptureReq *req = (MsgcmdCaptureReq*)MsgCmd_ConstructPara(sizeof(MsgcmdCaptureReq));
+
+			dtmf_trace("%s, CAPTURE.", __FUNCTION__);
+            strcpy(req->number, rsp->number);
+            MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_CAPTURE_REQ, (void *)req);
+        }
         break;
         
     case DTMF_CMD_ADORECD:
-        dtmf_trace("%s, AUDIO RECORD.", __FUNCTION__);
+		{
+            MsgcmdAdoProcReq *req = (MsgcmdAdoProcReq*)\
+                MsgCmd_ConstructPara(sizeof(MsgcmdAdoProcReq));
+
+			dtmf_trace("%s, AUDIO RECORD.", __FUNCTION__);
+            req->saveGap = MsgCmd_GetAdoRecdArgs()->save_gap;
+            strcpy(req->number, rsp->number);
+            
+            if (MsgCmd_AdoRecdBusy())
+            {
+                req->record  = MMI_FALSE;
+            }
+            else
+            {
+                req->record  = MMI_TRUE;
+                req->forever = MMI_FALSE;
+            }
+            
+            MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_ADORECD_REQ, (void *)req);
+        }
         break;
         
     case DTMF_CMD_VDORECD:
-        dtmf_trace("%s, VIDEO RECORD.", __FUNCTION__);
         {
-            MsgCmdRecdArg *vsp = MsgCmd_GetVdoRecdArgs();
+            MsgcmdVdoProcReq *req = (MsgcmdVdoProcReq*)\
+                MsgCmd_ConstructPara(sizeof(MsgcmdVdoProcReq));
+
+			dtmf_trace("%s, VIDEO RECORD.", __FUNCTION__);
+            req->saveGap = MsgCmd_GetVdoRecdArgs()->save_gap;
+            strcpy(req->number, rsp->number);
             
-            if (NULL == rsp->param || (U32)rsp->param == 0)
-                MsgCmd_VdoRecdStart(MMI_TRUE, 0, vsp->save_gap, rsp->number);
+            if (MsgCmd_VdoRecdBusy())
+            {
+                req->record  = MMI_FALSE;
+            }
             else
-                MsgCmd_VdoRecdStart(
-                    MMI_FALSE,
-                    (U32)rsp->param < vsp->min_time ? vsp->min_time : (U32)rsp->param,
-                    vsp->save_gap,
-                    rsp->number);
+            {
+                req->record  = MMI_TRUE;
+                req->forever = MMI_FALSE;
+            }
+            
+            MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_VDORECD_REQ, (void *)req);
         }
         break;
         
