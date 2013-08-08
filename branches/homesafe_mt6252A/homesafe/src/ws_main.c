@@ -445,6 +445,7 @@ void hf_make_call_out_ex(void)
 }
 void hf_vdo_rec_stop(void)
 {
+	hf_print("停止了。。");
 	MsgCmd_VdoRecdStop(NULL);
 	hf_init_hf_info();
 }
@@ -477,10 +478,34 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 							hf_make_call(hf_nv.admin_number[v],hf_hisr_call_result);
 							break;
 						}
+						else
+						{
+							hf_print("定时器启动");
+							StartTimer(HF_HISR_VDO_STOP_TIMER_ID, 1000*60*5, hf_vdo_rec_stop);
+						}
 					}
 				}
 			}
-			StartTimer(HF_HISR_VDO_STOP_TIMER_ID, 1000*60*5, hf_vdo_rec_stop);
+			else
+			{
+				if (MsgCmd_VdoRecdBusy())
+				{
+					hf_print("设置录音参数，继续录音");
+		                    MsgCmd_VdoRecdGetContext()->forever = MMI_TRUE;
+				}
+				else
+				{
+					hf_print("录音开始");
+					hf_set_light_for_rec();
+					MsgCmd_VdoRecdStart(
+					    time ? MMI_FALSE : MMI_TRUE, 
+					    time*60, 
+					    MsgCmd_GetVdoRecdArgs()->save_gap,
+					    NULL);
+				}
+				hf_print("定时器启动5分钟后停止");
+				StartTimer(HF_HISR_VDO_STOP_TIMER_ID, 1000*60*5, hf_vdo_rec_stop);
+			}
 		}
 		else
 		{
