@@ -489,7 +489,7 @@ CHE_SUPPORT          = FALSE    # CHE support
 
 TV_OUT_SUPPORT 		= FALSE       # TRUE, FALSE  only MT6228 and MT6229 support TV OUT
 
-BACKGROUND_SOUND	   = FALSE	  # TRUE/FALSE
+BACKGROUND_SOUND	   = TRUE	  # TRUE/FALSE
 
 AU_DECODE             = FALSE       #  TRUE, FALSE
 

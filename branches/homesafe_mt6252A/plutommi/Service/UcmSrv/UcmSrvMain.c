@@ -1169,18 +1169,14 @@ void srv_ucm_accept_act_rsp(void *rsp_struct)
         /* Action response callback */
         srv_ucm_send_act_response(g_ucm_srv_p->call_misc.curr_action, (void *)&rsp);
 
-    #if defined(__MSGCMD_DTMF__)
+    #if defined(__MSGCMD_SUPPORT__)
         {
             extern void Dtmf_AutoAnswerReqSend(WCHAR *name, char *number);//defined in msgcmd_dtmf.c
-            srv_ucm_index_info_struct index;
-            S32 group_index = srv_ucm_query_group_index_by_call_state(SRV_UCM_ACTIVE_STATE);
-    
-            if (srv_ucm_query_index_by_id(&g_ucm_srv_p->autoam.uid_info, &index) == MMI_TRUE)
-            {    
-                Dtmf_AutoAnswerReqSend(
-                    g_ucm_srv_p->call_list.group_info[group_index].call_info[0].remote_info.disp_name,
-                    g_ucm_srv_p->call_list.group_info[group_index].call_info[0].remote_info.num_uri);
-            }
+    		S32 group_index = srv_ucm_query_group_index_by_call_state(SRV_UCM_ACTIVE_STATE);
+			kal_prompt_trace(0, "%s, L:%d. group_index=%d.",__FUNCTION__,__LINE__,group_index);
+            Dtmf_AutoAnswerReqSend(
+                g_ucm_srv_p->call_list.group_info[group_index].call_info[0].remote_info.disp_name,
+                g_ucm_srv_p->call_list.group_info[group_index].call_info[0].remote_info.num_uri);
         }
     #else
     #ifdef __MMI_AUTO_ANSWER_MACHINE__

@@ -14,6 +14,7 @@
 
 #include "./../inc/msgcmd_dtmf.h"
 #include "ucmsrvgprot.h"
+#include "AlarmFrameworkProt.h"
 
 /*
  * 必须在提示音播放完毕之后才能开启按键检测, 否则会造成按键误检测
@@ -21,11 +22,21 @@
  * 如果提示音播放失败, 则直接进入按键检测
  */
 
-#define dtmf_trace hf_print
-#define __NEED_CHECK_PASSWORD__
-#define __RECIVE_CMD_PARAMETER__
+#define dtmf_trace(fmt, ...) do{lfy_write_log(fmt, ##__VA_ARGS__); kal_prompt_trace(0, fmt, ##__VA_ARGS__);}while(0)
+
 
 extern U8 *get_audio(MMI_ID_TYPE i, U8 *type, U32 *filelen);
+
+#if defined(__TEST_PLAY_AUDIO__)
+static WCHAR *dtmf_TestPlayVoiceGetFolderPath(WCHAR *buffer);
+static void dtmf_TestPlayVoiceTraceName(WCHAR *file);
+static void dtmf_TestPlayVoicePlayCb(mdi_result result);
+static MMI_BOOL dtmf_TestPlayVoicePlay(WCHAR *filepath);
+static void dtmf_TestPlayVoiceEndCall(void);
+static void dtmf_TestPlayVoiceTimerCb();
+static void dtmf_TestPlayVoice(void);
+#endif
+
 static void dtmf_CmdExecRsp(void *p);
 static void dtmf_PostCmdExecReq(DtmfCommand cmd, char *number, void *param);
 static void dtmf_ReleaseAllActivedCall(MMI_BOOL exec);
@@ -35,8 +46,8 @@ static void dtmf_KeyDetectCallback(S16 key);
 static void dtmf_StartKeyDetect(U32 timeout);
 static void dtmf_StopKeyDetect(void);
 static WCHAR *dtmf_CombineVoiceFilePath(WCHAR *output, DtmfVoiceIndex index);
-static void dtmf_PlayCustomPromptVoiceFileCb(mdi_result result, void *usd);
-static void dtmf_PlaySystemPromptVoiceFileCb(mdi_result result, void *usd);
+static void dtmf_PlayCustomPromptVoiceFileCb(mdi_result result);
+static void dtmf_PlaySystemPromptVoiceFileCb(mdi_result result);
 static MMI_ID_TYPE dtmf_GetSystemVoiceFileId(DtmfVoiceIndex idx);
 static MMI_BOOL dtmf_PlayCustomVoiceFile(DtmfVoiceIndex idx, void *usd);
 static MMI_BOOL dtmf_PlaySystemVoiceFile(DtmfVoiceIndex idx, void *usd);
@@ -58,6 +69,11 @@ const static VoiceAttr voiceTab[] = {
     {DTMF_VOC_RETRY_OPTIOIN  , "RetryOpt.wav"},
 };
 
+#if defined(__TEST_PLAY_AUDIO__)
+static FS_HANDLE testPlayFh = NULL;
+#endif
+
+
 /*******************************************************************************
 ** 函数: Dtmf_Reset
 ** 功能: 参数复位
@@ -71,6 +87,9 @@ void Dtmf_Reset(void)
     dtmfCnxt.hotKey     = DTMF_HOT_KEY_VALUE;
     dtmfCnxt.rptMax     = DTMF_MAX_REPEAT_TIMES;
     dtmfCnxt.detectTime = DTMF_DEF_DETECT_TIME;
+#if defined(__TEST_PLAY_AUDIO__)
+	dtmfCnxt.testKey	= DTMF_TEST_KEY_VALUE;
+#endif
 }
 
 /*******************************************************************************
@@ -89,11 +108,181 @@ void Dtmf_Initialize(void)
         (PsIntFuncPtr)dtmf_AutoAnswerResponse,
         MMI_FALSE);
 
+#if !defined(__EXEC_IN_TIMER_CBF__)
     mmi_frm_set_protocol_event_handler(
         MSG_ID_DTMF_EXEC_CMD_REQ,
         (PsIntFuncPtr)dtmf_CmdExecRsp,
         MMI_FALSE);
+#endif
 }
+
+#if defined(__TEST_PLAY_AUDIO__)
+
+/*******************************************************************************
+** 函数: dtmf_TestPlayVoiceGetFolderPath
+** 功能: 获取文件夹的绝对路径
+** 参数: buffer -- 输出buffer
+** 返回: 返回buffer的地址
+** 作者: wasfayu
+*******/
+static WCHAR *dtmf_TestPlayVoiceGetFolderPath(WCHAR *buffer)
+{
+    kal_wsprintf(buffer, "%c:\\%w\\", MsgCmd_GetUsableDrive(), DTMF_VOICE_MAIN_PATH);
+}
+
+/*******************************************************************************
+** 函数: dtmf_TestPlayVoiceTraceName
+** 功能: trace文件名信息, 因为是wchar格式, 这里专程ASCII格式来打印
+** 参数: file -- 文件名
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void dtmf_TestPlayVoiceTraceName(WCHAR *file)
+{
+    if (file)
+    {
+        char buffer[256];
+
+        memset(buffer, 0, 256);
+
+        app_ucs2_str_to_asc_str(buffer, (S8*)file);
+        dtmf_trace("file-\"%s\"", buffer);
+    }
+}
+
+/*******************************************************************************
+** 函数: dtmf_TestPlayVoicePlayCb
+** 功能: 播放的回调函数, 52上面的这个回调函数只有一个形参, 50上面有一个void*型的形参
+** 参数: result -- 播放结果
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void dtmf_TestPlayVoicePlayCb(mdi_result result)
+{    
+    dtmf_trace("Play voice Callback result is %d.", result);
+
+    StartTimer(TIMER_DTMF_KEY_DETECT, 500, dtmf_TestPlayVoiceTimerCb);
+}
+
+/*******************************************************************************
+** 函数: dtmf_TestPlayVoicePlay
+** 功能: 执行播放
+** 参数: filepath -- 文件的绝对路径
+** 返回: 是否播放成功
+** 作者: wasfayu
+*******/
+static MMI_BOOL dtmf_TestPlayVoicePlay(WCHAR *filepath)
+{
+    mdi_result result;
+    WCHAR abspath[128];
+    
+    if (!mdi_audio_snd_is_idle())
+    {
+        mdi_audio_snd_stop();
+    }
+
+    memset(abspath, 0, 128*sizeof(WCHAR));
+    dtmf_TestPlayVoiceGetFolderPath(abspath);
+    app_ucs2_strcat((S8*)abspath, (const S8 *)filepath);
+    dtmf_TestPlayVoiceTraceName(abspath);
+        
+    result = mdi_audio_snd_check_file_format(abspath);
+    dtmf_trace("Check voice return %d.", result);
+    
+    if (result == MDI_AUDIO_SUCCESS)
+    {
+        result = mdi_audio_snd_play_file_with_vol_path(
+                    (void*)abspath,
+                    1,
+                    NULL,
+                    dtmf_TestPlayVoicePlayCb,
+                    6,
+                    MDI_DEVICE_SPEAKER2);
+        dtmf_trace("Play voice return %d.", result);
+    }
+    
+    return (MMI_BOOL)(MDI_AUDIO_SUCCESS == result);
+}
+
+/*******************************************************************************
+** 函数: dtmf_TestPlayVoiceEndCall
+** 功能: 结束所有来电
+** 参数: 无
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void dtmf_TestPlayVoiceEndCall(void)
+{
+    srv_ucm_act_request(SRV_UCM_END_ALL_ACT, NULL, NULL, NULL);
+    dtmf_trace("Release Call");
+}
+
+/*******************************************************************************
+** 函数: dtmf_TestPlayVoiceTimerCb
+** 功能: 定时器回调函数, 查找下一首并播放
+** 参数: inp  -- 入参
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void dtmf_TestPlayVoiceTimerCb(void)
+{
+    WCHAR file[128];
+    FS_DOSDirEntry info;
+
+    memset(file, 0, 128*sizeof(WCHAR));
+    if (NULL == testPlayFh)
+    {
+        WCHAR buffer[128];
+        
+        memset(buffer, 0, 128*sizeof(WCHAR));
+        dtmf_TestPlayVoiceGetFolderPath(buffer);
+        app_ucs2_strcat((S8*)buffer, (const S8*)L"*.*");
+        
+        testPlayFh = FS_FindFirst(buffer, 0, FS_ATTR_HIDDEN|FS_ATTR_VOLUME|FS_ATTR_DIR, &info, file, 63);
+        if (testPlayFh < FS_NO_ERROR)
+        {
+        	testPlayFh = NULL;
+            dtmf_TestPlayVoiceEndCall();
+            return;
+        }
+    }
+    else if (FS_FindNext(testPlayFh, &info, file, 63) < FS_NO_ERROR)
+    {
+        dtmf_TestPlayVoiceEndCall();
+        FS_FindClose(testPlayFh);
+		testPlayFh = NULL;
+        return;
+    }
+
+    //如果没有电话在通话中
+    if (srv_ucm_query_call_count(SRV_UCM_CALL_STATE_ALL, SRV_UCM_CALL_TYPE_ALL, NULL) == 0)
+    {
+        dtmf_TestPlayVoiceEndCall();
+        FS_FindClose(testPlayFh);
+		testPlayFh = NULL;
+        return;
+    }
+    
+    //play voice
+    if (!dtmf_TestPlayVoicePlay(file))
+    {
+        StartTimer(TIMER_DTMF_KEY_DETECT, 300, dtmf_TestPlayVoiceTimerCb);
+    }
+}
+
+/*******************************************************************************
+** 函数: dtmf_TestPlayVoice
+** 功能: 开始执行播放
+** 参数: 无
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void dtmf_TestPlayVoice(void)
+{
+    StartTimer(TIMER_DTMF_KEY_DETECT, 200, dtmf_TestPlayVoiceTimerCb);
+}
+#endif
+
 
 /*******************************************************************************
 ** 函数: dtmf_CmdExecRsp
@@ -120,7 +309,7 @@ static void dtmf_CmdExecRsp(void *p)
     case DTMF_CMD_VDORECD:
         dtmf_trace("%s, VIDEO RECORD.", __FUNCTION__);
         {
-            MsgCmdRecdArg *vsp = msgcmd_GetVdoRecdArgs();
+            MsgCmdRecdArg *vsp = MsgCmd_GetVdoRecdArgs();
             
             if (NULL == rsp->param || (U32)rsp->param == 0)
                 MsgCmd_VdoRecdStart(MMI_TRUE, 0, vsp->save_gap, rsp->number);
@@ -136,6 +325,11 @@ static void dtmf_CmdExecRsp(void *p)
     default:
         break;
     }
+
+#if defined(__EXEC_IN_TIMER_CBF__)
+    MsgCmd_DestructPara(p);
+#endif
+
 }
 
 /*******************************************************************************
@@ -159,7 +353,12 @@ static void dtmf_PostCmdExecReq(DtmfCommand cmd, char *number, void *param)
     }
 
     dtmf_trace("%s, cmd=%d.", __FUNCTION__, cmd);
+		//延时2秒钟去执行, 否则容易引起问题
+#if defined(__EXEC_IN_TIMER_CBF__)
+	StartTimerEx(TIMER_DTMF_DELAY_EXEC, 2000, dtmf_CmdExecRsp, (void *)req);
+#else
     MsgCmd_SendIlm2Mmi(MSG_ID_DTMF_EXEC_CMD_REQ, (void*)req);
+#endif
 }
 
 /*******************************************************************************
@@ -393,6 +592,12 @@ static void dtmf_KeyDetectCallback(S16 key)
             //输入密码状态
             dtmf_SwitchFSMStatus();
         }
+	#if defined(__TEST_PLAY_AUDIO__)
+		else if(dtmfCnxt.testKey == (U8)key)
+		{
+			dtmf_TestPlayVoice();
+		}
+	#endif
         else
         {
             //按键错误, 重新检测, 播放提示语
@@ -528,11 +733,10 @@ static WCHAR *dtmf_CombineVoiceFilePath(WCHAR *output, DtmfVoiceIndex index)
 ** 函数: dtmf_PlayCustomPromptVoiceFileCb
 ** 功能: 播放用户自定义提示语的回调函数
 ** 参数: result -- 播放结果
-**       usd    -- 用户数据
 ** 返回: 无
 ** 作者: wasfayu
 *******/
-static void dtmf_PlayCustomPromptVoiceFileCb(mdi_result result, void *usd)
+static void dtmf_PlayCustomPromptVoiceFileCb(mdi_result result)
 {
     dtmf_trace("Play custom voice Callback, ret=%d. state=%d.", result, dtmfCnxt.state);
 
@@ -570,11 +774,10 @@ static void dtmf_PlayCustomPromptVoiceFileCb(mdi_result result, void *usd)
 ** 函数: dtmf_PlaySystemPromptVoiceFileCb
 ** 功能: 播放系统提示语的回调函数
 ** 参数: result -- 播放结果
-**       usd    -- 用户数据
 ** 返回: 无
 ** 作者: wasfayu
 *******/
-static void dtmf_PlaySystemPromptVoiceFileCb(mdi_result result, void *usd)
+static void dtmf_PlaySystemPromptVoiceFileCb(mdi_result result)
 {
     dtmf_trace("Play system voice Callback, ret=%d. state=%d.", result, dtmfCnxt.state);
 
@@ -733,8 +936,8 @@ static MMI_BOOL dtmf_PlayCustomVoiceFile(DtmfVoiceIndex idx, void *usd)
         result = mdi_audio_snd_play_file_with_vol_path(
                     (void*)filepath,
                     1,
+                    NULL,
                     dtmf_PlayCustomPromptVoiceFileCb,
-                    usd,
                     6,
                     MDI_DEVICE_SPEAKER2);
         dtmf_trace("Play custom voice \"%s\", ret=%d.", voiceTab[idx].name, result);
@@ -768,8 +971,8 @@ static MMI_BOOL dtmf_PlaySystemVoiceFile(DtmfVoiceIndex idx, void *usd)
                 (void*)audio_data,
                 audio_len,
                 1,
+                NULL,
                 dtmf_PlaySystemPromptVoiceFileCb,
-                usd,
                 6,
                 MDI_DEVICE_SPEAKER2);
     dtmf_trace("Play system voice, ret=%d.", result);
@@ -835,5 +1038,19 @@ void Dtmf_AutoAnswerReqSend(WCHAR *name, char *number)
     MsgCmd_SendIlm2Mmi(MSG_ID_DTMF_ANSWER_CALL, (void*)req);
 }
 
+#else
+
+/*******************************************************************************
+** 函数: Dtmf_AutoAnswerReqSend
+** 功能: 发送请求应答来电的消息
+** 参数: name  -- 来电号码
+**       number-- 显示名字
+** 返回: 无
+** 作者: wasfayu
+*******/
+void Dtmf_AutoAnswerReqSend(WCHAR *name, char *number)
+{
+	/* 空函数 */
+}
 #endif/*__MSGCMD_DTMF__*/
 
