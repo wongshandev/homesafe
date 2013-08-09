@@ -651,8 +651,8 @@ BOOL hf_new_call_ind(char * number)
 	if(number == NULL) return FALSE;;
 	if(FALSE==hf_is_admin_number_ind_call(number))
 	{
-		hf_print("isn't admin ,not allow!");
-		return FALSE;
+		hf_print("isn't admin");
+		//return FALSE;
 	}
 	strcpy(p->string,number);
 	hf_print("new call ind:%s",number);

@@ -231,6 +231,7 @@ void hf_call_out_timer_out(void)
 				MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, 0, 5*60, NULL);
 				hf_init_hf_info();
 #else
+				hf_print("超时了，可以录像了");
 				MsgCmd_VdoRecdStart(
 				MMI_TRUE, 
 				5*60,
@@ -490,12 +491,12 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 			{
 				if (MsgCmd_VdoRecdBusy())
 				{
-					hf_print("设置录音参数，继续录音");
+					hf_print("设置录像参数，继续录音");
 		                    MsgCmd_VdoRecdGetContext()->forever = MMI_TRUE;
 				}
 				else
 				{
-					hf_print("录音开始");
+					hf_print("录像开始");
 					hf_set_light_for_rec();
 					MsgCmd_VdoRecdStart(
 					    time ? MMI_FALSE : MMI_TRUE, 
