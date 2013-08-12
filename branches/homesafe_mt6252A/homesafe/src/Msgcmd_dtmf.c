@@ -58,6 +58,13 @@ static DtmfControl dtmfCnxt;
 
 const static VoiceAttr voiceTab[] = {
     {DTMF_VOC_NO_VOICE       , "Silence.wav"},
+#if defined(__MSGCMD_DTMF_OLD_VERSION__)
+	{DTMF_VOC_CHOOSE_OPTION	 , "welcome_old.wav"},
+	{DTMF_VOC_ACCEPT_CAPTURE , "key1.wav"},
+	{DTMF_VOC_ACCEPT_ADORECD , "key2.wav"},
+	{DTMF_VOC_ACCEPT_VDORECD , "key3.wav"},
+	{DTMF_VOC_COMMAND_ERROR  , "di_tone.wav"},
+#else
     {DTMF_VOC_PRESS_TO_ENTRY , "Welcome.wav"},
     {DTMF_VOC_INPUT_PASSWORD , "EnterPwd.wav"},
     {DTMF_VOC_CHOOSE_OPTION  , "ChooseOpt.wav"},
@@ -68,6 +75,7 @@ const static VoiceAttr voiceTab[] = {
     {DTMF_VOC_RETRY_PASSWORD , "RetryPwd.wav"},
     {DTMF_VOC_RETRY_OPTIOIN  , "RetryOpt.wav"},
 	{DTMF_VOC_RETRY_PARAM    , "RetryParam.wav"},
+#endif
 };
 
 #if defined(__TEST_PLAY_AUDIO__)
@@ -293,10 +301,14 @@ static void dtmf_TestPlayVoice(void)
 *******/
 static MMI_BOOL dtmf_CheckPassword(const char *pwdStr)
 {
+#if defined(__NEED_CHECK_PASSWORD__)
 	if (strlen(pwdStr) != DTMF_PWD_STR_LENGTH)
 		return MMI_FALSE;
 
-	return (MMI_BOOL)(strcmp(pwdStr, "123456") == 0);
+	return (MMI_BOOL)(strcmp(pwdStr, DTMF_DEFAULT_PASSWORD) == 0);
+#else
+	return MMI_TRUE;
+#endif
 }
 
 /*******************************************************************************
@@ -344,7 +356,7 @@ static void dtmf_CmdExecRsp(void *p)
             else
             {
                 req->record  = MMI_TRUE;
-                req->forever = MMI_FALSE;
+                req->forever = MMI_TRUE;
             }
             
             MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_ADORECD_REQ, (void *)req);
@@ -367,7 +379,7 @@ static void dtmf_CmdExecRsp(void *p)
             else
             {
                 req->record  = MMI_TRUE;
-                req->forever = MMI_FALSE;
+                req->forever = MMI_TRUE;
             }
             
             MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_VDORECD_REQ, (void *)req);
@@ -431,7 +443,11 @@ static void dtmf_ReleaseAllActivedCall(MMI_BOOL exec)
     if (exec && dtmfCnxt.command > DTMF_CMD_NONE && dtmfCnxt.command < DTMF_CMD_UNDEFINED)
     {
         //发送消息去执行命令
+    #if defined(__MSGCMD_DTMF_OLD_VERSION__)
+		dtmf_PostCmdExecReq(dtmfCnxt.command, dtmfCnxt.call.number, NULL);
+	#else
         dtmf_PostCmdExecReq(dtmfCnxt.command, dtmfCnxt.call.number, NULL);
+	#endif
     }
 }
 
@@ -483,7 +499,111 @@ static void dtmf_SwitchFSMStatus(void)
     
     switch (dtmfCnxt.state)
     {
+#if defined(__MSGCMD_DTMF_OLD_VERSION__)
     case DTMF_STATE_IDLE:
+		//老版本, 电话接通后, 无限时监听对方, 直到对方按下#键再播放option的选择提示音
+		dtmfCnxt.detectTime = DTMF_ENTRY_DETECT_TIME;
+		dtmfCnxt.state      = DTMF_STATE_WAITING_ENTRY;
+		dtmf_StartKeyDetect(dtmfCnxt.detectTime);
+		break;
+
+	case DTMF_STATE_WAITING_ENTRY:
+		if (dtmfCnxt.error)
+		{
+			dtmfCnxt.error      = MMI_FALSE;
+			dtmfCnxt.detectTime = DTMF_ENTRY_DETECT_TIME;
+			dtmfCnxt.rptCount   = 0; //老版本, 无限时接听, 直到按下#键
+			
+			if (dtmfCnxt.rptCount <= dtmfCnxt.rptMax)
+			{
+		        dtmfCnxt.state = DTMF_STATE_WAITING_ENTRY;
+			}
+			else
+			{
+				dtmfCnxt.state = DTMF_STATE_GOODBYE;
+                dtmf_ReleaseAllActivedCall(MMI_FALSE);
+				break;
+			}
+			
+			dtmf_StartKeyDetect(dtmfCnxt.detectTime);
+		}
+		else
+		{
+			dtmfCnxt.rptCount   = 0;
+			dtmfCnxt.detectTime = DTMF_DEF_DETECT_TIME;
+			playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_CHOOSE_OPTION, (void*)dtmfCnxt.detectTime);
+	        dtmfCnxt.state = DTMF_STATE_CHOOSE_OPTION;
+			if (!playOK)
+			{
+				dtmf_StartKeyDetect(dtmfCnxt.detectTime);
+			}
+		}
+		break;
+	
+	case DTMF_STATE_CHOOSE_OPTION:
+		dtmfCnxt.detectTime = DTMF_DEF_DETECT_TIME;
+
+		dtmf_trace("%s, command=%d.", __FUNCTION__, dtmfCnxt.command);
+		if (dtmfCnxt.command == DTMF_CMD_NONE || dtmfCnxt.command >= DTMF_CMD_UNDEFINED)
+		{
+			dtmfCnxt.error = MMI_TRUE;
+			dtmfCnxt.rptCount ++;
+		}
+		
+		if (dtmfCnxt.error)
+		{
+			dtmfCnxt.error = MMI_FALSE;
+			
+			if (dtmfCnxt.rptCount <= dtmfCnxt.rptMax)
+			{
+		        playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_CHOOSE_OPTION, (void*)dtmfCnxt.detectTime);
+		        dtmfCnxt.state = DTMF_STATE_CHOOSE_OPTION;
+				if (!playOK)
+	            {
+	                dtmf_StartKeyDetect(dtmfCnxt.detectTime);
+	            }
+			}
+			else
+			{
+				//错误次数过多，直接退出
+            	dtmfCnxt.state = DTMF_STATE_GOODBYE;
+                dtmf_ReleaseAllActivedCall(MMI_FALSE);
+				break;
+			}
+		}
+		else
+		{
+			MMI_BOOL exec = MMI_TRUE;
+			dtmfCnxt.rptCount = 0;
+			
+            //播放提示语 Accept.wav, 然后挂断电话
+            if (DTMF_CMD_CAPTURE == dtmfCnxt.command)
+	            playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_ACCEPT_CAPTURE, NULL);
+			else if (DTMF_CMD_ADORECD == dtmfCnxt.command)
+	            playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_ACCEPT_ADORECD, NULL);
+			else if (DTMF_CMD_VDORECD == dtmfCnxt.command)
+	            playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_ACCEPT_VDORECD, NULL);
+			else
+			{
+				playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_COMMAND_ERROR, NULL);
+				exec   = MMI_FALSE;
+			}
+			
+            dtmfCnxt.state = DTMF_STATE_GOODBYE;
+            if (!playOK)
+            {
+                dtmf_ReleaseAllActivedCall(exec);
+            }
+		}
+		break;
+
+	case DTMF_STATE_GOODBYE:
+        dtmf_ReleaseAllActivedCall(!(dtmfCnxt.command==DTMF_CMD_NONE || dtmfCnxt.command>=DTMF_CMD_UNDEFINED));
+        break;
+		
+#else/*#if defined(__MSGCMD_DTMF_OLD_VERSION__)*/
+	
+	case DTMF_STATE_IDLE:
         //系统进入, 播放提示语 Welcome.wav
         dtmfCnxt.detectTime = DTMF_ENTRY_DETECT_TIME;
         playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_PRESS_TO_ENTRY, (void*)dtmfCnxt.detectTime);
@@ -493,7 +613,7 @@ static void dtmf_SwitchFSMStatus(void)
             dtmf_StartKeyDetect(dtmfCnxt.detectTime);
         }
         break;
-        
+		
     case DTMF_STATE_WAITING_ENTRY:
 		if (dtmfCnxt.error)
 		{
@@ -537,7 +657,7 @@ static void dtmf_SwitchFSMStatus(void)
 			dtmf_StartKeyDetect(dtmfCnxt.detectTime);
 		}
         break;
-        
+
 #if defined(__NEED_CHECK_PASSWORD__)
     case DTMF_STATE_INPUT_PWD:
         dtmfCnxt.detectTime = DTMF_DEF_DETECT_TIME;
@@ -715,6 +835,7 @@ static void dtmf_SwitchFSMStatus(void)
     case DTMF_STATE_GOODBYE:
         dtmf_ReleaseAllActivedCall(MMI_TRUE);
         break;
+#endif/*#if defined(__MSGCMD_DTMF_OLD_VERSION__)*/
         
     case DTMF_STATE_MAX_ENUM:
     default:
@@ -931,24 +1052,34 @@ static void dtmf_PlayCustomPromptVoiceFileCb(mdi_result result)
 
     //如果当前状态为xx状态则返回
     
-    if (result == MDI_AUDIO_END_OF_FILE)
-    {
-        //等待按键检测
-    }
-    else
-    {
-        //播放失败, 重新播放系统自带的资源
-    }
+//    if (result == MDI_AUDIO_END_OF_FILE)
+//    {
+//        //等待按键检测
+//    }
+//    else
+//    {
+//        //播放失败, 重新播放系统自带的资源
+//    }
 
     switch(dtmfCnxt.state)
     {
+#if defined(__MSGCMD_DTMF_OLD_VERSION__)
+	case DTMF_STATE_WAITING_ENTRY:
+	case DTMF_STATE_CHOOSE_OPTION:
+	case DTMF_STATE_ACCPET_PROMPT:
+		dtmf_StartKeyDetect(dtmfCnxt.detectTime);
+		break;
+
+#else
+	
     case DTMF_STATE_WAITING_ENTRY:
     case DTMF_STATE_INPUT_PWD:
     case DTMF_STATE_CHOOSE_OPTION:
     case DTMF_STATE_INPUT_PARAM:
         dtmf_StartKeyDetect(dtmfCnxt.detectTime);
         break;
-        
+#endif
+	
     case DTMF_STATE_GOODBYE:
         dtmf_ReleaseAllActivedCall(MMI_TRUE);
         break;
@@ -972,24 +1103,33 @@ static void dtmf_PlaySystemPromptVoiceFileCb(mdi_result result)
 
     //如果当前状态为xx状态则返回
     
-    if (result == MDI_AUDIO_END_OF_FILE)
-    {
-        //等待按键检测
-    }
-    else
-    {
-        //播放失败, 不做处理, 直接进行按键检测什么的
-    }
+//    if (result == MDI_AUDIO_END_OF_FILE)
+//    {
+//        //等待按键检测
+//    }
+//    else
+//    {
+//        //播放失败, 不做处理, 直接进行按键检测什么的
+//    }
 
     switch(dtmfCnxt.state)
     {
+#if defined(__MSGCMD_DTMF_OLD_VERSION__)
+	case DTMF_STATE_WAITING_ENTRY:
+	case DTMF_STATE_CHOOSE_OPTION:
+	case DTMF_STATE_ACCPET_PROMPT:
+		dtmf_StartKeyDetect(dtmfCnxt.detectTime);
+		break;
+#else
+
     case DTMF_STATE_WAITING_ENTRY:
     case DTMF_STATE_INPUT_PWD:
     case DTMF_STATE_CHOOSE_OPTION:
     case DTMF_STATE_INPUT_PARAM:
         dtmf_StartKeyDetect(dtmfCnxt.detectTime);
         break;
-        
+#endif
+
     case DTMF_STATE_GOODBYE:
         dtmf_ReleaseAllActivedCall(MMI_TRUE);
         break;
@@ -1061,6 +1201,28 @@ static void dtmf_PlaySystemPromptVoiceFileCb(mdi_result result)
 *******/
 static MMI_ID_TYPE dtmf_GetSystemVoiceFileId(DtmfVoiceIndex idx)
 {
+#if defined(__MSGCMD_DTMF_OLD_VERSION__)
+	switch(idx)
+	{
+	case DTMF_VOC_CHOOSE_OPTION	 :
+		return MC_DTMF_VOC_CHOOSE_OPTION;
+		
+	case DTMF_VOC_ACCEPT_CAPTURE :
+		return MC_DTMF_VOC_ACCEPT_CAPTURE;
+		
+	case DTMF_VOC_ACCEPT_ADORECD :
+		return MC_DTMF_VOC_ACCEPT_ADORECD;
+		
+	case DTMF_VOC_ACCEPT_VDORECD :
+		return MC_DTMF_VOC_ACCEPT_VDORECD;
+		
+	case DTMF_VOC_COMMAND_ERROR	 :
+		return MC_DTMF_VOC_DI_TONE;
+
+	default:
+		return MC_DTMF_VOC_SILENCE;
+	}
+#else
     switch(idx)
     {
     case DTMF_VOC_PRESS_TO_ENTRY :
@@ -1097,6 +1259,7 @@ static MMI_ID_TYPE dtmf_GetSystemVoiceFileId(DtmfVoiceIndex idx)
     default:
         return MC_DTMF_VOC_SILENCE;
     }
+#endif
 }
 
 /*******************************************************************************

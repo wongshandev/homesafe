@@ -1,5 +1,7 @@
 64kbps-8bit-8KHz-PCM-1channel
 
+老版本的，电话接通后，就会无限时等待输入#键进入系统。首先提示请选择操作。操作选择完成后，会提示命令已接收。然后主动挂断电话。
+
 文件名：welcome.wav
 欢迎使用。按#键进入系统，按*键进入测试模式。
 Welcome to use. Press the hash key to enter the system, press the star key to enter the test pattern.

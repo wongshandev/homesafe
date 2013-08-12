@@ -19,24 +19,41 @@
 #include "mdi_datatype.h"
 #include "ucmsrvgprot.h"
 
+//老版本, 电话接通后, 等待按#键后才进入系统选择录音或者录像, 选择之后播放提示语然后再挂机
+#ifndef __MSGCMD_DTMF_OLD_VERSION__
+#define __MSGCMD_DTMF_OLD_VERSION__
+#endif
+
 //macro
+#ifndef __MSGCMD_DTMF_OLD_VERSION__
 #define __NEED_CHECK_PASSWORD__
 #define __RECIVE_CMD_PARAMETER__
+#endif
 #define __EXEC_IN_TIMER_CBF__
-#define __TEST_PLAY_AUDIO__
+//#define __TEST_PLAY_AUDIO__
 
 #define DTMF_HOT_KEY_VALUE         '#'
 #if defined(__TEST_PLAY_AUDIO__)
 #define DTMF_TEST_KEY_VALUE        '*'
 #endif
 #define DTMF_PWD_STR_LENGTH        6
+#define DTMF_DEFAULT_PASSWORD      "123456"
 #define DTMF_PARAM_STR_LENGTH      6
 #define DTMF_MAX_REPEAT_TIMES      3
-#define DTMF_DEF_DETECT_TIME       15000    //ms
+#if defined(__MSGCMD_DTMF_OLD_VERSION__)
+#define DTMF_ENTRY_DETECT_TIME     65535  //进入无限时接听
+#define DTMF_DEF_DETECT_TIME       20000    //ms
+#else
 #define DTMF_ENTRY_DETECT_TIME     10000
+#define DTMF_DEF_DETECT_TIME       15000    //ms
+#endif
 
 // E:\dtmf\1.wav
+#if defined(__MSGCMD_DTMF_OLD_VERSION__)
+#define DTMF_VOICE_MAIN_PATH       L"main"
+#else
 #define DTMF_VOICE_MAIN_PATH       L"dtmf_voice"
+#endif
 
 //1. 请按'#'键进入系统.   "entry.wav"
 //#define DTMF_VOC_IDX_ENTRY           1
@@ -54,6 +71,13 @@
 //#define DTMF_VOC_IDX_PARAM           7
 typedef enum {
     DTMF_VOC_NO_VOICE       = 0,
+#if defined(__MSGCMD_DTMF_OLD_VERSION__)
+	DTMF_VOC_CHOOSE_OPTION  = 1,
+	DTMF_VOC_ACCEPT_CAPTURE = 2,
+	DTMF_VOC_ACCEPT_ADORECD = 3,
+	DTMF_VOC_ACCEPT_VDORECD = 4,
+	DTMF_VOC_COMMAND_ERROR  = 5,
+#else
     DTMF_VOC_PRESS_TO_ENTRY = 1,
     DTMF_VOC_INPUT_PASSWORD = 2,
     DTMF_VOC_CHOOSE_OPTION  = 3,
@@ -64,7 +88,8 @@ typedef enum {
     DTMF_VOC_RETRY_PASSWORD = 8,
     DTMF_VOC_RETRY_OPTIOIN  = 9,
     DTMF_VOC_RETRY_PARAM    = 10,
-    
+#endif
+
     DTMF_VOC_NOT_DEFINED    = 0,
 }DtmfVoiceIndex;
 
@@ -80,9 +105,14 @@ typedef enum {
 typedef enum {
     DTMF_STATE_IDLE = 0,
     DTMF_STATE_WAITING_ENTRY,
+#if defined(__MSGCMD_DTMF_OLD_VERSION__)
+	DTMF_STATE_CHOOSE_OPTION,
+	DTMF_STATE_ACCPET_PROMPT,
+#else
     DTMF_STATE_INPUT_PWD,
     DTMF_STATE_CHOOSE_OPTION,
     DTMF_STATE_INPUT_PARAM,
+#endif
     DTMF_STATE_GOODBYE,
     DTMF_STATE_MAX_ENUM
 }DtmfStatus;
