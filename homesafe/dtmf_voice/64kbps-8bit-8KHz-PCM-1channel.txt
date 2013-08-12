@@ -1,11 +1,51 @@
 64kbps-8bit-8KHz-PCM-1channel
 
-welcome to use, press # to entry.
-please enter password.
-Please choose option: 1 is capture, 2 is audio record, 3 is video record.
-please enter record time, unit in minutes.
-password error. please enter password.
-choose error. please choose option: 1 is capture, 2 is audio record, 3 is video record.
-enter error, please try again.
-your enter too many error times. thanks, goodbye.
-your request is accept. thanks. goodbye.
+文件名：welcome.wav
+欢迎使用。按#键进入系统，按*键进入测试模式。
+Welcome to use. Press the hash key to enter the system, press the star key to enter the test pattern.
+
+
+文件名：EnterPwd.wav
+请输入密码, 按#键结束。
+Please enter the password. Press the hash key to end.
+
+
+文件名：ChooseOpt.wav
+请选择操作：1为拍照；2为录音；3为录像。
+Please choose option: one is capture, two is audio record, three is video record.
+
+
+文件名：EnterParam.wav
+请输入录制时间，以分钟为单位。按#键结束。
+please enter recording time, unit in minutes. Press the hash key to end.
+
+
+文件名：RetrayPwd.wav
+密码错误，请重新输入。
+password error. please enter again.
+
+
+文件名：RetryOpt.wav
+选择错误。请重新选择：1为拍照；2为录音；3为录像。
+Choose error. Please choose option: one is capture, two is audio record, three is video record.
+
+
+文件名：RetryParam.wav
+参数错误，请重新输入录制时间。按#键结束。
+Parameter error, please enter recording time. Press the hash key to end.
+
+
+文件名：Error.wav
+您的错误次数过多。谢谢来电，再见！
+Your wrong too many times. Thank you for calling, goodbye!
+
+
+文件名：Retry.wav
+输入错误。请重新输入
+Enter error. Please enter again!
+
+
+文件名：Accept.wav
+您的请求已接受。谢谢来电，再见！
+Your request is accept. Thank you for calling, goodbye!
+

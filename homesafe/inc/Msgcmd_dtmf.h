@@ -29,6 +29,8 @@
 #if defined(__TEST_PLAY_AUDIO__)
 #define DTMF_TEST_KEY_VALUE        '*'
 #endif
+#define DTMF_PWD_STR_LENGTH        6
+#define DTMF_PARAM_STR_LENGTH      6
 #define DTMF_MAX_REPEAT_TIMES      3
 #define DTMF_DEF_DETECT_TIME       15000    //ms
 #define DTMF_ENTRY_DETECT_TIME     10000
@@ -61,13 +63,15 @@ typedef enum {
     DTMF_VOC_INPUT_PARAM    = 7,
     DTMF_VOC_RETRY_PASSWORD = 8,
     DTMF_VOC_RETRY_OPTIOIN  = 9,
+    DTMF_VOC_RETRY_PARAM    = 10,
     
     DTMF_VOC_NOT_DEFINED    = 0,
 }DtmfVoiceIndex;
 
 
 typedef enum {
-    DTMF_CMD_CAPTURE = 0,
+	DTMF_CMD_NONE    = 0,
+    DTMF_CMD_CAPTURE,
     DTMF_CMD_ADORECD,
     DTMF_CMD_VDORECD,
     DTMF_CMD_UNDEFINED
@@ -99,9 +103,12 @@ typedef struct {
 typedef struct {
     DtmfStatus   state;         //当前状态
     DtmfCommand  command;       //选定的命令
-    MMI_BOOL     start;
-    U8       rptMax;      //最大可重复次数
-    U8       rptCount;      //已重复次数
+    MMI_BOOL     detecting;     //正在检测按键
+
+	MMI_BOOL     error;    //错误标志
+    U8       rptMax;       //最大可重复次数
+    U8       rptCount;     //已重复次数
+    
     U8       hotKey;            //热键
 #if defined(__TEST_PLAY_AUDIO__)
 	U8       testKey;
@@ -109,8 +116,11 @@ typedef struct {
     U32      detectTime;       //检测超时时间ms
     DtmfCallInfo call;
     union {
-        U8    password[6+1];
-        U32   recordTime;
+        U8    password[DTMF_PWD_STR_LENGTH + 2];
+        #define PWD_IDX_VAL (DTMF_PWD_STR_LENGTH+1)
+        
+        U8    recordTime[DTMF_PARAM_STR_LENGTH + 2];
+        #define PARAM_IDX_VAL (DTMF_PARAM_STR_LENGTH+1)
     }param;
 }DtmfControl;
 
