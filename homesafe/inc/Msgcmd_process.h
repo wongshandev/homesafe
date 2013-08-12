@@ -75,6 +75,30 @@ typedef enum {
     STR_TYPE_MAX = STR_TYPE_NORMAL
 }StringType_e;
 
+/* 系统错误枚举 */
+typedef enum {
+	MC_ERR_NONE = 0,
+	MC_ERR_UNKOWN,
+	MC_ERR_NO_TCARD,
+	MC_ERR_IGNORE_TIME,
+	MC_ERR_IGNORE_SIZE,
+	MC_ERR_CALL_BUSY, /* 5 */
+	MC_ERR_PATH_NOT_EXIST,
+	MC_ERR_DRIVE_ERROR,
+	MC_ERR_SYSTEM_BUSY,
+	MC_ERR_ADORECD_BUSY,
+	MC_ERR_VDORECD_BUSY, /* 10 */
+	MC_ERR_NULL_NUMBER,
+	MC_ERR_POWER_FIALED,
+	MC_ERR_PREVIEW_FAILED,
+	MC_ERR_DOING_FAILED,
+	MC_ERR_SAVE_FAILED, /* 15 */
+	MC_ERR_NO_SAPCE,
+	MC_ERR_SMS_NOT_READY,
+	MC_ERR_MMS_NOT_READY,
+	MC_ERR_NW_NOT_AVALIABLE,
+}MCErrCode;
+
 /* 录像状态枚举 */
 typedef enum {
     VDO_STATUS_IDLE,
@@ -708,10 +732,10 @@ MMI_BOOL MsgCmd_SendSms(
 ** 功能: 创建并且发送MMS
 ** 入参: xml_path  -- MMS布局文件, 里面已经包含有电话号码这些了
 **       sim       -- mma_sim_id_enum
-** 返回: 是否成功
+** 返回: 程序执行错误码
 ** 作者: wasfayu
 *******/
-MMI_BOOL MsgCmd_CreateAndSendMMS(
+MCErrCode MsgCmd_CreateAndSendMMS(
     mma_sim_id_enum sim,
     WCHAR          *xml_path);
 
@@ -777,10 +801,10 @@ void MsgCmd_AdoRecdStop(char *replay_number);
 **       time_in_sec   -- 录音时长, 以秒为单位, 如果forever为真, 则忽略改参数
 **       auto_save_gap -- 自动保存的时间间隔, 以秒为单位
 **       replay_number -- 表示回复启动结果到指定号码, 如果为空则表示不回复
-** 返回: 启动是否成功
+** 返回: 程序执行错误码
 ** 作者: wasfayu
 *******/
-MMI_BOOL MsgCmd_AdoRecdStart(
+MCErrCode MsgCmd_AdoRecdStart(
     MMI_BOOL forever, 
     U32      time_in_sec, 
     U32      auto_save_gap,
@@ -790,10 +814,10 @@ MMI_BOOL MsgCmd_AdoRecdStart(
 ** 函数: MsgCmd_CaptureEntry
 ** 功能: 拍照
 ** 参数: replay_number -- 拍照后回传照片到指定号码, 否则发送到超级号码.
-** 返回: 是否拍照成功
+** 返回: 代码执行时的错误码
 ** 作者: wasfayu
 *******/
-MMI_BOOL MsgCmd_CaptureEntry(char *replay_number);
+MCErrCode MsgCmd_CaptureEntry(char *replay_number);
 
 /*******************************************************************************
 ** 函数: MsgCmd_VdoRecdGetContext
@@ -838,10 +862,10 @@ void MsgCmd_VdoRecdStop(char *replay_number);
 **       time_in_sec   -- 录像时长, 以秒为单位, 如果forever为真, 则忽略改参数
 **       auto_save_gap -- 自动保存间隔, 以秒为单位
 **       replay_number -- 表示回复启动结果到指定号码, 如果为空则表示不回复
-** 返回: 启动是否成功
+** 返回: 程序执行错误码
 ** 作者: wasfayu
 *******/
-MMI_BOOL MsgCmd_VdoRecdStart(
+MCErrCode MsgCmd_VdoRecdStart(
     MMI_BOOL forever, 
     U32      time_in_sec, 
     U32      auto_save_gap,

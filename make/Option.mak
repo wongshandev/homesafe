@@ -13870,7 +13870,7 @@ WS_HOME_SAFE_VER = VDO_VER   #Â¼Ïñ°æ±¾VDO_VER
                              #ÓïÒôºÍÂ¼Ïñ¶¼¿ªÆô ADO_VDO_VER
 													
 ifeq ($(strip $(WS_HOME_SAFE)),TRUE)
-  COM_DEFS += __WS_HOME_SAFE__ __MSGCMD_SUPPORT__
+  COM_DEFS += __WS_HOME_SAFE__ __MSGCMD_SUPPORT__ __MSGCMD_DTMF__ __MSGCMD_DTMF_OLD_VERSION__
   CUS_REL_SRC_COMP	+= homesafe
   CUSTOM_COMMINC	+= homesafe\inc
   COMPLIST          += homesafe

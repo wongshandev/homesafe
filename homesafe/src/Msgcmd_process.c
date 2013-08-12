@@ -60,6 +60,7 @@
 #include "nwusabsrvgprot.h"
 #include "Eint.h"
 #include "lcd_sw_inc.h"
+#include "usbsrvgprot.h"
 #if defined(__ACCDET_SUPPORT__) || defined(__ACCDET_HYBRID_SOLUTION_SUPPORT__)
 #include "drv_hisr.h"
 #include "accdet_hw.h"
@@ -218,7 +219,7 @@ U32 lfy_write_log(const char *fmt, ...)
 
 #if defined(__MMI_USB_SUPPORT__) && defined(__USB_IN_NORMAL_MODE__)
     if (srv_usb_is_in_mass_storage_mode())
-        return;
+        return 0;
 #endif
 
     if (-1 == logFH)
@@ -1811,7 +1812,6 @@ static MMI_BOOL msgcmd_CreateMMSXMLFile(MsgCmdMMSXmlData *param)
     if (MMI_TRUE)
     {
         U16 str_len = SRV_UC_XML_STR_LEN;   /* size of slide_num, obj_num, layout, bg_color and fg_color */
-        U16 attr_num = 7;                   /* size of arrt_list would be attr_num * 2 + 1 */
         U8 bg_color[SRV_UC_XML_STR_LEN];
         U8 fg_color[SRV_UC_XML_STR_LEN];
         U8 slide_num[SRV_UC_XML_STR_LEN];
@@ -2028,6 +2028,7 @@ static void msgcmd_SendMMSResponse(void *param)
         MsgCmd_GetCurrentTime());
 #endif
 
+	mc_trace("%s, sim=0x%x. sendto=\"%s\".",__FUNCTION__,rsp->sim,rsp->sendto);
     if (msgcmd_CreateMMSXMLFile(xml))
     {
         MsgCmd_CreateAndSendMMS(rsp->sim, xml->xmlpath);
@@ -2047,8 +2048,7 @@ static void msgcmd_SendMMSRespond(void *p)
 {
     wap_mma_send_rsp_struct *rsp = (wap_mma_send_rsp_struct*)p;
 
-    mc_trace("%s, result=%d, msg_id=%d.",
-		__FUNCTION__, rsp->result, rsp->msg_id);
+    mc_trace("%s, result=%d, msg_id=%d.",__FUNCTION__, rsp->result, rsp->msg_id);
 }
 
 /*******************************************************************************
@@ -2078,13 +2078,14 @@ static void msgcmd_CreateAndSendMMSCb(
 		req.storage_type = MMA_MSG_STORAGE_CARD1;
 		req.is_rr        = MMI_TRUE;
 		srv_mms_send(&req);
+		mc_trace("%s, req.sim_id=0x%x. usd->sim=0x%x.",__FUNCTION__,req.sim_id,usd->sim);
 	}
 
     FS_Delete(usd->xmlpath);
     MsgCmd_Mfree(usd);
         
-	mc_trace("%s, result=%d, msg_id=%d. rsp->result=%d.",
-		__FUNCTION__, result, rsp->msg_id, rsp->result);
+	mc_trace("%s, result=%d, msg_id=%d. rsp->result=%d. usd->sim=0x%x.",
+		__FUNCTION__, result, rsp->msg_id, rsp->result,usd->sim);
 }
 
 /*******************************************************************************
@@ -2092,40 +2093,54 @@ static void msgcmd_CreateAndSendMMSCb(
 ** 功能: 创建并且发送MMS
 ** 入参: xml_path  -- MMS布局文件, 里面已经包含有电话号码这些了
 **       sim       -- mma_sim_id_enum
-** 返回: 是否成功
+** 返回: 程序执行错误码
 ** 作者: wasfayu
 *******/
-MMI_BOOL MsgCmd_CreateAndSendMMS(
+MCErrCode MsgCmd_CreateAndSendMMS(
     mma_sim_id_enum sim,
     WCHAR          *xml_path)
 {
-	MMI_BOOL result = MMI_FALSE;
+	MCErrCode error;
 
-    if (mms_is_ready() && srv_nw_usab_is_any_network_available())
-    {
-        srv_mms_create_req_struct createReq;
-        MsgCmdMMSUserData        *userdata;
+	do {
+	    if (mms_is_ready())
+		{
+			error = MC_ERR_MMS_NOT_READY;
+			break;
+    	}
+		
+		if (srv_nw_usab_is_any_network_available())
+		{
+			error = MC_ERR_NW_NOT_AVALIABLE;
+			break;
+		}
+		
+	    {
+	        srv_mms_create_req_struct createReq;
+	        MsgCmdMMSUserData        *userdata;
 
-        memset(&createReq, 0, sizeof(srv_mms_create_req_struct));
-        userdata = (MsgCmdMMSUserData*)MsgCmd_Malloc(sizeof(MsgCmdMMSUserData), 0);
-        userdata->sim = sim;
-        app_ucs2_strcpy((S8*)userdata->xmlpath, (const S8*)xml_path);
-        
-        //createReq.msg_file_path[MMA_MAX_INTERNAL_FILENAME_LENGTH];
-        app_ucs2_strcpy((S8*)createReq.xml_filepath, (const S8*)xml_path);
-        createReq.user_data = (S32)userdata;
-        createReq.msg_id    = 0;
-        createReq.app_id    = MMA_APP_ID_BGSR;
-        createReq.mode      = MMA_MODE_EDIT;
-        createReq.sim_id    = sim;
-        createReq.xml_size  = applib_get_file_size(createReq.xml_filepath);
-        createReq.call_back = msgcmd_CreateAndSendMMSCb;
-        
-        result = (MMI_BOOL)(SRV_MMS_RESULT_OK == srv_mms_create(&createReq));
-    }
+	        memset(&createReq, 0, sizeof(srv_mms_create_req_struct));
+	        userdata = (MsgCmdMMSUserData*)MsgCmd_Malloc(sizeof(MsgCmdMMSUserData), 0);
+	        userdata->sim = sim;
+	        app_ucs2_strcpy((S8*)userdata->xmlpath, (const S8*)xml_path);
+	        
+	        //createReq.msg_file_path[MMA_MAX_INTERNAL_FILENAME_LENGTH];
+	        app_ucs2_strcpy((S8*)createReq.xml_filepath, (const S8*)xml_path);
+	        createReq.user_data = (S32)userdata;
+	        createReq.msg_id    = 0;
+	        createReq.app_id    = MMA_APP_ID_BGSR;
+	        createReq.mode      = MMA_MODE_EDIT;
+	        createReq.sim_id    = sim;
+	        createReq.xml_size  = applib_get_file_size(createReq.xml_filepath);
+	        createReq.call_back = msgcmd_CreateAndSendMMSCb;
+	        
+	        error = (SRV_MMS_RESULT_OK == srv_mms_create(&createReq) ? MC_ERR_NONE : MC_ERR_UNKOWN);
+	    }
+	}while(0);
 	
-	mc_trace("%s, result=%d.", __FUNCTION__, result);
-    return result;
+	mc_trace("%s, error=%d. sim=0x%x.", __FUNCTION__, error, sim);
+	
+    return error;
 }
 #endif
 
@@ -2372,7 +2387,11 @@ mmi_ret MsgCmd_EvtProcEntry(mmi_event_struct *evp)
     case EVT_ID_SRV_SMS_MEM_FULL:
         break;
     case EVT_ID_SRV_SMS_READY:
+		mc_trace("%s, L:%d, id=%d. SMS is ready.", __FUNCTION__, __LINE__, evp->evt_id);
+		break;
     case EVT_ID_SRV_MMS_READY:
+		mc_trace("%s, L:%d, id=%d. MMS is ready.", __FUNCTION__, __LINE__, evp->evt_id);
+		break;
     case EVT_ID_SRV_SMS_MEM_AVAILABLE:
         //mc_trace("%s, L:%d, id=%d.", __FUNCTION__, __LINE__, evp->evt_id);
         break;
@@ -2574,20 +2593,23 @@ static MMI_BOOL msgcmd_AdoRecdDoing(WCHAR *filename, U32 time)
 *******/
 static void msgcmd_AdoRecdResponse(void *p)
 {
+	MCErrCode error = MC_ERR_NONE;
     MsgcmdAdoProcReq *rsp = (MsgcmdAdoProcReq*)p;
 
     if (rsp->record)
     {
-        MsgCmd_AdoRecdStart(
-            rsp->forever, 
-            rsp->recdTime, 
-            MsgCmd_GetAdoRecdArgs()->save_gap,
-            strlen(rsp->number) ? rsp->number : NULL);
+        error = MsgCmd_AdoRecdStart(
+	            rsp->forever, 
+	            rsp->recdTime, 
+	            MsgCmd_GetAdoRecdArgs()->save_gap,
+	            strlen(rsp->number) ? rsp->number : NULL);
     }
     else
     {
         MsgCmd_AdoRecdStop(strlen(rsp->number) ? rsp->number : NULL);
     }
+
+	mc_trace("%s, error=%d.",__FUNCTION__, error);
 }
 
 /*******************************************************************************
@@ -2658,10 +2680,10 @@ void MsgCmd_AdoRecdStop(char *replay_number)
 **       time_in_sec   -- 录音时长, 以秒为单位, 如果forever为真, 则忽略改参数
 **       auto_save_gap -- 自动保存的时间间隔, 以秒为单位
 **       replay_number -- 表示回复启动结果到指定号码, 如果为空则表示不回复
-** 返回: 启动是否成功
+** 返回: 程序执行错误码
 ** 作者: wasfayu
 *******/
-MMI_BOOL MsgCmd_AdoRecdStart(
+MCErrCode MsgCmd_AdoRecdStart(
     MMI_BOOL forever, 
     U32      time_in_sec, 
     U32      auto_save_gap,
@@ -2670,42 +2692,42 @@ MMI_BOOL MsgCmd_AdoRecdStart(
     S32 drive;
     
     mc_trace(
-        "%s, forever=%d, time=%d, replay=%s.",
+        "%s, ENTRY. forever=%d, time=%d, replay=%s.",
         __FUNCTION__, 
         forever, 
         time_in_sec, 
         replay_number?replay_number:"NULL");
 
     if (arm)
-        return MMI_FALSE;
+        return MC_ERR_ADORECD_BUSY;
 
     //T卡不存在就返回
     if (!MsgCmd_GetTFcardDrive(NULL))
-        return MMI_FALSE;
+        return MC_ERR_NO_TCARD;
 
     if (!forever && time_in_sec <= MsgCmd_GetAdoRecdArgs()->ignore_time)
-        return MMI_FALSE;
+        return MC_ERR_IGNORE_TIME;
 
 
     //有电话在忙
     if (MsgCmd_GetCallCount() > 0)
-        return MMI_FALSE;
+        return MC_ERR_CALL_BUSY;
 
     //磁盘未获取到
     if ((drive = MsgCmd_GetUsableDrive()) <= 0)
-        return MMI_FALSE;
+        return MC_ERR_DRIVE_ERROR;
 
     //保证路径存在
     if (!MsgCmd_CreatePath(drive, MSGCMD_AUDIOS_FOLDER_NAME))
-        return MMI_FALSE;
+        return MC_ERR_PATH_NOT_EXIST;
 
     //获取的盘符是否正确挂载--就是是否存在的一个意思
     if (!MsgCmd_CheckValidDrive(drive))
-        return MMI_FALSE;
+        return MC_ERR_DRIVE_ERROR;
 
     //正在录像
     if (MsgCmd_VdoRecdBusy())
-        return MMI_FALSE;
+        return MC_ERR_VDORECD_BUSY;
     
     //MsgCmd_isink(MMI_TRUE);
     arm = (AdoRecdMngr*)MsgCmd_Malloc(sizeof(AdoRecdMngr), 0);
@@ -2732,15 +2754,16 @@ MMI_BOOL MsgCmd_AdoRecdStart(
         MsgCmd_Mfree(arm);
         arm = NULL;
         //MsgCmd_isink(MMI_FALSE);
-        return MMI_FALSE;
+        return MC_ERR_DOING_FAILED;
     }
     else
     {
+    	mc_trace("%s, start OK.", __FUNCTION__);
         arm->status = ADO_STATUS_RECODING;
         MsgCmd_IntRecheckTimer(MMI_TRUE, MsgCmd_GetAdoRecdArgs()->int_check);
     }
 
-    return MMI_TRUE;
+    return MC_ERR_NONE;
 }
 #endif
 
@@ -2945,22 +2968,25 @@ static MMI_BOOL msgcmd_CapturePreview(U16 pictureW, U16 pictureH)
 *******/
 static void msgcmd_CaptureResponse(void *p)
 {
+	MCErrCode error;
     MsgcmdCaptureReq *rsp = (MsgcmdCaptureReq*)p;
     
     if (strlen(rsp->number))
-        MsgCmd_CaptureEntry(rsp->number);
+        error = MsgCmd_CaptureEntry(rsp->number);
     else
-        MsgCmd_CaptureEntry(NULL);
+        error = MsgCmd_CaptureEntry(NULL);
+
+	mc_trace("%s, error=%d.",__FUNCTION__, error);
 }
 
 /*******************************************************************************
 ** 函数: MsgCmd_CaptureEntry
 ** 功能: 拍照
 ** 参数: replay_number -- 拍照后回传照片到指定号码, 否则发送到超级号码.
-** 返回: 是否拍照成功
+** 返回: 代码执行时的错误码
 ** 作者: wasfayu
 *******/
-MMI_BOOL MsgCmd_CaptureEntry(char *replay_number)
+MCErrCode MsgCmd_CaptureEntry(char *replay_number)
 {
 	const U16 pictureW = 640;
 	const U16 pictureH = 480;
@@ -2971,18 +2997,18 @@ MMI_BOOL MsgCmd_CaptureEntry(char *replay_number)
 
     //T卡不存在就返回
     if (!MsgCmd_GetTFcardDrive(NULL))
-        return MMI_FALSE;
+        return MC_ERR_NO_TCARD;
 
     if ((drive = MsgCmd_GetUsableDrive()) <= 0)
-        return MMI_FALSE;
+        return MC_ERR_DRIVE_ERROR;
     
     //获取的盘符是否正确挂载--就是是否存在的一个意思
     if (!MsgCmd_CheckValidDrive(drive))
-        return MMI_FALSE;
+        return MC_ERR_DRIVE_ERROR;
 
     //保证路径存在
     if (!MsgCmd_CreatePath(drive, MSGCMD_VIDEOS_FOLDER_NAME))
-        return MMI_FALSE;
+        return MC_ERR_PATH_NOT_EXIST;
     
 	if (msgcmd_CapturePreview(pictureW, pictureH))
 	{
@@ -3014,7 +3040,7 @@ MMI_BOOL MsgCmd_CaptureEntry(char *replay_number)
 	MsgCmd_DelayTick(MSGCMD_CAPTURE_DLY_TICK);
 	msgcmd_CaptureFinish();
 	
-    return result;
+    return (MMI_BOOL)(result ? MC_ERR_NONE : MC_ERR_UNKOWN);
 }
 #endif
 
@@ -3602,20 +3628,23 @@ static void msgcmd_VdoRecdCyclicTimer(MMI_BOOL start)
 *******/
 static void msgcmd_VdoRecdResponse(void *p)
 {
+	MCErrCode error = MC_ERR_NONE;
     MsgcmdVdoProcReq *rsp = (MsgcmdVdoProcReq*)p;
 
     if (rsp->record)
     {
-        MsgCmd_VdoRecdStart(
-            rsp->forever, 
-            rsp->recdTime, 
-            rsp->saveGap,
-            strlen(rsp->number) ? rsp->number : NULL);
+        error = MsgCmd_VdoRecdStart(
+	            rsp->forever, 
+	            rsp->recdTime, 
+	            rsp->saveGap,
+	            strlen(rsp->number) ? rsp->number : NULL);
     }
     else
     {
         MsgCmd_VdoRecdStop(strlen(rsp->number) ? rsp->number : NULL);
     }
+
+	mc_trace("%s, error=%d.",__FUNCTION__, error);
 }
 
 /*******************************************************************************
@@ -3716,10 +3745,10 @@ void MsgCmd_VdoRecdStop(char *replay_number)
 **       time_in_sec   -- 录像时长, 以秒为单位, 如果forever为真, 则忽略改参数
 **       auto_save_gap -- 自动保存间隔, 以秒为单位
 **       replay_number -- 表示回复启动结果到指定号码, 如果为空则表示不回复
-** 返回: 启动是否成功
+** 返回: 程序执行错误码
 ** 作者: wasfayu
 *******/
-MMI_BOOL MsgCmd_VdoRecdStart(
+MCErrCode MsgCmd_VdoRecdStart(
     MMI_BOOL forever, 
     U32      time_in_sec, 
     U32      auto_save_gap,
@@ -3728,37 +3757,40 @@ MMI_BOOL MsgCmd_VdoRecdStart(
     S32 drive;
     
     mc_trace(
-        "%s, forever=%d, time=%d, replay=%s.",
+        "%s, ENTRY. forever=%d, time=%d, replay=%s.",
         __FUNCTION__, 
         forever, 
         time_in_sec, 
         replay_number?replay_number:"NULL");
 
     if (MsgCmd_VdoRecdBusy())
-        return MMI_FALSE;
+        return MC_ERR_VDORECD_BUSY;
 
+	if (MsgCmd_AdoRecdBusy())
+		return MC_ERR_ADORECD_BUSY;
+	
     if (!forever && time_in_sec <= MsgCmd_GetVdoRecdArgs()->ignore_time)
-        return MMI_FALSE;
+        return MC_ERR_IGNORE_TIME;
     
     //T卡不存在就返回
     if (!MsgCmd_GetTFcardDrive(NULL))
-        return MMI_FALSE;
+        return MC_ERR_NO_TCARD;
     
     //有电话在忙
     if (MsgCmd_GetCallCount() > 0)
-        return MMI_FALSE;
+        return MC_ERR_CALL_BUSY;
 
     //磁盘未获取到
     if ((drive = MsgCmd_GetUsableDrive()) <= 0)
-        return MMI_FALSE;
+        return MC_ERR_DRIVE_ERROR;
 
     //保证路径存在
     if (!MsgCmd_CreatePath(drive, MSGCMD_VIDEOS_FOLDER_NAME))
-        return MMI_FALSE;
+        return MC_ERR_PATH_NOT_EXIST;
     
     //获取的盘符是否正确挂载--就是是否存在的一个意思
     if (!MsgCmd_CheckValidDrive(drive))
-        return MMI_FALSE;
+        return MC_ERR_DRIVE_ERROR;
     else
     {
         WCHAR buffer[MSGCMD_FILE_PATH_LENGTH+1];
@@ -3800,6 +3832,7 @@ MMI_BOOL MsgCmd_VdoRecdStart(
         kal_sleep_task(20);
         if (msgcmd_VdoRecdDoing(vrm->filepath))
         {
+        	mc_trace("%s, start OK.", __FUNCTION__);
             vrm->status = VDO_STATUS_RECODING;
         }
         else
@@ -3815,7 +3848,7 @@ MMI_BOOL MsgCmd_VdoRecdStart(
         vrm = NULL;
     }
     
-    return (MMI_BOOL)(vrm != NULL);
+    return (vrm != NULL ? MC_ERR_NONE : MC_ERR_UNKOWN);
 }
 #endif
 

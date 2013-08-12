@@ -14,6 +14,6 @@ SRC_LIST = homesafe\src\ws_sms.c \
            homesafe\src\msgcmd_win32data.c
 
 # Define the specified compile options to COMP_DEFS
-COMP_DEFS = __MSGCMD_DTMF__
+# COMP_DEFS = 
 
 
