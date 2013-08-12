@@ -306,7 +306,17 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 				return 0xff;
 			}
 			strcpy(p->string,_phone);
+#if defined(__VDO_VER__)
+			if (MsgCmd_VdoRecdBusy())
+			{
+				hf_send_sms_req(_phone,"system is recording video now,will ignore MMS.");
+			}
+			else
+				hf_send_sms_req(_phone,"MMS set done, please wait.");
+
+#else
 			hf_send_sms_req(_phone,"MMS set done, please wait.");
+#endif			
 			hf_mmi_task_send(HF_MSG_ID_MMS, p);
 		}
 		else
