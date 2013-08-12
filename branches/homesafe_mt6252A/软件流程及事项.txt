@@ -28,6 +28,48 @@
     提示音的文件需要符合如下格式：位速为64kbps，音频采样大小为8bit，单声道，采样级别为8KHZ或者16KHZ，音频格式为PCM。
     文件的存放位置为T卡根目录下的“dtmf_voice”文件夹下。
     可以将自定义的wav音频文件，放在dtmf_voice文件夹下，然后在电话接通后的第一个提示音（如果没有提示音，则可以再电话接通后的第2秒之后）按×键，此时，注意听电话的提示音，如果提示音有播放，索引音频文件可以作为提示音，否则不能作为提示音。
+|----文件名：welcome.wav
+|------ 欢迎使用。按#键进入系统，按*键进入测试模式。
+|------ Welcome to use. Press the hash key to enter the system, press the star key to enter the test pattern.
+|
+|----文件名：EnterPwd.wav
+|------ 请输入密码, 按#键结束。
+|------ Please enter the password. Press the hash key to end.
+|
+|----文件名：ChooseOpt.wav
+|------ 请选择操作：1为拍照；2为录音；3为录像。
+|------ Please choose option: one is capture, two is audio record, three is video record.
+|
+|----文件名：EnterParam.wav
+|------ 请输入录制时间，以分钟为单位。按#键结束。
+|------ please enter recording time, unit in minutes. Press the hash key to end.
+|
+|----文件名：RetrayPwd.wav
+|------ 密码错误，请重新输入。
+|------ password error. please enter again.
+|
+|----文件名：RetryOpt.wav
+|------ 选择错误。请重新选择：1为拍照；2为录音；3为录像。
+|------ Choose error. Please choose option: one is capture, two is audio record, three is video record.
+|
+|----文件名：RetryParam.wav
+|------ 参数错误，请重新输入录制时间。按#键结束。
+|------ Parameter error, please enter recording time. Press the hash key to end.
+|
+|----文件名：Error.wav
+|------ 您的错误次数过多。谢谢来电，再见！
+|------ Your wrong too many times. Thank you for calling, goodbye!
+|
+|----文件名：Retry.wav
+|------ 输入错误。请重新输入
+|------ Enter error. Please enter again!
+|
+|----文件名：Accept.wav
+|------ 您的请求已接受。谢谢来电，再见！
+|------ Your request is accept. Thank you for calling, goodbye!
+
+
+
 
 ---(@.@)---
 录音版本的软件流程（外部电平状态稳定）：

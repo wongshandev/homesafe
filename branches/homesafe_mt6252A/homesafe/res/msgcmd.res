@@ -23,7 +23,9 @@
     <AUDIO id="MC_DTMF_VOC_RETRY">"..\\\\..\\\\..\\\\homesafe\\\\dtmf_voice\\\\retry.wav"</AUDIO>
     <AUDIO id="MC_DTMF_VOC_RETRY_PWD">"..\\\\..\\\\..\\\\homesafe\\\\dtmf_voice\\\\RetryPwd.wav"</AUDIO>
     <AUDIO id="MC_DTMF_VOC_RETRY_OPT">"..\\\\..\\\\..\\\\homesafe\\\\dtmf_voice\\\\RetryOpt.wav"</AUDIO>
+    <AUDIO id="MC_DTMF_VOC_RETRY_PARAM">"..\\\\..\\\\..\\\\homesafe\\\\dtmf_voice\\\\RetryParam.wav"</AUDIO>
     <AUDIO id="MC_DTMF_VOC_SILENCE">"..\\\\..\\\\..\\\\homesafe\\\\dtmf_voice\\\\silence.wav"</AUDIO>
+    <AUDIO id="MC_DTMF_VOC_DI_TONE">"..\\\\..\\\\..\\\\homesafe\\\\dtmf_voice\\\\di_tone.wav"</AUDIO>
     
     <!-----------------------------------------------------event handler area------------------------------------------------------>
     <RECEIVER id="EVT_ID_IDLE_ENTER" proc="MsgCmd_EvtProcEntry"/>

@@ -36,7 +36,7 @@ static void dtmf_TestPlayVoiceEndCall(void);
 static void dtmf_TestPlayVoiceTimerCb();
 static void dtmf_TestPlayVoice(void);
 #endif
-
+static MMI_BOOL dtmf_CheckPassword(const char *pwdStr);
 static void dtmf_CmdExecRsp(void *p);
 static void dtmf_PostCmdExecReq(DtmfCommand cmd, char *number, void *param);
 static void dtmf_ReleaseAllActivedCall(MMI_BOOL exec);
@@ -67,6 +67,7 @@ const static VoiceAttr voiceTab[] = {
     {DTMF_VOC_INPUT_PARAM    , "EnterParam.wav"},
     {DTMF_VOC_RETRY_PASSWORD , "RetryPwd.wav"},
     {DTMF_VOC_RETRY_OPTIOIN  , "RetryOpt.wav"},
+	{DTMF_VOC_RETRY_PARAM    , "RetryParam.wav"},
 };
 
 #if defined(__TEST_PLAY_AUDIO__)
@@ -283,6 +284,20 @@ static void dtmf_TestPlayVoice(void)
 }
 #endif
 
+/*******************************************************************************
+** 函数: dtmf_CheckPassword
+** 功能: 检查密码的正确性
+** 参数: pwdStr -- 密码字符串
+** 返回: 密码是否正确
+** 作者: wasfayu
+*******/
+static MMI_BOOL dtmf_CheckPassword(const char *pwdStr)
+{
+	if (strlen(pwdStr) != DTMF_PWD_STR_LENGTH)
+		return MMI_FALSE;
+
+	return (MMI_BOOL)(strcmp(pwdStr, "123456") == 0);
+}
 
 /*******************************************************************************
 ** 函数: dtmf_CmdExecRsp
@@ -295,6 +310,12 @@ static void dtmf_CmdExecRsp(void *p)
 {
     DtmfCmdExecReq *rsp = (DtmfCmdExecReq*)p;
 
+	//因为是延时执行的, 如果执行时, 有电话进来, 则取消执行
+	if (srv_ucm_query_call_count(SRV_UCM_CALL_STATE_ALL, SRV_UCM_CALL_TYPE_ALL, NULL) > 0)
+    {
+        return;
+    }
+	
     switch(rsp->command)
     {
     case DTMF_CMD_CAPTURE:
@@ -400,13 +421,14 @@ static void dtmf_PostCmdExecReq(DtmfCommand cmd, char *number, void *param)
 ** 作者: wasfayu
 *******/
 static void dtmf_ReleaseAllActivedCall(MMI_BOOL exec)
-{    
+{
     //挂断电话
     srv_ucm_act_request(SRV_UCM_END_ALL_ACT, NULL, NULL, NULL);
     
     AlmEnableExpiryHandler();
 
-    if (exec)
+	dtmf_trace("Release call, exec=%d, cmd=%d.", exec, dtmfCnxt.command);
+    if (exec && dtmfCnxt.command > DTMF_CMD_NONE && dtmfCnxt.command < DTMF_CMD_UNDEFINED)
     {
         //发送消息去执行命令
         dtmf_PostCmdExecReq(dtmfCnxt.command, dtmfCnxt.call.number, NULL);
@@ -427,46 +449,23 @@ static void dtmf_KeyDetectTimeoutCb(void)
     dtmf_StopKeyDetect();
 
     //达到最大次数, 直接挂断电话
-    if (dtmfCnxt.rptCount++ >= dtmfCnxt.rptMax)
+    if (dtmfCnxt.rptCount >= dtmfCnxt.rptMax)
     {
         dtmf_ReleaseAllActivedCall(MMI_FALSE);
         Dtmf_Reset();
         return;
     }
-    
-    //重新播放提示语
-    switch (dtmfCnxt.state)
+
+	//如果没有电话在通话中
+    if (srv_ucm_query_call_count(SRV_UCM_CALL_STATE_ALL, SRV_UCM_CALL_TYPE_ALL, NULL) == 0)
     {
-    case DTMF_STATE_WAITING_ENTRY:
-        //正在等待进入, 按键检测超时, 重复播放
-        //系统进入, 播放提示语 1Entry.wav
-        dtmfCnxt.detectTime = DTMF_ENTRY_DETECT_TIME;
-        playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_PRESS_TO_ENTRY, (void*)dtmfCnxt.detectTime);
-        if (!playOK)
-        {
-            //播放失败则进入按键检测
-            dtmf_StartKeyDetect(dtmfCnxt.detectTime);
-        }
-        break;
-        
-    case DTMF_STATE_INPUT_PWD:
-        //等待输入密码, 超时则重复播放
-        dtmfCnxt.param.password[7] = 0;
-        break;
-        
-    case DTMF_STATE_CHOOSE_OPTION:
-        break;
-        
-    case DTMF_STATE_INPUT_PARAM:
-        break;
-        
-    case DTMF_STATE_IDLE:
-    case DTMF_STATE_GOODBYE:
-    case DTMF_STATE_MAX_ENUM:
-    default:
-        break;
+        Dtmf_Reset();
+        return;
     }
-    
+	
+	dtmfCnxt.error = MMI_TRUE;
+	dtmfCnxt.rptCount ++;
+	dtmf_SwitchFSMStatus();    
 }
 
 /*******************************************************************************
@@ -485,102 +484,231 @@ static void dtmf_SwitchFSMStatus(void)
     switch (dtmfCnxt.state)
     {
     case DTMF_STATE_IDLE:
-        //系统进入, 播放提示语 1Entry.wav
+        //系统进入, 播放提示语 Welcome.wav
         dtmfCnxt.detectTime = DTMF_ENTRY_DETECT_TIME;
         playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_PRESS_TO_ENTRY, (void*)dtmfCnxt.detectTime);
         dtmfCnxt.state = DTMF_STATE_WAITING_ENTRY;
         if (!playOK)
         {
-            //播放失败则进入按键检测
             dtmf_StartKeyDetect(dtmfCnxt.detectTime);
         }
         break;
         
     case DTMF_STATE_WAITING_ENTRY:
-        dtmfCnxt.detectTime = DTMF_DEF_DETECT_TIME;
-        //系统已经进入, 播放提示语 2Password.wav
-    #if defined(__NEED_CHECK_PASSWORD__)
-        playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_INPUT_PASSWORD, (void*)dtmfCnxt.detectTime);
-        dtmfCnxt.state = DTMF_STATE_INPUT_PWD;
-    #else
-        playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_CHOOSE_OPTION, (void*)dtmfCnxt.detectTime);
-        dtmfCnxt.state = DTMF_STATE_CHOOSE_OPTION;
-    #endif
-        if (!playOK)
-        {
-            //播放失败则进入按键检测
-            dtmf_StartKeyDetect(dtmfCnxt.detectTime);
-        }
+		if (dtmfCnxt.error)
+		{
+			dtmfCnxt.error      = MMI_FALSE;
+			dtmfCnxt.detectTime = DTMF_ENTRY_DETECT_TIME;
+			
+			if (dtmfCnxt.rptCount <= dtmfCnxt.rptMax)
+			{
+		        playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_PRESS_TO_ENTRY, (void*)dtmfCnxt.detectTime);
+		        dtmfCnxt.state = DTMF_STATE_WAITING_ENTRY;
+			}
+			else
+			{
+				playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_ERROR_TO_EXIT, NULL);
+            	dtmfCnxt.state = DTMF_STATE_GOODBYE;
+				if (!playOK)
+	            {
+	                dtmf_ReleaseAllActivedCall(MMI_FALSE);
+	            }
+				break;
+			}
+		}
+		else
+		{
+			dtmfCnxt.rptCount = 0;
+			dtmfCnxt.detectTime = DTMF_DEF_DETECT_TIME;
+			
+	    #if defined(__NEED_CHECK_PASSWORD__)
+	        //系统已经进入, 播放提示语 password.wav
+	        playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_INPUT_PASSWORD, (void*)dtmfCnxt.detectTime);
+	        dtmfCnxt.state = DTMF_STATE_INPUT_PWD;
+	    #else
+	        //系统已经进入, 播放提示语 ChooseOpt.wav
+	        playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_CHOOSE_OPTION, (void*)dtmfCnxt.detectTime);
+	        dtmfCnxt.state = DTMF_STATE_CHOOSE_OPTION;
+	    #endif
+		}
+		
+		if (!playOK)
+		{
+			dtmf_StartKeyDetect(dtmfCnxt.detectTime);
+		}
         break;
         
 #if defined(__NEED_CHECK_PASSWORD__)
     case DTMF_STATE_INPUT_PWD:
         dtmfCnxt.detectTime = DTMF_DEF_DETECT_TIME;
-        //检查密码是否有效
-        if (dtmfCnxt.param.password[7] == 6 &&
-            strncmp(dtmfCnxt.param.password, "123456", 6) == 0)
-        {
-            //播放提示语 3Option.wav
-            playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_CHOOSE_OPTION, (void*)dtmfCnxt.detectTime);
-            dtmfCnxt.state = DTMF_STATE_CHOOSE_OPTION;
-            if (!playOK)
-            {
-                //播放失败则进入按键检测
-                dtmf_StartKeyDetect(dtmfCnxt.detectTime);
-            }
-        }
-        else if (dtmfCnxt.rptCount < dtmfCnxt.rptMax)
-        {
-            //密码错误
-            dtmfCnxt.param.password[7] = 0;
-            //播放提示语 3Option.wav
-            playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_RETRY_PASSWORD, (void*)dtmfCnxt.detectTime);
-            dtmfCnxt.state = DTMF_STATE_INPUT_PWD;
-            if (!playOK)
-            {
-                //播放失败则进入按键检测
-                dtmf_StartKeyDetect(dtmfCnxt.detectTime);
-            }
-        }
-        else
-        {
-            playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_ERROR_TO_EXIT, NULL);
-            dtmfCnxt.state = DTMF_STATE_GOODBYE;
 
-            if (!playOK)
-            {
-                dtmf_ReleaseAllActivedCall(MMI_TRUE);
-            }
-        }
+		dtmf_trace("%s, error=%d. password=%s. %d.", __FUNCTION__, dtmfCnxt.error, dtmfCnxt.param.password, dtmfCnxt.param.password[PWD_IDX_VAL]);
+		//输入没有错误且密码正确
+		if (!dtmfCnxt.error)
+		{
+			if (dtmfCnxt.param.password[PWD_IDX_VAL] == DTMF_PWD_STR_LENGTH &&
+				dtmf_CheckPassword((const char *)dtmfCnxt.param.password))
+	        {
+	            dtmfCnxt.rptCount = 0;
+				
+	            //密码有效, 播放提示语 ChooseOpt.wav
+	            playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_CHOOSE_OPTION, (void*)dtmfCnxt.detectTime);
+	            dtmfCnxt.state = DTMF_STATE_CHOOSE_OPTION;
+	            if (!playOK)
+	            {
+	                dtmf_StartKeyDetect(dtmfCnxt.detectTime);
+	            }
+				break;
+	        }
+			else
+			{
+				dtmfCnxt.error = MMI_TRUE;
+				dtmfCnxt.rptCount ++;
+			}
+		}
+
+		//必须要上面的检测完毕再执行下面的
+		if (dtmfCnxt.error)
+		{
+			dtmfCnxt.error      = MMI_FALSE;
+			
+			if (dtmfCnxt.rptCount <= dtmfCnxt.rptMax)
+			{
+				dtmfCnxt.param.recordTime[PWD_IDX_VAL] = 0;
+		        playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_RETRY_PASSWORD, (void*)dtmfCnxt.detectTime);
+		        dtmfCnxt.state = DTMF_STATE_INPUT_PWD;
+			}
+			else
+			{
+				playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_ERROR_TO_EXIT, NULL);
+            	dtmfCnxt.state = DTMF_STATE_GOODBYE;
+				if (!playOK)
+	            {
+	                dtmf_ReleaseAllActivedCall(MMI_FALSE);
+	            }
+				break;
+			}
+		}
         break;
 #endif
 
     case DTMF_STATE_CHOOSE_OPTION:
-        dtmfCnxt.detectTime = DTMF_DEF_DETECT_TIME;
-        //播放提示语 7Param.wav
-    #if defined(__RECIVE_CMD_PARAMETER__)
-        playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_INPUT_PARAM, (void*)dtmfCnxt.detectTime);
-        dtmfCnxt.state = DTMF_STATE_INPUT_PARAM;
-        if (!playOK)
-        {
-            //播放失败则进入按键检测
-            dtmf_StartKeyDetect(dtmfCnxt.detectTime);
-        }
-    #else
-        playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_ACCEPT_REQUEST, NULL);
-        dtmfCnxt.state = DTMF_STATE_GOODBYE;
-    #endif
+		dtmfCnxt.detectTime = DTMF_DEF_DETECT_TIME;
+
+		dtmf_trace("%s, command=%d.", __FUNCTION__, dtmfCnxt.command);
+		if (dtmfCnxt.command == DTMF_CMD_NONE || dtmfCnxt.command >= DTMF_CMD_UNDEFINED)
+		{
+			dtmfCnxt.error = MMI_TRUE;
+			dtmfCnxt.rptCount ++;
+		}
+		
+		if (dtmfCnxt.error)
+		{
+			dtmfCnxt.error      = MMI_FALSE;
+			
+			if (dtmfCnxt.rptCount <= dtmfCnxt.rptMax)
+			{
+		        playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_RETRY_OPTIOIN, (void*)dtmfCnxt.detectTime);
+		        dtmfCnxt.state = DTMF_STATE_CHOOSE_OPTION;
+				if (!playOK)
+	            {
+	                dtmf_StartKeyDetect(dtmfCnxt.detectTime);
+	            }
+			}
+			else
+			{
+				playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_ERROR_TO_EXIT, NULL);
+            	dtmfCnxt.state = DTMF_STATE_GOODBYE;
+				if (!playOK)
+	            {
+	                dtmf_ReleaseAllActivedCall(MMI_FALSE);
+	            }
+				break;
+			}
+		}
+		else
+		{
+			dtmfCnxt.rptCount = 0;
+			
+	    #if defined(__RECIVE_CMD_PARAMETER__)
+	        if (DTMF_CMD_CAPTURE != dtmfCnxt.command)
+	        {
+	            //非拍照命令, 播放提示语 Param.wav
+	            playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_INPUT_PARAM, (void*)dtmfCnxt.detectTime);
+	            dtmfCnxt.state = DTMF_STATE_INPUT_PARAM;
+	            if (!playOK)
+	            {
+	                dtmf_StartKeyDetect(dtmfCnxt.detectTime);
+	            }
+	        }
+	        else
+	    #endif
+	        {
+	            //选择了拍照命令, 播放提示语 Accept.wav, 然后挂断电话
+	            playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_ACCEPT_REQUEST, NULL);
+	            dtmfCnxt.state = DTMF_STATE_GOODBYE;
+	            if (!playOK)
+	            {
+	                dtmf_ReleaseAllActivedCall(MMI_TRUE);
+	            }
+	        }
+		}
         break;
         
 #if defined(__RECIVE_CMD_PARAMETER__)
     case DTMF_STATE_INPUT_PARAM:
-        playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_ACCEPT_REQUEST, NULL);
-        dtmfCnxt.state = DTMF_STATE_GOODBYE;
+        dtmfCnxt.detectTime = DTMF_DEF_DETECT_TIME;
 
-        if (!playOK)
-        {
-            dtmf_ReleaseAllActivedCall(MMI_TRUE);
-        }
+		dtmf_trace("%s, error=%d. recordTime=%s. %d.", __FUNCTION__, dtmfCnxt.error, dtmfCnxt.param.recordTime, dtmfCnxt.param.recordTime[PARAM_IDX_VAL]);
+		
+		//输入没有错误且密码正确
+		if (!dtmfCnxt.error)
+		{
+			if (dtmfCnxt.param.recordTime[PARAM_IDX_VAL] > DTMF_PARAM_STR_LENGTH)
+	        {
+	            dtmfCnxt.rptCount = 0;
+				
+	            //密码有效, 播放提示语 ChooseOpt.wav
+	            playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_ACCEPT_REQUEST, (void*)dtmfCnxt.detectTime);
+	            dtmfCnxt.state = DTMF_STATE_GOODBYE;
+	            if (!playOK)
+	            {
+	                dtmf_ReleaseAllActivedCall(MMI_TRUE);
+	            }
+				break;
+	        }
+			else
+			{
+				dtmfCnxt.error = MMI_TRUE;
+				dtmfCnxt.rptCount ++;
+			}
+		}
+
+		if (dtmfCnxt.error)
+		{		
+	        if (dtmfCnxt.rptCount < dtmfCnxt.rptMax)
+	        {
+	            //输入错误, 播放提示语 RetryOpt.wav
+	            dtmfCnxt.param.recordTime[PARAM_IDX_VAL] = 0;
+	            playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_RETRY_PARAM, (void*)dtmfCnxt.detectTime);
+	            dtmfCnxt.state = DTMF_STATE_INPUT_PARAM;
+	            if (!playOK)
+	            {
+	                dtmf_StartKeyDetect(dtmfCnxt.detectTime);
+	            }
+	        }
+	        else
+	        {
+	            //输入错误次数过多, 播放提示语 Error.wav, 然后挂断电话
+	            playOK = dtmf_PlayPromptVoiceFile(DTMF_VOC_ERROR_TO_EXIT, NULL);
+	            dtmfCnxt.state = DTMF_STATE_GOODBYE;
+
+	            if (!playOK)
+	            {
+	                dtmf_ReleaseAllActivedCall(MMI_TRUE);
+	            }
+	        }
+		}
         break;
 #endif
 
@@ -611,11 +739,12 @@ static void dtmf_KeyDetectCallback(S16 key)
     {
         mdi_audio_snd_stop();
     }
-    
+
+	StopTimer(TIMER_DTMF_KEY_DETECT);
+	dtmfCnxt.error = MMI_FALSE;
+	
     switch (dtmfCnxt.state)
     {
-    case DTMF_STATE_IDLE:
-        break;
     case DTMF_STATE_WAITING_ENTRY:
         mdi_audio_stop_keytone_detect();
         if (dtmfCnxt.hotKey == (U8)key)
@@ -626,13 +755,16 @@ static void dtmf_KeyDetectCallback(S16 key)
 	#if defined(__TEST_PLAY_AUDIO__)
 		else if(dtmfCnxt.testKey == (U8)key)
 		{
+			dtmfCnxt.rptCount = 0;
 			dtmf_TestPlayVoice();
 		}
 	#endif
         else
         {
             //按键错误, 重新检测, 播放提示语
+            dtmfCnxt.error = MMI_TRUE;
             dtmfCnxt.rptCount++;
+            dtmf_SwitchFSMStatus();
         }
         break;
         
@@ -645,58 +777,82 @@ static void dtmf_KeyDetectCallback(S16 key)
         }
         else if (('0' <= (char)key && (char)key <= '9') || '*' <= (char)key)
         {
-            U32 index = dtmfCnxt.param.password[7];
+            U32 index = dtmfCnxt.param.password[PWD_IDX_VAL];
 
-            if (index < 6)
+            if (index < DTMF_PWD_STR_LENGTH)
             {
                 dtmfCnxt.param.password[index] = (char)key;
             }
-            dtmfCnxt.param.password[7] ++;
+            dtmfCnxt.param.password[PWD_IDX_VAL] ++;
         }
         else
         {
             mdi_audio_stop_keytone_detect();
             //按键错误
+            dtmfCnxt.error = MMI_TRUE;
+            dtmfCnxt.rptCount++;
+            memset(dtmfCnxt.param.password, 0, DTMF_PWD_STR_LENGTH);
+            dtmfCnxt.param.password[PWD_IDX_VAL] = 0;
+            dtmf_SwitchFSMStatus();
         }
         break;
 #endif
 
+	//只接受一次按键
     case DTMF_STATE_CHOOSE_OPTION:
         mdi_audio_stop_keytone_detect();
         if (dtmfCnxt.hotKey == (U8)key)
         {
-            dtmf_SwitchFSMStatus();
+            //什么也不做, 仅仅切换状态
         }
-        else if ('0' <= (char)key && (char)key <= '9')
+        else if ('1' <= (char)key && (char)key <= '9')
         {
+        	//只接受1~9的按键输入
             dtmfCnxt.command = (char)key - '0';
-            dtmf_SwitchFSMStatus();
         }
         else
         {
             //输入有误, 重新输入
             dtmfCnxt.rptMax ++;
+			dtmfCnxt.error = MMI_TRUE;
         }
+		dtmf_SwitchFSMStatus();
         break;
 
 #if defined(__RECIVE_CMD_PARAMETER__)
     case DTMF_STATE_INPUT_PARAM:
-        mdi_audio_stop_keytone_detect();
         if (dtmfCnxt.hotKey == (U8)key)
         {
+            mdi_audio_stop_keytone_detect();
             dtmf_SwitchFSMStatus();
+        }
+        else if ('0' <= (char)key && (char)key <= '9')
+        {
+            U32 index = dtmfCnxt.param.recordTime[PARAM_IDX_VAL];
+
+            if (index < DTMF_PARAM_STR_LENGTH)
+            {
+                dtmfCnxt.param.recordTime[index] = (char)key;
+            }
+            dtmfCnxt.param.recordTime[PARAM_IDX_VAL] ++;
         }
         else
         {
-            //记录参数
+            mdi_audio_stop_keytone_detect();
+            dtmfCnxt.rptCount ++;
+			dtmfCnxt.error = MMI_TRUE;
+            memset(dtmfCnxt.param.recordTime, 0, DTMF_PARAM_STR_LENGTH);
+            dtmfCnxt.param.recordTime[PARAM_IDX_VAL] = 0;
+            dtmf_SwitchFSMStatus();
         }
         break;
 #endif
 
+    case DTMF_STATE_IDLE:
     case DTMF_STATE_GOODBYE:
-        break;
     case DTMF_STATE_MAX_ENUM:
     default:
+		mdi_audio_stop_keytone_detect();
         break;
     }
 }
@@ -713,15 +869,17 @@ static void dtmf_StartKeyDetect(U32 timeout)
     mdi_result ret;
 
     ret = mdi_audio_start_keytone_detect(dtmf_KeyDetectCallback);
-    dtmf_trace("%s: time=%d,ret=%d,curr state=%d.", __FUNCTION__, timeout, ret, dtmfCnxt.state);
+    //dtmf_trace("%s: time=%d,ret=%d,curr state=%d.", __FUNCTION__, timeout, ret, dtmfCnxt.state);
     if (MDI_AUDIO_SUCCESS == ret)
     {
         StartTimer(TIMER_DTMF_KEY_DETECT, timeout, dtmf_KeyDetectTimeoutCb);
-        dtmfCnxt.start = MMI_TRUE;
+        dtmfCnxt.detecting = MMI_TRUE;
     }
     else
     {
-        //失败了, 重新提示
+        //失败了, 直接挂断电话
+        dtmf_ReleaseAllActivedCall(MMI_FALSE);
+		Dtmf_Reset();
     }
 }
 
@@ -735,10 +893,10 @@ static void dtmf_StartKeyDetect(U32 timeout)
 static void dtmf_StopKeyDetect(void)
 {
     StopTimer(TIMER_DTMF_KEY_DETECT);
-    if (dtmfCnxt.start)
+    if (dtmfCnxt.detecting)
     {
         mdi_audio_stop_keytone_detect();
-        dtmfCnxt.start = MMI_FALSE;
+        dtmfCnxt.detecting = MMI_FALSE;
     }
 }
 
@@ -769,7 +927,7 @@ static WCHAR *dtmf_CombineVoiceFilePath(WCHAR *output, DtmfVoiceIndex index)
 *******/
 static void dtmf_PlayCustomPromptVoiceFileCb(mdi_result result)
 {
-    dtmf_trace("Play custom voice Callback, ret=%d. state=%d.", result, dtmfCnxt.state);
+    //dtmf_trace("Play custom voice Callback, ret=%d. state=%d.", result, dtmfCnxt.state);
 
     //如果当前状态为xx状态则返回
     
@@ -810,7 +968,7 @@ static void dtmf_PlayCustomPromptVoiceFileCb(mdi_result result)
 *******/
 static void dtmf_PlaySystemPromptVoiceFileCb(mdi_result result)
 {
-    dtmf_trace("Play system voice Callback, ret=%d. state=%d.", result, dtmfCnxt.state);
+    //dtmf_trace("Play system voice Callback, ret=%d. state=%d.", result, dtmfCnxt.state);
 
     //如果当前状态为xx状态则返回
     
@@ -931,7 +1089,10 @@ static MMI_ID_TYPE dtmf_GetSystemVoiceFileId(DtmfVoiceIndex idx)
 
     case DTMF_VOC_RETRY_OPTIOIN:
         return MC_DTMF_VOC_RETRY_OPT;
-        
+
+	case DTMF_VOC_RETRY_PARAM:
+		return MC_DTMF_VOC_RETRY_PARAM;
+		
     case DTMF_VOC_NO_VOICE       :
     default:
         return MC_DTMF_VOC_SILENCE;
@@ -960,7 +1121,7 @@ static MMI_BOOL dtmf_PlayCustomVoiceFile(DtmfVoiceIndex idx, void *usd)
     dtmf_CombineVoiceFilePath(filepath, idx);
     
     result = mdi_audio_snd_check_file_format(filepath);
-    dtmf_trace("Check custom voice \"%s\", ret=%d.", voiceTab[idx].name, result);
+    //dtmf_trace("Check custom voice \"%s\", ret=%d.", voiceTab[idx].name, result);
     
     if (result == MDI_AUDIO_SUCCESS)
     {
@@ -971,7 +1132,7 @@ static MMI_BOOL dtmf_PlayCustomVoiceFile(DtmfVoiceIndex idx, void *usd)
                     dtmf_PlayCustomPromptVoiceFileCb,
                     6,
                     MDI_DEVICE_SPEAKER2);
-        dtmf_trace("Play custom voice \"%s\", ret=%d.", voiceTab[idx].name, result);
+        //dtmf_trace("Play custom voice \"%s\", ret=%d.", voiceTab[idx].name, result);
     }
 
     return (MMI_BOOL)(MDI_AUDIO_SUCCESS == result);
@@ -1006,7 +1167,7 @@ static MMI_BOOL dtmf_PlaySystemVoiceFile(DtmfVoiceIndex idx, void *usd)
                 dtmf_PlaySystemPromptVoiceFileCb,
                 6,
                 MDI_DEVICE_SPEAKER2);
-    dtmf_trace("Play system voice, ret=%d.", result);
+    //dtmf_trace("Play system voice, ret=%d.", result);
     
     return (MMI_BOOL)(MDI_AUDIO_SUCCESS == result);
 }
@@ -1028,6 +1189,7 @@ static MMI_BOOL dtmf_PlayPromptVoiceFile(DtmfVoiceIndex idx, void *usd)
     if (!ret)
         ret = dtmf_PlaySystemVoiceFile(idx, usd);
 
+	dtmf_trace("Play Voice: idx=%d. ret=%d.", idx, ret);
     return ret;
 }
 
