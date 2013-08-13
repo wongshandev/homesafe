@@ -85,6 +85,7 @@ typedef enum _hf_task_msg_id{
  HF_MSG_ID_QUIT,
  HF_MSG_ID_LOCA,
  HF_MSG_ID_INCOMING_CALL,
+ HF_MSG_ID_RELEASE_CALL,
  HF_MSG_ID_EINT_IND,
 
 #if defined(__MSGCMD_SUPPORT__)

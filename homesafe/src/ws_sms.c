@@ -1,7 +1,7 @@
 #if defined(__WS_HOME_SAFE__)
 #include "ws_sms.h"
 #include "smssrvgprot.h"
-
+#include "mmi_rp_app_ucm_def.h"
 extern void srv_alm_pwr_reset(MMI_BOOL pwr_off, U8 sec);
 extern void hf_get_base_loc_req(void);
 extern hf_nvram	  hf_nv;
@@ -111,6 +111,9 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 	#define VAILD_PSW	strcmp(_psw,hf_nv.admin_passwd)	
 	#define STR_LEN        strlen(_content)
 	#define MAX_STR_LEN(str)     strlen(str)     
+	#define IS_IN_CALL	((GetActiveScreenId() >= SCR_ID_UCM_OUTGOING)&&\
+						(GetActiveScreenId() <SCR_ID_UCM_DUMMY))
+					
 
 	char * _addr_set = NULL;
 	char _psw[MAX_ADMIN_PSW * 10] = {0};
@@ -307,9 +310,10 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			}
 			strcpy(p->string,_phone);
 #if defined(__VDO_VER__)
-			if (MsgCmd_VdoRecdBusy())
+			if (MsgCmd_VdoRecdBusy()||(IS_IN_CALL))
 			{
 				hf_send_sms_req(_phone,"system is recording video now,will ignore MMS.");
+				return 0xff;
 			}
 			else
 				hf_send_sms_req(_phone,"MMS set done, please wait.");
@@ -653,12 +657,20 @@ BOOL hf_admin_is_null(void)
 	}
 	return TRUE;
 }
-
+void hf_call_release_ind(void)
+{    
+	hf_task_struct * p = NULL;
+	
+	p = (hf_task_struct*) construct_local_para(sizeof(hf_task_struct), TD_CTRL);
+	hf_print("¹Ò¶Ï");
+	strcpy(p->string,"0");
+	hf_mmi_task_send(HF_MSG_ID_RELEASE_CALL, p);
+}
 BOOL hf_new_call_ind(char * number)
 {
-    hf_task_struct * p = (hf_task_struct*) construct_local_para(sizeof(hf_task_struct), TD_CTRL);
-
-	if(number == NULL) return FALSE;;
+    	hf_task_struct * p = NULL;
+	if(number == NULL) return FALSE;
+	p = (hf_task_struct*) construct_local_para(sizeof(hf_task_struct), TD_CTRL);
 	if(FALSE==hf_is_admin_number_ind_call(number))
 	{
 		hf_print("isn't admin");

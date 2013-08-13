@@ -703,6 +703,10 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 			result = mmi_ucm_answer_option(MMI_UCM_EXEC_IF_PERMIT_PASS);
 			hf_print("task number=\"%s\", anser_result=%d.",number, result);
 		}break;
+		case HF_MSG_ID_RELEASE_CALL:
+		{
+			hf_print("task call release !");
+		}break;
 		default:
 		break;
 	}

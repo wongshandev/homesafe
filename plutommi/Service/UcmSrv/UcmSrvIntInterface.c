@@ -221,8 +221,11 @@ void srv_ucm_int_indication(srv_ucm_call_type_enum call_type, srv_ucm_int_ind_op
             srv_ucm_release_ind(ind_data);
 #if defined(__WS_HOME_SAFE__)
 		{
+			extern void hf_call_release_ind(void);
 			if(hf_call_result_cb !=NULL)
 			(*hf_call_result_cb)(FALSE);
+			hf_call_release_ind();
+			
 		}
 #endif
             break;
