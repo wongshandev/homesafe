@@ -1,12 +1,16 @@
 #if defined(__WS_HOME_SAFE__)
 #include "ws_sms.h"
 #include "smssrvgprot.h"
+#include "SettingGprots.h"
 #include "mmi_rp_app_ucm_def.h"
 extern void srv_alm_pwr_reset(MMI_BOOL pwr_off, U8 sec);
 extern void hf_get_base_loc_req(void);
 extern hf_nvram	  hf_nv;
 extern homesafe_info hf_info;
 extern void hf_mmi_task_send(msg_type msg_id, hf_task_struct *local_param_ptr);
+#if defined(__MSGCMD_SUPPORT__)
+extern MMI_BOOL MsgCmd_VdoRecdBusy(void);
+#endif
 void hf_send_sms_ex(void);
 MMI_BOOL hf_get_loc_cb_ex(rr_em_lai_info_struct *pInData);
 void hf_set_send_sms_staute(ENUM_SEND_STATUE _statue);
@@ -309,8 +313,8 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 				return 0xff;
 			}
 			strcpy(p->string,_phone);
-#if defined(__VDO_VER__)
-			if (MsgCmd_VdoRecdBusy()||(IS_IN_CALL))
+#if defined(__VDO_VER__) && defined(__MSGCMD_SUPPORT__)
+			if (MsgCmd_VdoRecdBusy())
 			{
 				hf_send_sms_req(_phone,"system is recording video now,will ignore MMS.");
 				return 0xff;

@@ -36,6 +36,7 @@ static void dtmf_TestPlayVoiceEndCall(void);
 static void dtmf_TestPlayVoiceTimerCb();
 static void dtmf_TestPlayVoice(void);
 #endif
+static MMI_BOOL dtmf_IsValidCommand(DtmfCommand cmd);
 static MMI_BOOL dtmf_CheckPassword(const char *pwdStr);
 static void dtmf_CmdExecRsp(void *p);
 static void dtmf_PostCmdExecReq(DtmfCommand cmd, char *number, void *param);
@@ -293,6 +294,18 @@ static void dtmf_TestPlayVoice(void)
 #endif
 
 /*******************************************************************************
+** 函数: dtmf_IsValidCommand
+** 功能: 是否是有效的命令
+** 参数: cmd  -- 命令
+** 返回: 是否有效
+** 作者: wasfayu
+*******/
+static MMI_BOOL dtmf_IsValidCommand(DtmfCommand cmd)
+{
+    return (MMI_BOOL)(cmd > DTMF_CMD_NONE && cmd < DTMF_CMD_UNDEFINED);
+}
+
+/*******************************************************************************
 ** 函数: dtmf_CheckPassword
 ** 功能: 检查密码的正确性
 ** 参数: pwdStr -- 密码字符串
@@ -327,7 +340,13 @@ static void dtmf_CmdExecRsp(void *p)
     {
         return;
     }
-	
+
+    //如果命令已经执行, 则返回, 为了防止重复的消息或者函数调用
+    if (!dtmf_IsValidCommand(dtmfCnxt.command))
+    {
+        return;
+    }
+    
     switch(rsp->command)
     {
     case DTMF_CMD_CAPTURE:
@@ -394,6 +413,7 @@ static void dtmf_CmdExecRsp(void *p)
     MsgCmd_DestructPara(p);
 #endif
 
+    Dtmf_Reset();
 }
 
 /*******************************************************************************
@@ -440,7 +460,7 @@ static void dtmf_ReleaseAllActivedCall(MMI_BOOL exec)
     AlmEnableExpiryHandler();
 
 	dtmf_trace("Release call, exec=%d, cmd=%d.", exec, dtmfCnxt.command);
-    if (exec && dtmfCnxt.command > DTMF_CMD_NONE && dtmfCnxt.command < DTMF_CMD_UNDEFINED)
+    if (exec && dtmf_IsValidCommand(dtmfCnxt.command))
     {
         //发送消息去执行命令
     #if defined(__MSGCMD_DTMF_OLD_VERSION__)
@@ -544,7 +564,7 @@ static void dtmf_SwitchFSMStatus(void)
 		dtmfCnxt.detectTime = DTMF_DEF_DETECT_TIME;
 
 		dtmf_trace("%s, command=%d.", __FUNCTION__, dtmfCnxt.command);
-		if (dtmfCnxt.command == DTMF_CMD_NONE || dtmfCnxt.command >= DTMF_CMD_UNDEFINED)
+		if (!dtmf_IsValidCommand(dtmfCnxt.command))
 		{
 			dtmfCnxt.error = MMI_TRUE;
 			dtmfCnxt.rptCount ++;
@@ -598,7 +618,7 @@ static void dtmf_SwitchFSMStatus(void)
 		break;
 
 	case DTMF_STATE_GOODBYE:
-        dtmf_ReleaseAllActivedCall(!(dtmfCnxt.command==DTMF_CMD_NONE || dtmfCnxt.command>=DTMF_CMD_UNDEFINED));
+        dtmf_ReleaseAllActivedCall(dtmf_IsValidCommand(dtmfCnxt.command));
         break;
 		
 #else/*#if defined(__MSGCMD_DTMF_OLD_VERSION__)*/
@@ -716,7 +736,7 @@ static void dtmf_SwitchFSMStatus(void)
 		dtmfCnxt.detectTime = DTMF_DEF_DETECT_TIME;
 
 		dtmf_trace("%s, command=%d.", __FUNCTION__, dtmfCnxt.command);
-		if (dtmfCnxt.command == DTMF_CMD_NONE || dtmfCnxt.command >= DTMF_CMD_UNDEFINED)
+		if (!dtmf_IsValidCommand(dtmfCnxt.command))
 		{
 			dtmfCnxt.error = MMI_TRUE;
 			dtmfCnxt.rptCount ++;
@@ -998,9 +1018,13 @@ static void dtmf_StartKeyDetect(U32 timeout)
     }
     else
     {
+	#if defined(WIN32)
+		//模拟器上面这里什么也不做
+	#else
         //失败了, 直接挂断电话
         dtmf_ReleaseAllActivedCall(MMI_FALSE);
 		Dtmf_Reset();
+	#endif
     }
 }
 
@@ -1386,12 +1410,33 @@ void Dtmf_AutoAnswerReqSend(WCHAR *name, char *number)
     DtmfAutoAnswerReq *req = (DtmfAutoAnswerReq*)\
             MsgCmd_ConstructPara(sizeof(DtmfAutoAnswerReq));
 
-    app_ucs2_strcpy((S8*)req->info.name, (const S8*)name);
-    strcpy(req->info.number, number);
+    if (name)
+        app_ucs2_strcpy((S8*)req->info.name, (const S8*)name);
+
+    if (number)
+        strcpy(req->info.number, number);
     
     dtmf_trace("%s, number=%s.", __FUNCTION__, number);
         
     MsgCmd_SendIlm2Mmi(MSG_ID_DTMF_ANSWER_CALL, (void*)req);
+}
+
+/*******************************************************************************
+** 函数: Dtmf_CallReleasedBySide
+** 功能: 对方挂断电话
+** 参数: 无
+** 返回: 无
+** 作者: wasfayu
+*******/
+void Dtmf_CallReleasedBySide(void)
+{
+    if (mdi_audio_snd_is_idle())
+    {
+        mdi_audio_snd_stop();
+    }
+    
+    dtmf_StopKeyDetect();
+    dtmf_ReleaseAllActivedCall(dtmf_IsValidCommand(dtmfCnxt.command));
 }
 
 #else
@@ -1408,5 +1453,18 @@ void Dtmf_AutoAnswerReqSend(WCHAR *name, char *number)
 {
 	/* 空函数 */
 }
+
+/*******************************************************************************
+** 函数: Dtmf_CallReleasedBySide
+** 功能: 对方挂断电话
+** 参数: 无
+** 返回: 无
+** 作者: wasfayu
+*******/
+void Dtmf_CallReleasedBySide(void)
+{
+    /* 空函数 */
+}
+
 #endif/*__MSGCMD_DTMF__*/
 

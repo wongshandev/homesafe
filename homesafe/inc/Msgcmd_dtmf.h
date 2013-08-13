@@ -195,6 +195,15 @@ void Dtmf_Initialize(void);
 *******/
 void Dtmf_AutoAnswerReqSend(WCHAR *name, char *number);
 
+/*******************************************************************************
+** 函数: Dtmf_CallReleasedBySide
+** 功能: 对方挂断电话
+** 参数: 无
+** 返回: 无
+** 作者: wasfayu
+*******/
+void Dtmf_CallReleasedBySide(void);
+
 
 #endif/*__MSGCMD_DTMF__*/
 
