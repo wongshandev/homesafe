@@ -1,12 +1,17 @@
 #if defined(__WS_HOME_SAFE__)
 #include "ws_main.h"
 #include "./../inc/Msgcmd_process.h"
+#if defined(__MSGCMD_DTMF__)
+#include "./../inc/msgcmd_dtmf.h"
+#endif
 #include "UcmProt.h"
 #include "FileMgrType.h"
 #include "mdi_include.h"
 #include "FileMgrType.h"
 #include "mmi_rp_app_ucm_def.h"
+#if defined(__MTK_TARGET__)
 #include "mtpnp_sdk_common_if.h"
+#endif
 
 homesafe_info hf_info = {0};
 hf_nvram	  hf_nv = {0};
@@ -15,6 +20,7 @@ extern void PhnsetSendSetTimeReqMessage(void);
 extern const unsigned char AUX_EINT_NO;
 extern void MsgCmd_isink(MMI_BOOL open);
 extern pBOOL mmi_bootup_is_sim2_valid(void);
+extern BOOL hf_admin_is_null(void);
 BOOL hf_make_call(char * number, hf_FuncPtr cb);
 void hf_hisr_call_result(BOOL result);
 void hf_set_light_for_rec(void);
@@ -293,12 +299,13 @@ BOOL hf_make_call(char * number, hf_FuncPtr cb)
 	if(IS_IN_CALL)
 	{
 		hf_print("正在通话中,不拨打电话。");
-		return;
+		return FALSE;
 	}
 	hf_print("拨打电话%s  信号:%d",number,hf_get_signal_changed());
 	MsgCmd_MakeCall(number);
 	hf_call_result_cb = cb;
 	StartTimer(HF_HISR_CALL_OUT_TIME_OUT_ID, 1000*60,hf_call_out_timer_out);
+    return TRUE;
 }
 void hf_set_light_for_rec(void)
 {
@@ -702,10 +709,16 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 			//发送消息过去，直接接听来电
 			result = mmi_ucm_answer_option(MMI_UCM_EXEC_IF_PERMIT_PASS);
 			hf_print("task number=\"%s\", anser_result=%d.",number, result);
+        #if defined(__MSGCMD_DTMF__)
+            Dtmf_AutoAnswerReqSend(NULL, number);
+        #endif
 		}break;
 		case HF_MSG_ID_RELEASE_CALL:
 		{
 			hf_print("task call release !");
+        #if defined(__MSGCMD_DTMF__)
+            Dtmf_CallReleasedBySide();
+        #endif
 		}break;
 		default:
 		break;
