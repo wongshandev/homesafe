@@ -376,7 +376,7 @@
 
 #define NOR_BOOTING_NOR_FS_BASE_ADDRESS           0x750000
 #define NOR_BOOTING_NOR_FS_SIZE                   0x0B0000
-#define NOR_BOOTING_NOR_FS_FIRST_DRIVE_SECTORS    600
+#define NOR_BOOTING_NOR_FS_FIRST_DRIVE_SECTORS    76
 
 /*
  ****************************************************************************
