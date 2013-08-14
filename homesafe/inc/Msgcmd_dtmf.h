@@ -97,8 +97,14 @@ typedef enum {
 typedef enum {
 	DTMF_CMD_NONE    = 0,
     DTMF_CMD_CAPTURE,
+#if defined(__MSGCMD_DTMF_OLD_VERSION__)
+	//扯蛋了, 老版本提示语1为拍照2为录像3为录音, 2/3跟新的相反。操蛋的。
+	DTMF_CMD_VDORECD,
+	DTMF_CMD_ADORECD,
+#else
     DTMF_CMD_ADORECD,
     DTMF_CMD_VDORECD,
+#endif
     DTMF_CMD_UNDEFINED
 }DtmfCommand;
 
