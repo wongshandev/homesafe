@@ -17,8 +17,8 @@
 #if defined(__MSGCMD_DTMF_OLD_VERSION__)
 	<AUDIO id="MC_DTMF_VOC_CHOOSE_OPTION">"..\\\\..\\\\..\\\\homesafe\\\\dtmf_voice\\\\welcome_old.wav"</AUDIO>
     <AUDIO id="MC_DTMF_VOC_ACCEPT_CAPTURE">"..\\\\..\\\\..\\\\homesafe\\\\dtmf_voice\\\\key1.wav"</AUDIO>
-    <AUDIO id="MC_DTMF_VOC_ACCEPT_ADORECD">"..\\\\..\\\\..\\\\homesafe\\\\dtmf_voice\\\\key2.wav"</AUDIO>
-    <AUDIO id="MC_DTMF_VOC_ACCEPT_VDORECD">"..\\\\..\\\\..\\\\homesafe\\\\dtmf_voice\\\\key3.wav"</AUDIO>
+    <AUDIO id="MC_DTMF_VOC_ACCEPT_VDORECD">"..\\\\..\\\\..\\\\homesafe\\\\dtmf_voice\\\\key2.wav"</AUDIO>
+    <AUDIO id="MC_DTMF_VOC_ACCEPT_ADORECD">"..\\\\..\\\\..\\\\homesafe\\\\dtmf_voice\\\\key3.wav"</AUDIO>
 #else
     <AUDIO id="MC_DTMF_VOC_WELCOME">"..\\\\..\\\\..\\\\homesafe\\\\dtmf_voice\\\\welcome.wav"</AUDIO>
     <AUDIO id="MC_DTMF_VOC_PASSWORD">"..\\\\..\\\\..\\\\homesafe\\\\dtmf_voice\\\\enterPwd.wav"</AUDIO>

@@ -2101,7 +2101,7 @@ static void msgcmd_CreateAndSendMMSCb(
 		req.is_rr        = MMI_TRUE;
 		srv_mms_send(&req);
 		mc_trace("%s, req.sim_id=0x%x. usd->sim=0x%x.storage=0x%x.",
-			__FUNCTION__,req.sim_id,usd->sim,req->storage_type);
+			__FUNCTION__,req.sim_id,usd->sim,req.storage_type);
 	}
 
     FS_Delete(usd->xmlpath);
