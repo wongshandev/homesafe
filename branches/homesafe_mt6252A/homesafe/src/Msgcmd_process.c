@@ -1444,6 +1444,18 @@ MMI_BOOL MsgCmd_CreateMultiPath(char drive, const WCHAR *UcsFolder)
     return (MMI_BOOL)(fd >= FS_NO_ERROR);
 }
 
+/*******************************************************************************
+** 函数: MsgCmd_IsSimUsable
+** 功能: 判断SIM卡是否可以使用, 仅当SIM卡读取正常且校验都通过了才算可以使用.
+** 参数: sim  -- SIM卡索引
+** 返回: 是否可以使用
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_IsSimUsable(mmi_sim_enum sim)
+{
+	return srv_sim_ctrl_is_available(sim);
+}
+
 #if 1
 extern const unsigned char AUX_EINT_NO;
 
@@ -1980,7 +1992,7 @@ static MMI_BOOL msgcmd_CreateMMSXMLFile(MsgCmdMMSXmlData *param)
 }
 
 /*******************************************************************************
-** 函数: msgcmd_SendMMSResponse
+** 函数: msgcmd_SendMMSRequestResponse
 ** 功能: 创建并且发送MMS的回调函数
 ** 入参: result   -- 
 **       rsp_data -- srv_mms_create_rsp_struct
@@ -1988,11 +2000,18 @@ static MMI_BOOL msgcmd_CreateMMSXMLFile(MsgCmdMMSXmlData *param)
 ** 返回: 是否成功
 ** 作者: wasfayu
 *******/
-static void msgcmd_SendMMSResponse(void *param)
+static void msgcmd_SendMMSRequestResponse(void *param)
 {
     MsgCmdMMSReq     *rsp = (MsgCmdMMSReq*)param;
-    MsgCmdMMSXmlData *xml = (MsgCmdMMSXmlData*)MsgCmd_Malloc(sizeof(MsgCmdMMSXmlData), 0);
+    MsgCmdMMSXmlData *xml;
 
+	if (!MsgCmd_IsSimUsable(rsp->sim))
+	{
+		mc_trace("%s, SIM NOT USABLE.", __FUNCTION__);
+		return;
+	}
+
+	xml = (MsgCmdMMSXmlData*)MsgCmd_Malloc(sizeof(MsgCmdMMSXmlData), 0);
     //send to
     memcpy(xml->sendto, rsp->sendto, MMI_PHB_NUMBER_LENGTH+1);
     //subject
@@ -2038,13 +2057,13 @@ static void msgcmd_SendMMSResponse(void *param)
 }
 
 /*******************************************************************************
-** 函数: msgcmd_SendMMSRespond
+** 函数: msgcmd_SendMMSResultRespond
 ** 功能: 发送MMS的结果通知
 ** 入参: p   -- wap_mma_send_rsp_struct
 ** 返回: 无
 ** 作者: wasfayu
 *******/
-static void msgcmd_SendMMSRespond(void *p)
+static void msgcmd_SendMMSResultRespond(void *p)
 {
     wap_mma_send_rsp_struct *rsp = (wap_mma_send_rsp_struct*)p;
 
@@ -2075,10 +2094,14 @@ static void msgcmd_CreateAndSendMMSCb(
 		req.msg_id       = rsp->msg_id;
 		req.send_setting = SRV_MMS_SETTING_SEND_ONLY;
 		req.sim_id       = (usd->sim==MMA_SIM_ID_SIM2) ? MMI_SIM_ID_SIM2 : MMI_SIM_ID_SIM1;
-		req.storage_type = MMA_MSG_STORAGE_CARD1;
+		if (MsgCmd_IsSdCardExist())
+			req.storage_type = MMA_MSG_STORAGE_CARD1;
+		else
+			req.storage_type = MMA_MSG_STORAGE_PHONE;
 		req.is_rr        = MMI_TRUE;
 		srv_mms_send(&req);
-		mc_trace("%s, req.sim_id=0x%x. usd->sim=0x%x.",__FUNCTION__,req.sim_id,usd->sim);
+		mc_trace("%s, req.sim_id=0x%x. usd->sim=0x%x.storage=0x%x.",
+			__FUNCTION__,req.sim_id,usd->sim,req->storage_type);
 	}
 
     FS_Delete(usd->xmlpath);
@@ -2103,13 +2126,13 @@ MCErrCode MsgCmd_CreateAndSendMMS(
 	MCErrCode error;
 
 	do {
-	    if (mms_is_ready())
+	    if (!mms_is_ready())
 		{
 			error = MC_ERR_MMS_NOT_READY;
 			break;
     	}
 		
-		if (srv_nw_usab_is_any_network_available())
+		if (!srv_nw_usab_is_any_network_available())
 		{
 			error = MC_ERR_NW_NOT_AVALIABLE;
 			break;
@@ -3020,7 +3043,7 @@ MCErrCode MsgCmd_CaptureEntry(char *replay_number)
                         MSGCMD_PHOTOS_FOLDER_NAME, 
                         L".jpg");
 		
-		MsgCmd_DelayTick(MSGCMD_CAPTURE_DLY_TICK);
+		//MsgCmd_DelayTick(MSGCMD_CAPTURE_DLY_TICK);
 		result = msgcmd_CaptureDoing((S8 *)req->picpath);
         
 		if (result && NULL != replay_number && replay_number[0] != '\0')
@@ -3037,7 +3060,7 @@ MCErrCode MsgCmd_CaptureEntry(char *replay_number)
         }
 	}
 
-	MsgCmd_DelayTick(MSGCMD_CAPTURE_DLY_TICK);
+	//MsgCmd_DelayTick(MSGCMD_CAPTURE_DLY_TICK);
 	msgcmd_CaptureFinish();
 	
     return (MMI_BOOL)(result ? MC_ERR_NONE : MC_ERR_UNKOWN);
@@ -3889,12 +3912,12 @@ void MsgCmd_ProcessInit(void)
 
     mmi_frm_set_protocol_event_handler(
         MSG_ID_MC_SEND_MMS_REQ,
-        (PsIntFuncPtr)msgcmd_SendMMSResponse,
+        (PsIntFuncPtr)msgcmd_SendMMSRequestResponse,
         MMI_FALSE);
 
     mmi_frm_set_protocol_event_handler(
         MSG_ID_WAP_MMA_SEND_RSP, 
-        (PsIntFuncPtr)msgcmd_SendMMSRespond,
+        (PsIntFuncPtr)msgcmd_SendMMSResultRespond,
         MMI_TRUE);
 
 #if defined(__MSGCMD_DTMF__)

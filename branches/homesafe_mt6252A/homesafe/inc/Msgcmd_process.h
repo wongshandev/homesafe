@@ -97,6 +97,7 @@ typedef enum {
 	MC_ERR_SMS_NOT_READY,
 	MC_ERR_MMS_NOT_READY,
 	MC_ERR_NW_NOT_AVALIABLE,
+	MC_ERR_SIM_NOT_AVALIABLE, /* 20 */
 }MCErrCode;
 
 /* 录像状态枚举 */
@@ -678,6 +679,15 @@ MMI_BOOL MsgCmd_CreatePath(S32 drive, const WCHAR *folder);
 ** 作者: wasfayu
 *******/
 MMI_BOOL MsgCmd_CreateMultiPath(char drive, const WCHAR *UcsFolder);
+
+/*******************************************************************************
+** 函数: MsgCmd_IsSimUsable
+** 功能: 判断SIM卡是否可以使用, 仅当SIM卡读取正常且校验都通过了才算可以使用.
+** 参数: sim  -- SIM卡索引
+** 返回: 是否可以使用
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_IsSimUsable(mmi_sim_enum sim);
 
 /*******************************************************************************
 ** 函数: MsgCmd_InterruptMask
