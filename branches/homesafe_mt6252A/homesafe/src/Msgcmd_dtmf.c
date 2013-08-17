@@ -14,6 +14,7 @@
 
 #include "./../inc/msgcmd_dtmf.h"
 #include "ucmsrvgprot.h"
+#include "UcmProt.h"
 #include "AlarmFrameworkProt.h"
 
 /*
@@ -368,16 +369,8 @@ static void dtmf_CmdExecRsp(void *p)
             req->saveGap = MsgCmd_GetAdoRecdArgs()->save_gap;
             strcpy(req->number, rsp->number);
             
-            if (MsgCmd_AdoRecdBusy())
-            {
-                req->record  = MMI_FALSE;
-            }
-            else
-            {
-                req->record  = MMI_TRUE;
-                req->forever = MMI_TRUE;
-            }
-            
+			req->forever = MMI_FALSE;
+            req->record  = MsgCmd_AdoRecdBusy() ? MMI_FALSE : MMI_TRUE;
             MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_ADORECD_REQ, (void *)req);
         }
         break;
@@ -391,16 +384,8 @@ static void dtmf_CmdExecRsp(void *p)
             req->saveGap = MsgCmd_GetVdoRecdArgs()->save_gap;
             strcpy(req->number, rsp->number);
             
-            if (MsgCmd_VdoRecdBusy())
-            {
-                req->record  = MMI_FALSE;
-            }
-            else
-            {
-                req->record  = MMI_TRUE;
-                req->forever = MMI_TRUE;
-            }
-            
+			req->forever = MMI_FALSE;
+            req->record  = MsgCmd_VdoRecdBusy() ? MMI_FALSE : MMI_TRUE;            
             MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_VDORECD_REQ, (void *)req);
         }
         break;
@@ -1434,9 +1419,59 @@ void Dtmf_CallReleasedBySide(void)
     {
         mdi_audio_snd_stop();
     }
-    
+	
+    StopTimer(MSGCMD_TIMER_DELAY_TO_ANSWER);
     dtmf_StopKeyDetect();
     dtmf_ReleaseAllActivedCall(dtmf_IsValidCommand(dtmfCnxt.command));
+}
+
+/*******************************************************************************
+** 函数: dtmf_DelayToAnswerCallCb
+** 功能: 延时接听来电的定时器回调函数
+** 参数: inp -- 入参
+** 返回: 无
+** 作者: wasfayu
+*******/
+static void dtmf_DelayToAnswerCallCb(void *inp)
+{
+	srv_ucm_result_enum result;
+	
+	//发送消息过去，直接接听来电
+	result = mmi_ucm_answer_option(MMI_UCM_EXEC_IF_PERMIT_PASS);
+	dtmf_trace("%s, answer error=%d.", __FUNCTION__, result);
+	
+	if (SRV_UCM_RESULT_OK == result)
+	    Dtmf_AutoAnswerReqSend(NULL, (char*)inp);
+	else
+		dtmf_ReleaseAllActivedCall(MMI_FALSE);
+}
+
+/*******************************************************************************
+** 函数: Dtmf_DelayToAnswerCall
+** 功能: 延时接听来电
+** 参数: dlyTimer -- 延时时间, 以毫秒为单位
+**       number   -- 来电号码
+** 返回: 无
+** 作者: wasfayu
+*******/
+void Dtmf_DelayToAnswerCall(U32 dlyTime, char *number)
+{
+	char *args = NULL;
+
+	if (number && strlen(number))
+	{
+		args = (char*)MsgCmd_Malloc(32, 0);
+		strcpy(args, number);
+	}
+
+	StopTimer(TIMER_DTMF_KEY_DETECT);
+	StopTimer(TIMER_DTMF_DELAY_EXEC);
+	
+	StartTimerEx(
+		MSGCMD_TIMER_DELAY_TO_ANSWER,
+		dlyTime,
+		dtmf_DelayToAnswerCallCb,
+		(void*)args);
 }
 
 #else
@@ -1466,5 +1501,17 @@ void Dtmf_CallReleasedBySide(void)
     /* 空函数 */
 }
 
+/*******************************************************************************
+** 函数: Dtmf_DelayToAnswerCall
+** 功能: 延时接听来电
+** 参数: dlyTimer -- 延时时间, 以毫秒为单位
+**       number   -- 来电号码
+** 返回: 无
+** 作者: wasfayu
+*******/
+void Dtmf_DelayToAnswerCall(U32 dlyTime, char *number)
+{
+	/* 空函数 */
+}
 #endif/*__MSGCMD_DTMF__*/
 

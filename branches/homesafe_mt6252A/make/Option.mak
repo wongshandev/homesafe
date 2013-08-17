@@ -13870,7 +13870,7 @@ WS_HOME_SAFE_VER = VDO_VER   #Â¼Ïñ°æ±¾VDO_VER
                              #ÓïÒôºÍÂ¼Ïñ¶¼¿ªÆô ADO_VDO_VER
 													
 ifeq ($(strip $(WS_HOME_SAFE)),TRUE)
-  COM_DEFS += __WS_HOME_SAFE__ __MSGCMD_SUPPORT__ __MSGCMD_DTMF__ __MSGCMD_DTMF_OLD_VERSION__
+  COM_DEFS += __WS_HOME_SAFE__ __MSGCMD_SUPPORT__
   CUS_REL_SRC_COMP	+= homesafe
   CUSTOM_COMMINC	+= homesafe\inc
   COMPLIST          += homesafe
@@ -13879,8 +13879,8 @@ ifeq ($(strip $(WS_HOME_SAFE_VER)),ADO_VER)
   COM_DEFS += __ADO_VER__ 
 endif
 ifeq ($(strip $(WS_HOME_SAFE_VER)),VDO_VER)
-  COM_DEFS += __VDO_VER__ 
+  COM_DEFS += __VDO_VER__  __MSGCMD_DTMF__ __MSGCMD_DTMF_OLD_VERSION__ __VDORECD_VERSION_FEATRUE__
 endif
 ifeq ($(strip $(WS_HOME_SAFE_VER)),ADO_VDO_VER)
-  COM_DEFS += __ADO_VER__ __VDO_VER__
+  COM_DEFS += __ADO_VER__ __VDO_VER__ __MSGCMD_DTMF__ __MSGCMD_DTMF_OLD_VERSION__ __VDORECD_VERSION_FEATRUE__
 endif

@@ -16,10 +16,12 @@
 
 #if defined(__MSGCMD_SUPPORT__)
 #include "./ws_main.h"
+#include "MMIDataType.h"
 #include "gdi_datatype.h"
 #include "app_datetime.h"
 #include "SmsSrvGprot.h"
 #include "mma_struct.h"
+#include "mmssrvgprot.h"
 #include "ucsrvgprot.h"
 #include "umsrvdefs.h"
 #include "mmi_rp_app_msgcmd_def.h"
@@ -41,10 +43,13 @@ enum msgcmd_timer_id_enum{
 	MSGCMD_TIMER_SHUTDOWN     ,
 	MSGCMD_TIMER_FACTORY      ,
 	MSGCMD_TIMER_INT_RECHECK  ,
+	MSGCMD_TIMER_DELAY_TO_ANSWER,
 #if defined(__MSGCMD_DTMF__)
 	TIMER_DTMF_KEY_DETECT     ,
 	TIMER_DTMF_DELAY_EXEC     ,
 #endif
+
+	TIMER_TEST_DEBUG,
 };
 
 /* 消息ID定义 */
@@ -490,13 +495,13 @@ void MsgCmd_SendIlmMsg(
     void *msg);
 
 /*******************************************************************************
-** 函数: MsgCmd_GetSimIndex
+** 函数: MsgCmd_GetDefinedSim
 ** 功能: 获取设备使用的SIM卡ID
 ** 参数: 无
-** 返回: 索引值, 仅0或者1
+** 返回: mmi_sim_enum
 ** 作者: wasfayu
 *******/
-U8 MsgCmd_GetSimIndex(void);
+mmi_sim_enum MsgCmd_GetDefinedSim(void);
 
 /*******************************************************************************
 ** 函数: MsgCmd_MemAlloc
@@ -693,10 +698,24 @@ MMI_BOOL MsgCmd_IsSimUsable(mmi_sim_enum sim);
 ** 函数: MsgCmd_InterruptMask
 ** 功能: 屏蔽/打开外部中断
 ** 参数: mask  -- 屏蔽
+**       file  -- 调试时打印的文件名
+**       line  -- 调试时打印的行号
 ** 返回: 无
 ** 作者: wasfayu
 *******/
-void MsgCmd_InterruptMask(MMI_BOOL mask);
+void MsgCmd_InterruptMask(MMI_BOOL mask, char *file, U32 line);
+
+#if defined(__VDORECD_VERSION_FEATRUE__)
+/*******************************************************************************
+** 函数: MsgCmd_GetExtIntMaskFlag
+** 功能: 获取中断屏蔽标志
+** 说明: 这种方法并不科学, 应该读取寄存器. EINT_STATUS
+** 参数: 无
+** 返回: 屏蔽标志
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_GetExtIntMaskFlag(void);
+#endif
 
 /*******************************************************************************
 ** 函数: MsgCmd_InterruptRegister
@@ -750,6 +769,36 @@ MCErrCode MsgCmd_CreateAndSendMMS(
     WCHAR          *xml_path);
 
 /*******************************************************************************
+** 函数: MsgCmd_DeleteMMSFolder
+** 功能: 删除彩信文件夹
+** 入参: folder -- 文件夹类型
+**       usd    -- 用户数据, 在回调函数里面将被使用
+**       callback  -- 回调函数, 如果为空则调用默认的回调函数
+** 返回: 无
+** 作者: wasfayu
+*******/
+void MsgCmd_DeleteMMSFolder(
+	srv_um_msg_box_enum folder,
+	void *usd,
+	void (*callback)(srv_mms_result_enum, void *, S32));
+
+/*******************************************************************************
+** 函数: MsgCmd_GetMMSCounter
+** 功能: 获取彩信指定类型的数量
+** 入参: reqTab -- 指定类型
+**       tabCt  -- 多少种类型
+**       callback  -- 回调函数, 如果为空则调用默认的回调函数
+**       usd    -- 用户数据, 在回调函数里面将被使用
+** 返回: 无
+** 作者: wasfayu
+*******/
+void MsgCmd_GetMMSCounter(
+	mma_query_option_enum reqTab[], 
+	U32 tabCt, 
+	void *usd,
+	void (*callback)(srv_mms_result_enum, void *, S32));
+
+/*******************************************************************************
 ** 函数: MsgCmd_DelayTick
 ** 功能: 延时dt个tick
 ** 参数: dt -- 要延时的tick个数
@@ -758,6 +807,25 @@ MCErrCode MsgCmd_CreateAndSendMMS(
 ** 作者: wasfayu
 *******/
 void MsgCmd_DelayTick(U32 dt);
+
+/*******************************************************************************
+** 函数: MsgCmd_LocationGetRspSetOrClr
+** 功能: 注册还是注销
+** 入参: reg -- 注册还是注销
+** 返回: 无
+** 作者: LeiFaYu
+*******/
+void MsgCmd_LocationGetRspSetOrClr(MMI_BOOL reg);
+
+/*******************************************************************************
+** 函数: MsgCmd_SendLocationGetReq
+** 功能: 获取基站信息
+** 入参: 无
+** 返回: 无
+** 参考: vs_misc_cell_id_001 / vm_sal_stub_cell_reg_req
+** 作者: LeiFaYu
+*******/
+void MsgCmd_SendLocationGetReq(void);
 
 /*******************************************************************************
 ** 函数: MsgCmd_EvtProcEntry
