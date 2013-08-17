@@ -56,8 +56,10 @@
 #include "mms_sap_struct.h"
 #include "mma_api.h"
 #include "mma_sap.h"
+#include "mma_struct.h"
 #include "ucsrv.h"
 #include "nwusabsrvgprot.h"
+#include "as2l4c_struct.h"
 #include "Eint.h"
 #include "lcd_sw_inc.h"
 #include "usbsrvgprot.h"
@@ -71,6 +73,20 @@
 #endif
 
 
+extern MMI_BOOL hf_admin_is_null(void);
+
+/*****************************************************************************
+ * FUNCTION
+ *  mmi_frm_get_protocol_event_handler
+ * DESCRIPTION
+ *  This is used to get protocal event handler(only support MSG_ID_MMI_EQ_KEYPAD_DETECT_IND)
+ * PARAMETERS
+ *  eventID     :[IN] event ID
+ *  funcPtr     :[IN] protocol event handler of eventID
+ * RETURNS
+ *  void
+ *****************************************************************************/
+extern void mmi_frm_get_protocol_event_handler(U16 eventID, PsFuncPtr* pFuncPtr);
 
 /*****************************************************************************
  * FUNCTION
@@ -186,13 +202,23 @@ extern S32 srv_uc_create_xml_data_usc2_to_utf8(FS_HANDLE fh, U8 *data);
 *******/
 extern void MsgCmd_isink(kal_bool open);
 
+/*******************************************************************************
+** 函数: msgcmd_GetLocationInfoRsp
+** 功能: 获取基站信息的回调函数
+** 入参: msg_ptr -- l4c_nbr_cell_info_reg_cnf_struct
+** 返回: 无
+** 参考: vs_misc_cell_id_001 / vm_sal_stub_cell_reg_req
+** 作者: LeiFaYu
+*******/
+static void msgcmd_GetLocationInfoRsp(void * msg_ptr);
+
 #if defined(WIN32)
 extern void MsgCmd_ModisCreateJPEG(WCHAR *filepath);
 extern void MsgCmd_ModisCreateAVI(WCHAR *filepath);
 extern void MsgCmd_ModisCreateWAV(WCHAR *filepath);
 #endif
 
-#if 0
+#if 1
 /*******************************************************************************
 ** 函数: lfy_write_log
 ** 功能: 日志打印函数, 写入到磁盘的文件上
@@ -204,9 +230,9 @@ U32 lfy_write_log(const char *fmt, ...)
 {
 #define LFY_LOG_BUFFER_SZ        512 //BYTE
 #if defined(WIN32)
-#define LFY_LOG_FILE_LIMITED     200  //KB
+#define LFY_LOG_FILE_LIMITED     1024  //KB
 #else
-#define LFY_LOG_FILE_LIMITED     20  //KB
+#define LFY_LOG_FILE_LIMITED     100  //KB
 #endif
 
     static U32 logCount = 0;
@@ -610,7 +636,11 @@ S32 MsgCmd_GetCallCount(void)
 *******/
 MMI_BOOL MsgCmd_IsSdCardExist(void)
 {
-    return srv_fmgr_drv_is_accessible(SRV_FMGR_CARD_DRV);
+	MMI_BOOL exist;
+    exist = srv_fmgr_drv_is_accessible(SRV_FMGR_CARD_DRV);
+
+	mc_trace("%s, exist=%d.", __FUNCTION__, exist);
+	return exist;
 }
 
 /*******************************************************************************
@@ -872,15 +902,15 @@ void MsgCmd_SendIlmMsg(
 }
 
 /*******************************************************************************
-** 函数: MsgCmd_GetSimIndex
+** 函数: MsgCmd_GetDefinedSim
 ** 功能: 获取设备使用的SIM卡ID
 ** 参数: 无
-** 返回: 索引值, 仅0或者1
+** 返回: mmi_sim_enum
 ** 作者: wasfayu
 *******/
-U8 MsgCmd_GetSimIndex(void)
+mmi_sim_enum MsgCmd_GetDefinedSim(void)
 {
-	return 2;
+	return MMI_SIM2;
 }
 
 /*******************************************************************************
@@ -1073,23 +1103,30 @@ void MsgCmd_FactoryExt(U16 delayS)
 static void msgcmd_IntRecheckTimerCb(void)
 {
     mc_trace("%s", __FUNCTION__);
-    
+#if defined(__VDORECD_VERSION_FEATRUE__)
+	if (MsgCmd_VdoRecdBusy() && 
+		MsgCmd_IsSimUsable(MsgCmd_GetDefinedSim()) && 
+		!hf_admin_is_null())
+	{
+	    MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
+	}
+#endif
 }
 
 /*******************************************************************************
-** 函数: MsgCmd_IntRecheckTimer
+** 函数: msgcmd_IntRecheckTimer
 ** 功能: 外部中断重新检测的定时器操作函数
 ** 入参: open  -- 打开或者关闭定时器
-**       dlyS  -- 打开定时器时传入的定时时间, 秒为单位, 如果为0则默认为3秒钟
+**       dlyS  -- 打开定时器时传入的定时时间, 毫秒为单位, 如果为0则默认为3秒钟
 ** 返回: 无
 ** 作者: wasfayu
 *******/
-void MsgCmd_IntRecheckTimer(MMI_BOOL open, U16 dlyS)
+static void msgcmd_IntRecheckTimer(MMI_BOOL open, U16 dlyMS)
 {
-    dlyS = dlyS ? dlyS : (MsgCmd_GetAdoRecdArgs()->int_check);
+    dlyMS = dlyMS ? dlyMS : (MsgCmd_GetAdoRecdArgs()->int_check * 1000);
     
     if (open)
-        StartTimer(MSGCMD_TIMER_INT_RECHECK, dlyS*1000, msgcmd_IntRecheckTimerCb);
+        StartTimer(MSGCMD_TIMER_INT_RECHECK, dlyMS, msgcmd_IntRecheckTimerCb);
     else
         StopTimer(MSGCMD_TIMER_INT_RECHECK);
 }
@@ -1196,9 +1233,9 @@ void MsgCmd_MakeCall(char *pnumber)
     mc_trace("%s, number=%s.", __FUNCTION__, pnumber);
 	mmi_ucm_init_call_para_for_sendkey(&param); 
 	
-	if (1 == MsgCmd_GetSimIndex())
+	if (MMI_SIM1 == MsgCmd_GetDefinedSim())
 		param.dial_type = SRV_UCM_SIM1_CALL_TYPE_ALL;
-	else if (2 == MsgCmd_GetSimIndex())
+	else if (MMI_SIM2 == MsgCmd_GetDefinedSim())
 		param.dial_type = SRV_UCM_SIM2_CALL_TYPE_ALL;
 	else
 		ASSERT(0);
@@ -1453,11 +1490,20 @@ MMI_BOOL MsgCmd_CreateMultiPath(char drive, const WCHAR *UcsFolder)
 *******/
 MMI_BOOL MsgCmd_IsSimUsable(mmi_sim_enum sim)
 {
-	return srv_sim_ctrl_is_available(sim);
+	MMI_BOOL exist;
+	
+	exist = srv_sim_ctrl_is_available(sim);
+
+	mc_trace("%s, sim=0x%x. exist=%d.", __FUNCTION__, sim, exist);
+	return exist;
 }
 
 #if 1
 extern const unsigned char AUX_EINT_NO;
+
+#if defined(__VDORECD_VERSION_FEATRUE__)
+static MMI_BOOL extIntMasked;
+#endif
 
 #define MC_EINT_NO         AUX_EINT_NO
 #define MSGCMD_INTERRUPT_DIFF_LEVEL  0 //低电平出发外部中断
@@ -1476,7 +1522,6 @@ static void msgcmd_InterruptRespond(void *p)
 	mc_trace("%s, level=%d.", __FUNCTION__, rsp->level);
 	//MsgCmd_isink(rsp->level);
 	//发消息到hf_mmi_task_process() 统一处理。响应的消息ID还是HF_MSG_ID_ADO或者HF_MSG_ID_VDO
-
 	{
 		extern void hf_task_sent_hisr(BOOL level);
 		hf_task_sent_hisr(rsp->level);
@@ -1541,11 +1586,18 @@ void MsgCmd_TestInterrupt(int level)
 ** 函数: MsgCmd_InterruptMask
 ** 功能: 屏蔽/打开外部中断
 ** 参数: mask  -- 屏蔽
+**       file  -- 调试时打印的文件名
+**       line  -- 调试时打印的行号
 ** 返回: 无
 ** 作者: wasfayu
 *******/
-void MsgCmd_InterruptMask(MMI_BOOL mask)
+void MsgCmd_InterruptMask(MMI_BOOL mask, char *file, U32 line)
 {
+#if defined(__VDORECD_VERSION_FEATRUE__)
+	extIntMasked = mask;
+#endif
+
+	mc_trace("mask=%d.%s,L:%d",mask, file, line);
     if (mask)
     {
     #if defined(__ACCDET_SUPPORT__) || defined(__ACCDET_HYBRID_SOLUTION_SUPPORT__)
@@ -1572,9 +1624,22 @@ void MsgCmd_InterruptMask(MMI_BOOL mask)
         EINT_UnMask(MC_EINT_NO);
     #endif
     }
-    
-    mc_trace("%s, mask=%d.", __FUNCTION__, mask);
 }
+
+#if defined(__VDORECD_VERSION_FEATRUE__)
+/*******************************************************************************
+** 函数: MsgCmd_GetExtIntMaskFlag
+** 功能: 获取中断屏蔽标志
+** 说明: 这种方法并不科学, 应该读取寄存器. EINT_STATUS
+** 参数: 无
+** 返回: 屏蔽标志
+** 作者: wasfayu
+*******/
+MMI_BOOL MsgCmd_GetExtIntMaskFlag(void)
+{
+	return extIntMasked;
+}
+#endif
 
 /*******************************************************************************
 ** 函数: msgcmd_InterruptLISR
@@ -2165,6 +2230,98 @@ MCErrCode MsgCmd_CreateAndSendMMS(
 	
     return error;
 }
+
+/*******************************************************************************
+** 函数: MsgCmd_DeleteMMSFolder
+** 功能: 删除彩信文件夹的回调函数
+** 入参: xml_path  -- MMS布局文件, 里面已经包含有电话号码这些了
+**       sim       -- mma_sim_id_enum
+** 返回: 程序执行错误码
+** 作者: wasfayu
+*******/
+void MsgCmd_DeleteMMSFolderCb(srv_mms_result_enum result, void *rsp_data, S32 user_data)
+{
+	mc_trace("%s, result=%d.", __FUNCTION__, result);
+}
+
+/*******************************************************************************
+** 函数: MsgCmd_DeleteMMSFolder
+** 功能: 删除彩信文件夹
+** 入参: folder -- 文件夹类型
+**       usd    -- 用户数据, 在回调函数里面将被使用
+**       callback  -- 回调函数, 如果为空则调用默认的回调函数
+** 返回: 无
+** 作者: wasfayu
+*******/
+void MsgCmd_DeleteMMSFolder(
+	srv_um_msg_box_enum folder,
+	void *usd,
+	void (*callback)(srv_mms_result_enum, void *, S32))
+{
+	srv_mms_delete_folder_req_struct req;
+	
+	req.app_id = MMA_APP_ID_MMS_APP;
+	req.call_back = callback ? callback : MsgCmd_DeleteMMSFolderCb;
+	//srv_mms_convert_mma_folder_to_umbox_type(MMA_FOLDER_DRAFT);
+	req.msg_box_type = folder;
+	req.msg_type = SRV_UM_MSG_MMS;
+	req.user_data = (S32)usd;
+	srv_mms_delete_folder(&req);
+
+	mc_trace("%s, folder=%d.", __FUNCTION__, folder);
+}
+
+/*******************************************************************************
+** 函数: MsgCmd_GetMMSCounterCb
+** 功能: 获取彩信指定类型的数量的回调函数
+** 入参: result   -- 文件夹类型
+**       rsp_data -- 回调函数传入的数据
+**       usr_data -- 用户数据, 在回调函数里面将被使用
+** 返回: 无
+** 作者: wasfayu
+*******/
+void MsgCmd_GetMMSCounterCb(srv_mms_result_enum result, void *rsp_data, S32 user_data)
+{
+	srv_mms_get_msg_num_rsp_struct *rsp= (srv_mms_get_msg_num_rsp_struct*) rsp_data;
+
+	mc_trace("%s, result=%d.", __FUNCTION__, result);
+}
+
+/*******************************************************************************
+** 函数: MsgCmd_GetMMSCounter
+** 功能: 获取彩信指定类型的数量
+** 入参: reqTab -- 指定类型
+**       tabCt  -- 多少种类型
+**       callback  -- 回调函数, 如果为空则调用默认的回调函数
+**       usd    -- 用户数据, 在回调函数里面将被使用
+** 返回: 无
+** 作者: wasfayu
+*******/
+void MsgCmd_GetMMSCounter(
+	mma_query_option_enum reqTab[], 
+	U32 tabCt, 
+	void *usd,
+	void (*callback)(srv_mms_result_enum, void *, S32))
+{
+	srv_mms_get_msg_num_req_struct param_mms; 
+
+	mc_trace("%s, tabCt=%d.", __FUNCTION__, tabCt);
+	
+	if (tabCt == 0 || NULL == reqTab)
+		return;
+
+	if (tabCt >= MMA_MAX_MSG_NUM_QUERY_NUM)
+		tabCt = MMA_MAX_MSG_NUM_QUERY_NUM - 1;
+	
+	param_mms.app_id = MMA_APP_ID_MMS_APP;
+	param_mms.call_back = callback ? callback : MsgCmd_GetMMSCounterCb;
+	for ( ; tabCt>0; tabCt--)
+	{
+		param_mms.req_tb[tabCt-1] = reqTab[tabCt-1];
+	}
+	param_mms.user_data = (S32)usd;
+	srv_mms_get_msg_num(&param_mms);
+}
 #endif
 
 /*******************************************************************************
@@ -2318,10 +2475,17 @@ static mmi_ret msgcmd_NetworkAttachedEventHdlr(mmi_event_struct *evt)
     
     pevt = (srv_nw_info_service_availability_changed_evt_struct*)evt;	
 
-    
+    MsgCmd_SendLocationGetReq();
     switch (pevt->new_status)
     {
     case SRV_NW_INFO_SA_FULL_SERVICE:
+	#if defined(__VDORECD_VERSION_FEATRUE__)
+		if (MsgCmd_IsSdCardExist() && !MsgCmd_GetExtIntMaskFlag() && hf_admin_is_null())
+		{
+			MsgCmd_InterruptMask(MMI_TRUE, __FILE__, __LINE__);
+		}
+	#endif
+	
         //注销本事件的回调
         mmi_frm_cb_dereg_event( \
             EVT_ID_SRV_NW_INFO_SERVICE_AVAILABILITY_CHANGED, \
@@ -2331,9 +2495,21 @@ static mmi_ret msgcmd_NetworkAttachedEventHdlr(mmi_event_struct *evt)
         mc_trace("network attached!");
         break;
     case SRV_NW_INFO_SA_NO_SERVICE:
+	#if defined(__VDORECD_VERSION_FEATRUE__)
+		if (MsgCmd_IsSdCardExist() && MsgCmd_GetExtIntMaskFlag())
+		{
+			MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
+		}
+	#endif
         mc_trace("network no service!");
         break;
     case SRV_NW_INFO_SA_LIMITED_SERVICE:
+	#if defined(__VDORECD_VERSION_FEATRUE__)
+		if (MsgCmd_IsSdCardExist() && MsgCmd_GetExtIntMaskFlag())
+		{
+			MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
+		}
+	#endif
         mc_trace("network limited service!");
         break;
         
@@ -2343,6 +2519,105 @@ static mmi_ret msgcmd_NetworkAttachedEventHdlr(mmi_event_struct *evt)
     }
 
     return MMI_RET_OK;
+}
+
+/*******************************************************************************
+** 函数: msgcmd_GetLocationInfoRsp
+** 功能: 获取基站信息的回调函数
+** 入参: msg_ptr -- l4c_nbr_cell_info_reg_cnf_struct
+** 返回: 无
+** 参考: vs_misc_cell_id_001 / vm_sal_stub_cell_reg_req
+** 作者: LeiFaYu
+*******/
+static void msgcmd_GetLocationInfoRsp(void * msg_ptr)
+{
+    l4c_nbr_cell_info_reg_cnf_struct *cell_info_reg = \
+        (l4c_nbr_cell_info_reg_cnf_struct *)msg_ptr;
+    
+    mc_trace("%s, valid=%d. ", __FUNCTION__, cell_info_reg->is_nbr_info_valid);
+
+	//StartTimer(TIMER_TEST_DEBUG, 5000, MsgCmd_SendLocationGetReq);
+	
+    if (cell_info_reg->is_nbr_info_valid)
+    {
+        //memcpy((void *)&g_vs_cell_info, (void *)(&(cell_info_reg->ps_nbr_cell_info_union.gas_nbr_cell_info)), sizeof(gas_nbr_cell_info_struct));
+    }
+    else
+    {
+        //memset((void *)&g_vs_cell_info, 0, sizeof(gas_nbr_cell_info_struct));    
+    }
+}
+
+/*******************************************************************************
+** 函数: MsgCmd_LocationGetRspSetOrClr
+** 功能: 注册还是注销
+** 入参: reg -- 注册还是注销
+** 返回: 无
+** 作者: LeiFaYu
+*******/
+void MsgCmd_LocationGetRspSetOrClr(MMI_BOOL reg)
+{
+	ilm_struct *ilm_ptr = NULL;
+
+	ilm_ptr = allocate_ilm(MOD_MMI);
+	ilm_ptr->src_mod_id  = MOD_MMI;
+    ilm_ptr->dest_mod_id = MOD_L4C;
+    ilm_ptr->sap_id = MMI_L4C_SAP;
+    ilm_ptr->local_para_ptr = (local_para_struct *) NULL;
+    ilm_ptr->peer_buff_ptr = (peer_buff_struct *) NULL;
+	
+	if (reg)
+	{
+		mmi_frm_set_protocol_event_handler(
+			MSG_ID_L4C_NBR_CELL_INFO_REG_CNF, 
+			(PsIntFuncPtr)msgcmd_GetLocationInfoRsp, 
+			MMI_FALSE);
+	    mmi_frm_set_protocol_event_handler(
+			MSG_ID_L4C_NBR_CELL_INFO_IND, 
+			(PsIntFuncPtr)msgcmd_GetLocationInfoRsp,
+			MMI_FALSE);
+		
+		ilm_ptr->msg_id = MSG_ID_L4C_NBR_CELL_INFO_REG_REQ;
+	}
+	else
+	{
+		mmi_frm_clear_protocol_event_handler(
+			MSG_ID_L4C_NBR_CELL_INFO_IND, 
+			(PsIntFuncPtr)msgcmd_GetLocationInfoRsp);
+		mmi_frm_clear_protocol_event_handler(
+			MSG_ID_L4C_NBR_CELL_INFO_REG_CNF, 
+			(PsIntFuncPtr)msgcmd_GetLocationInfoRsp);
+
+		ilm_ptr->msg_id = MSG_ID_L4C_NBR_CELL_INFO_DEREG_REQ;
+	}
+
+	msg_send_ext_queue(ilm_ptr);
+}
+
+/*******************************************************************************
+** 函数: MsgCmd_SendLocationGetReq
+** 功能: 获取基站信息
+** 入参: 无
+** 返回: 无
+** 参考: vs_misc_cell_id_001 / vm_sal_stub_cell_reg_req
+** 作者: LeiFaYu
+*******/
+void MsgCmd_SendLocationGetReq(void)
+{
+	ilm_struct *ilm_ptr = NULL;
+	PsFuncPtr ptr;
+	
+	mmi_frm_get_protocol_event_handler(MSG_ID_L4C_NBR_CELL_INFO_IND, &ptr);
+	mc_trace("%s, ptr=0x%x. def_ptr=0x%x.", __FUNCTION__, ptr, msgcmd_GetLocationInfoRsp);
+	
+    ilm_ptr = allocate_ilm(MOD_MMI);
+    ilm_ptr->src_mod_id  = MOD_MMI;
+    ilm_ptr->dest_mod_id = MOD_L4C;
+    ilm_ptr->sap_id = MMI_L4C_SAP;
+    ilm_ptr->msg_id = MSG_ID_L4C_NBR_CELL_INFO_REG_REQ;
+    ilm_ptr->local_para_ptr = (local_para_struct *) NULL;
+    ilm_ptr->peer_buff_ptr = (peer_buff_struct *) NULL;
+    msg_send_ext_queue(ilm_ptr);
 }
 
 /*******************************************************************************
@@ -2360,14 +2635,40 @@ mmi_ret MsgCmd_EvtProcEntry(mmi_event_struct *evp)
 
     switch (evp->evt_id)
     {
+    case EVT_ID_SRV_NW_INFO_LOCATION_CHANGED:
+		{
+			srv_nw_info_location_changed_evt_struct *inp = \
+				(srv_nw_info_location_changed_evt_struct*)evp;
+						
+			mc_trace("%s, L:%d. plmn=%s,lac=%d,ci=%d.",
+				__FUNCTION__,__LINE__,
+				inp->new_location.plmn,
+				inp->new_location.lac,
+				inp->new_location.cell_id);
+		}
+		break;
     case EVT_ID_SRV_BOOTUP_NORMAL_INIT:
         MsgCmd_ProcessInit();
         break;
     case EVT_ID_SRV_BOOTUP_BEFORE_IDLE:
         break;
     case EVT_ID_SRV_BOOTUP_COMPLETED:
-		MsgCmd_InterruptMask(MMI_FALSE);
+	#if defined(__VDORECD_VERSION_FEATRUE__)
+		/* 录像版本的特征: 
+		   (1) 无T卡, 不响应中断, 不执行录音/录像/拍照
+		   (2) 无SIM卡, 不响应中断, 但是响应录音/录像/拍照
+		   (3) 有SIM卡, 未绑定号码, 不响应中断, 但是响应录音/录像/拍照 */
+		if (!MsgCmd_IsSdCardExist() ||
+			(MsgCmd_IsSimUsable(MsgCmd_GetDefinedSim()) && hf_admin_is_null()))
+			MsgCmd_InterruptMask(MMI_TRUE, __FILE__, __LINE__);
+		else
+			MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
+	#else
+		MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
+	#endif
 		//MsgCmd_isink(MMI_FALSE);
+				
+		MsgCmd_LocationGetRspSetOrClr(MMI_TRUE);
         break;
     case EVT_ID_SRV_BOOTUP_EARLY_INIT:
         hf_main_init();
@@ -2783,7 +3084,7 @@ MCErrCode MsgCmd_AdoRecdStart(
     {
     	mc_trace("%s, start OK.", __FUNCTION__);
         arm->status = ADO_STATUS_RECODING;
-        MsgCmd_IntRecheckTimer(MMI_TRUE, MsgCmd_GetAdoRecdArgs()->int_check);
+        //msgcmd_IntRecheckTimer(MMI_TRUE, MsgCmd_GetAdoRecdArgs()->int_check*1000);
     }
 
     return MC_ERR_NONE;
@@ -3049,7 +3350,7 @@ MCErrCode MsgCmd_CaptureEntry(char *replay_number)
 		if (result && NULL != replay_number && replay_number[0] != '\0')
 		{
 			//send MMS
-            req->sim = MsgCmd_GetSimIndex() == 2 ? MMA_SIM_ID_SIM2 : MMA_SIM_ID_SIM1;
+            req->sim = (mma_sim_id_enum)MsgCmd_GetDefinedSim();
 		    strcpy(req->sendto, replay_number);            
             kal_wsprintf(req->subject, "%w", req->picname);
             MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_SEND_MMS_REQ, (void *)req);
@@ -3063,7 +3364,7 @@ MCErrCode MsgCmd_CaptureEntry(char *replay_number)
 	//MsgCmd_DelayTick(MSGCMD_CAPTURE_DLY_TICK);
 	msgcmd_CaptureFinish();
 	
-    return (MMI_BOOL)(result ? MC_ERR_NONE : MC_ERR_UNKOWN);
+    return result;
 }
 #endif
 
@@ -3607,6 +3908,10 @@ static void msgcmd_VdoRecdTimerCyclic(void)
 #else
     vrm->timeCount = (U32)(time/1000);
 #endif
+{
+	//static U32 ct = 0;
+	//MsgCmd_isink(++ct%2);
+}
     //mc_trace("%s, timeCount=%dS. saveGap=%dS.", __FUNCTION__, vrm->timeCount, vrm->saveGap);
     if (vrm->timeCount >= vrm->saveGap)
     {
@@ -3685,11 +3990,21 @@ static void msgcmd_VdoRecdContRecdRsp(void *p)
 
     if (NULL != vrm)
     {
+    #if defined(__VDORECD_VERSION_FEATRUE__)
+		/* 录像版本的特征, 无T卡直接退出不录像 */
+		if (!MsgCmd_IsSdCardExist())
+		{
+			mc_trace("%s, not detected T-card. stop.", __FUNCTION__);
+			goto stopflag___;
+		}
+	#endif
+		
         msgcmd_VdoRecdPreview(MMI_TRUE, vrm->dispLayer);
         msgcmd_VdoRecdGetFilePath(vrm->filepath, (MSGCMD_FILE_PATH_LENGTH+1)*sizeof(WCHAR));
-        kal_sleep_task(20);
+        kal_sleep_task(20);		
         if (!msgcmd_VdoRecdDoing(vrm->filepath))
         {
+        stopflag___:
             msgcmd_VdoRecdPreview(MMI_FALSE, vrm->dispLayer);
             msgcmd_VdoRecdPowerMngr(MMI_FALSE);
             msgcmd_VdoRecdLayerMngr(MMI_FALSE, &vrm->dispLayer);
@@ -3785,6 +4100,21 @@ MCErrCode MsgCmd_VdoRecdStart(
         forever, 
         time_in_sec, 
         replay_number?replay_number:"NULL");
+
+#if defined(__VDORECD_VERSION_FEATRUE__)
+	{
+		U32 maskTime;
+	
+		if (MsgCmd_GetVdoRecdArgs()->save_gap > 60*2)
+			maskTime = MsgCmd_GetVdoRecdArgs()->save_gap - 60;
+		else
+			maskTime = MsgCmd_GetVdoRecdArgs()->save_gap / 2;
+		
+		//屏蔽中断一段时间后再开启
+		MsgCmd_InterruptMask(MMI_TRUE, __FILE__, __LINE__);
+		msgcmd_IntRecheckTimer(MMI_TRUE, maskTime*1000);
+	}
+#endif
 
     if (MsgCmd_VdoRecdBusy())
         return MC_ERR_VDORECD_BUSY;

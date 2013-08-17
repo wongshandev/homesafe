@@ -210,6 +210,15 @@ void Dtmf_AutoAnswerReqSend(WCHAR *name, char *number);
 *******/
 void Dtmf_CallReleasedBySide(void);
 
+/*******************************************************************************
+** 函数: Dtmf_DelayToAnswerCall
+** 功能: 延时接听来电
+** 参数: dlyTimer -- 延时时间, 以毫秒为单位
+**       number   -- 来电号码
+** 返回: 无
+** 作者: wasfayu
+*******/
+void Dtmf_DelayToAnswerCall(U32 dlyTime, char *number);
 
 #endif/*__MSGCMD_DTMF__*/
 

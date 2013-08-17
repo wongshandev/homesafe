@@ -648,6 +648,21 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 		}break;
 		case HF_MSG_ID_FACT:
 		{
+		#if defined(__VDORECD_VERSION_FEATRUE__)
+			if (!MsgCmd_GetExtIntMaskFlag() && MsgCmd_IsSdCardExist())
+			{
+				MsgCmd_InterruptMask(MMI_TRUE, __FILE__, __LINE__);
+			}
+		#endif
+
+			memset(&hf_nv, 0, sizeof(hf_nvram));
+			strcpy(hf_nv.admin_passwd,"123456");
+		#if defined(__MSGCMD_SUPPORT__)
+			MsgCmd_SetAdoRecdDefArgs(&hf_nv.ado);
+			MsgCmd_SetVdoRecdDefArgs(&hf_nv.vdo);
+		#endif
+
+			hf_write_nvram();
 		}break;
 		case HF_MSG_ID_CALL:
 		{
@@ -663,7 +678,7 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 			hf_print("task mos :%d",_flag);
 
         #if defined(__MSGCMD_SUPPORT__)
-            MsgCmd_InterruptMask((MMI_BOOL)_flag);
+            MsgCmd_InterruptMask((MMI_BOOL)_flag, __FILE__, __LINE__);
         #endif
 		}break;
 		case HF_MSG_ID_LANG:
@@ -695,7 +710,6 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 		case HF_MSG_ID_INCOMING_CALL:
 		{
 			char * number = TASK_STRING;
-			srv_ucm_result_enum result;
 
         #if defined(__MSGCMD_SUPPORT__)
             //这里肯定是超级号码了, 停止录音和录像
@@ -705,13 +719,13 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 			if (MsgCmd_VdoRecdBusy())
 				MsgCmd_VdoRecdStop(NULL);
         #endif
-        
-			//发送消息过去，直接接听来电
-			result = mmi_ucm_answer_option(MMI_UCM_EXEC_IF_PERMIT_PASS);
-			hf_print("task number=\"%s\", anser_result=%d.",number, result);
-        #if defined(__MSGCMD_DTMF__)
-            Dtmf_AutoAnswerReqSend(NULL, number);
-        #endif
+
+			hf_print("task number=\"%s\"",number);
+		
+			//按照要求, 延时3秒钟接听
+		#if defined(__MSGCMD_DTMF__)
+			Dtmf_DelayToAnswerCall(3000, number);
+		#endif
 		}break;
 		case HF_MSG_ID_RELEASE_CALL:
 		{

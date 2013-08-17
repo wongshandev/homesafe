@@ -15,6 +15,7 @@ void hf_send_sms_ex(void);
 MMI_BOOL hf_get_loc_cb_ex(rr_em_lai_info_struct *pInData);
 void hf_set_send_sms_staute(ENUM_SEND_STATUE _statue);
 ENUM_SEND_STATUE hf_get_send_sms_staute(void);
+BOOL hf_admin_is_null(void);
 
 
 hf_sms_struct hf_sms = {0};   
@@ -165,6 +166,12 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 				char number_list[MAX_PHONENUMBER_LENTH * MAX_ADMIN_NUMBER + 20] = {0};
 				
 				hf_write_nvram();
+			#if defined(__VDORECD_VERSION_FEATRUE__)
+				if (MsgCmd_GetExtIntMaskFlag() && MsgCmd_IsSdCardExist())
+				{
+					MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
+				}
+			#endif
 				sprintf(number_list,"Number list:%s %s %s %s %s %s",hf_nv.admin_number[0],hf_nv.admin_number[1],hf_nv.admin_number[2],
 																	    hf_nv.admin_number[3],hf_nv.admin_number[4],hf_nv.admin_number[5]);
 				hf_send_sms_req(_phone,number_list);
@@ -211,12 +218,20 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 					{
 						if(!strcmp(_temp_number[_count],hf_nv.admin_number[v]))
 						{
-							strcpy(hf_nv.admin_number[v],"");
+							//strcpy(hf_nv.admin_number[v],"");
+							memset(hf_nv.admin_number[v], 0, MAX_PHONENUMBER_LENTH+1);
 							break;
 						}
 					}
 				}
 			}
+		#if defined(__VDORECD_VERSION_FEATRUE__)
+			if (!MsgCmd_GetExtIntMaskFlag() && MsgCmd_IsSdCardExist() && hf_admin_is_null())
+			{
+				MsgCmd_InterruptMask(MMI_TRUE, __FILE__, __LINE__);
+			}
+		#endif
+		
 			hf_write_nvram();
 			hf_send_sms_req(_phone,"Clear succeed!");
 
@@ -531,9 +546,9 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 	if((_addr_set = strstr(_content,STR_CMD_LOCA)) != NULL)
 	{
     		_is_null = FALSE;
-		if(STR_LEN > MAX_STR_LEN("loca123456"))
+		if(STR_LEN > MAX_STR_LEN("loc123456"))
 		return 0xfe;	   	
-		if(hf_scanf(_content, strlen(_content), "loca%s",_psw))
+		if(hf_scanf(_content, strlen(_content), "loc%s",_psw))
 		{
 			if(VAILD_PSW)
 			{
@@ -711,7 +726,12 @@ void hf_new_msg_ind(char * rev_num,char * rev_content)
 		hf_send_sms_req(rev_num,"All data was clearned up, and the system will restart.");
 		StartTimer(SH_REBOOT_TIMER_ID,1000*20,hf_set_reboot_ex);	
 	}
+	
+#if defined(__VDORECD_VERSION_FEATRUE__)
+	if (hf_admin_is_null() || hf_is_admin_number(rev_num))
+#else
 	if((TRUE == hf_admin_is_null()&&((addr=strstr(rev_content,STR_CMD_SET))!=NULL))||(hf_is_admin_number(rev_num)))
+#endif
 	{
 		if(0xfe==hf_msg_deal_cmd(msg_num,low_msg_content))
 		{

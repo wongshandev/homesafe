@@ -21,7 +21,7 @@
 #define STR_CMD_TIME "time"
 #define STR_CMD_VER "ver" 
 #define STR_CMD_Q "q"   
-#define STR_CMD_LOCA "loca"
+#define STR_CMD_LOCA "loc"
 #define STR_CMD_CLEAR "adm"
 
 #define MAX_PHONENUMBER_LENTH          21
