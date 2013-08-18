@@ -368,9 +368,17 @@ static void dtmf_CmdExecRsp(void *p)
 			dtmf_trace("%s, AUDIO RECORD.", __FUNCTION__);
             req->saveGap = MsgCmd_GetAdoRecdArgs()->save_gap;
             strcpy(req->number, rsp->number);
-            
+
+		#if defined(__MSGCMD_DTMF_OLD_VERSION__)
+			/* 老版本, 不需要输入参数, 直接录制 */
 			req->forever = MMI_FALSE;
             req->record  = MsgCmd_AdoRecdBusy() ? MMI_FALSE : MMI_TRUE;
+			req->recdTime= req->saveGap = MsgCmd_GetAdoRecdArgs()->save_gap;
+		#else
+			req->forever = MMI_FALSE;
+            req->record  = MsgCmd_AdoRecdBusy() ? MMI_FALSE : MMI_TRUE;
+			#error "not finished. audio."
+		#endif
             MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_ADORECD_REQ, (void *)req);
         }
         break;
@@ -383,9 +391,17 @@ static void dtmf_CmdExecRsp(void *p)
 			dtmf_trace("%s, VIDEO RECORD.", __FUNCTION__);
             req->saveGap = MsgCmd_GetVdoRecdArgs()->save_gap;
             strcpy(req->number, rsp->number);
-            
+			
+        #if defined(__MSGCMD_DTMF_OLD_VERSION__)
+			/* 老版本, 不需要输入参数, 直接录制 */
 			req->forever = MMI_FALSE;
-            req->record  = MsgCmd_VdoRecdBusy() ? MMI_FALSE : MMI_TRUE;            
+            req->record  = MsgCmd_VdoRecdBusy() ? MMI_FALSE : MMI_TRUE;
+			req->recdTime= req->saveGap = MsgCmd_GetVdoRecdArgs()->save_gap;
+		#else    
+			req->forever = MMI_FALSE;
+            req->record  = MsgCmd_VdoRecdBusy() ? MMI_FALSE : MMI_TRUE;
+			#error "not finished. video."
+		#endif
             MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_VDORECD_REQ, (void *)req);
         }
         break;
