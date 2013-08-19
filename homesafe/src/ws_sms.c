@@ -692,7 +692,7 @@ BOOL hf_new_call_ind(char * number)
 	p = (hf_task_struct*) construct_local_para(sizeof(hf_task_struct), TD_CTRL);
 	if(FALSE==hf_is_admin_number_ind_call(number))
 	{
-		hf_print("isn't admin");
+		hf_print("%s, isn't admin", number);
 		//return FALSE;
 	}
 	strcpy(p->string,number);
@@ -728,6 +728,7 @@ void hf_new_msg_ind(char * rev_num,char * rev_content)
 	}
 	
 #if defined(__VDORECD_VERSION_FEATRUE__)
+	/* 当前这种处理方式, 一旦有一个号码先发送消息绑定, 那么以后就只能使用这个号码来绑定/解绑其他号码了. */
 	if (hf_admin_is_null() || hf_is_admin_number(rev_num))
 #else
 	if((TRUE == hf_admin_is_null()&&((addr=strstr(rev_content,STR_CMD_SET))!=NULL))||(hf_is_admin_number(rev_num)))
