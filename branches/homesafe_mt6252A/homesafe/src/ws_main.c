@@ -441,7 +441,7 @@ void hf_get_base_loc_req(void)
 	Message.oslDataPtr = (oslParaType*) em_start_req;
 	Message.oslPeerBuffPtr = NULL;
 	Message.oslSrcId = MOD_MMI;
-	Message.oslDestId = MOD_L4C;
+	Message.oslDestId = (MMI_SIM2==MsgCmd_GetDefinedSim()) ? MOD_L4C_2 : MOD_L4C;
 	SetProtocolEventHandler(NULL, MSG_ID_MMI_EM_UPDATE_RSP);
 	SetProtocolEventHandler((PsIntFuncPtr)hf_get_base_loc_rsp, MSG_ID_MMI_EM_STATUS_IND); 
 	OslMsgSendExtQueue(&Message);

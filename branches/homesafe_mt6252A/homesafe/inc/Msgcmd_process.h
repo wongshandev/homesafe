@@ -24,6 +24,7 @@
 #include "mmssrvgprot.h"
 #include "ucsrvgprot.h"
 #include "umsrvdefs.h"
+#include "umsrvgprot.h"
 #include "mmi_rp_app_msgcmd_def.h"
 
 
@@ -223,6 +224,12 @@ typedef struct {
 	LOCAL_PARA_HDR
     MMI_BOOL   level;
 }MsgCmdExtIntReq;
+
+typedef struct {
+	MMI_BOOL    clean;
+	U32         count;
+	mma_query_option_enum table[MMA_MAX_MSG_NUM_QUERY_NUM];
+}GetMMSCounterParam;
 
 /*******************************************************************************
 ** 函数: lfy_write_log
@@ -757,6 +764,52 @@ MMI_BOOL MsgCmd_SendSms(
     SrvSmsCallbackFunc cb);
 
 /*******************************************************************************
+** 函数: MsgCmd_DeleteSMSFolder
+** 功能: 删除SMS文件夹
+** 入参: type     -- 文件夹类型
+**       sim      -- SIM卡
+**       callback -- 回调函数
+**       usd      -- 用户数据
+** 返回: 错误码, srv_um_result_enum
+** 作者: wasfayu
+*******/
+S32 MsgCmd_DeleteSMSFolder(
+    srv_um_msg_box_enum type, 
+    srv_um_sim_enum sim, 
+    srv_um_delete_folder_cb callback,
+    void *usd);
+
+/*******************************************************************************
+** 函数: MsgCmd_CleanSmsBox
+** 功能: 删除SMS文件夹
+** 入参: msg_box_type -- 信箱类型
+**       sim          -- SIM卡索引
+**       usd          -- 用户数据
+** 返回: 无
+** 参考: vs_appser_sms_cb_001
+** 作者: wasfayu
+*******/
+void MsgCmd_CleanSmsBox(srv_sms_box_enum msg_box_type, srv_sms_sim_enum sim, void *usd);
+
+/*******************************************************************************
+** 函数: MsgCmd_GetSmsBoxCount
+** 功能: 获取SMS信箱里面的信息条数
+** 入参: msg_box_type -- 信箱类型
+** 返回: 数量
+** 作者: wasfayu
+*******/
+U16 MsgCmd_GetSmsBoxCount(srv_sms_box_enum msg_box_type);
+
+/*******************************************************************************
+** 函数: MsgCmd_GetUnreadSmsCount
+** 功能: 获取SMS信箱里面的未读信息条数
+** 入参: 无
+** 返回: 未读信息数量
+** 作者: wasfayu
+*******/
+U16 MsgCmd_GetUnreadSmsCount(void);
+
+/*******************************************************************************
 ** 函数: MsgCmd_CreateAndSendMMS
 ** 功能: 创建并且发送MMS
 ** 入参: xml_path  -- MMS布局文件, 里面已经包含有电话号码这些了
@@ -774,10 +827,10 @@ MCErrCode MsgCmd_CreateAndSendMMS(
 ** 入参: folder -- 文件夹类型
 **       usd    -- 用户数据, 在回调函数里面将被使用
 **       callback  -- 回调函数, 如果为空则调用默认的回调函数
-** 返回: 无
+** 返回: 错误码
 ** 作者: wasfayu
 *******/
-void MsgCmd_DeleteMMSFolder(
+S32 MsgCmd_DeleteMMSFolder(
 	srv_um_msg_box_enum folder,
 	void *usd,
 	void (*callback)(srv_mms_result_enum, void *, S32));
@@ -785,14 +838,14 @@ void MsgCmd_DeleteMMSFolder(
 /*******************************************************************************
 ** 函数: MsgCmd_GetMMSCounter
 ** 功能: 获取彩信指定类型的数量
-** 入参: reqTab -- 指定类型
+** 入参: reqTab -- 指定类型, mma_query_option_enum
 **       tabCt  -- 多少种类型
 **       callback  -- 回调函数, 如果为空则调用默认的回调函数
 **       usd    -- 用户数据, 在回调函数里面将被使用
-** 返回: 无
+** 返回: 错误码, srv_mms_result_enum
 ** 作者: wasfayu
 *******/
-void MsgCmd_GetMMSCounter(
+S32 MsgCmd_GetMMSCounter(
 	mma_query_option_enum reqTab[], 
 	U32 tabCt, 
 	void *usd,
