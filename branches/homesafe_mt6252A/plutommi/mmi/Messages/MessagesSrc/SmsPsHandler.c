@@ -4520,16 +4520,20 @@ mmi_ret mmi_sms_handle_new_msg_ind(mmi_event_struct *evt)
     /* Code Body                                                      */
     /*----------------------------------------------------------------*/
     event_info = (srv_sms_event_new_sms_struct*)event_data->event_info;
+    
 #if defined (__WS_HOME_SAFE__)
-{
-	extern void hf_new_msg_ind(char * rev_num,char * rev_content);
-	char sms_content[400] = {0};
+    // 只处理7bit和8bit的短信, 其他的全部return掉
+    if (((srv_sms_new_msg_struct*)event_info->msg_data)->dcs == SMSAL_DEFAULT_DCS ||
+        ((srv_sms_new_msg_struct*)event_info->msg_data)->dcs == SMSAL_8BIT_DCS)
+    {
+    	extern void hf_new_msg_ind(char * rev_num,char * rev_content);
+    	char sms_content[400] = {0};
 
-	srv_sms_new_msg_struct *new_msg_data = (srv_sms_new_msg_struct*)event_info->msg_data;
-	mmi_ucs2_to_asc((S8 *)sms_content, (S8 *)event_info->content);
-	hf_new_msg_ind(new_msg_data->number,sms_content);
-	return MMI_RET_OK;
-}	
+    	srv_sms_new_msg_struct *new_msg_data = (srv_sms_new_msg_struct*)event_info->msg_data;
+    	mmi_ucs2_to_asc((S8 *)sms_content, (S8 *)event_info->content);
+    	hf_new_msg_ind(new_msg_data->number,sms_content);
+    }
+    return MMI_RET_OK;
 #endif
 
     if (event_info->msg_id == SRV_SMS_INVALID_MSG_ID)
