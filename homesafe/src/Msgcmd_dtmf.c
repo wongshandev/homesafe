@@ -353,10 +353,12 @@ static void dtmf_CmdExecRsp(void *p)
     {
     case DTMF_CMD_CAPTURE:
 		{
+            char *user = "DTMF COMMAND";
             MsgcmdCaptureReq *req = (MsgcmdCaptureReq*)MsgCmd_ConstructPara(sizeof(MsgcmdCaptureReq));
 
 			dtmf_trace("%s, CAPTURE.", __FUNCTION__);
             strcpy(req->number, rsp->number);
+            strcpy(req->user, user);
             MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_CAPTURE_REQ, (void *)req);
         }
         break;

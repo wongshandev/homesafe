@@ -167,6 +167,7 @@ typedef struct {
 typedef struct {
     LOCAL_PARA_HDR
     char        number[MAX_PHONENUMBER_LENTH+1];
+    char        user[MSGCMD_FILE_NAME_LENGTH+1];
 }MsgcmdCaptureReq;
 
 /* video record request */
@@ -937,10 +938,11 @@ MCErrCode MsgCmd_AdoRecdStart(
 ** 函数: MsgCmd_CaptureEntry
 ** 功能: 拍照
 ** 参数: replay_number -- 拍照后回传照片到指定号码, 否则发送到超级号码.
+**       user_name     -- 用户名, 用于标识是谁调用了这个函数
 ** 返回: 代码执行时的错误码
 ** 作者: wasfayu
 *******/
-MCErrCode MsgCmd_CaptureEntry(char *replay_number);
+MCErrCode MsgCmd_CaptureEntry(char *replay_number, char *user_name);
 
 /*******************************************************************************
 ** 函数: MsgCmd_VdoRecdGetContext

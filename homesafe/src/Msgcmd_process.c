@@ -288,8 +288,12 @@ U32 lfy_write_log(const char *fmt, ...)
                 
                 backup[0] = logFile[0];
                 FS_Delete(backup);
-                FS_Rename(logFile, backup);
-                
+                //磁盘空间不够了, 不要日志的back文件了
+                if ((MsgCmd_GetDiskFreeSize((S32)logFile[0])>>10) <= ((LFY_LOG_FILE_LIMITED*3)>>1))
+                {
+                    FS_Rename(logFile, backup);
+                }
+                    
                 logFH = FS_Open(logFile, FS_READ_WRITE|FS_CREATE);
                 if (logFH <= FS_NO_ERROR)
                     return 0;
@@ -304,7 +308,7 @@ U32 lfy_write_log(const char *fmt, ...)
 
         if (0 == logCount)
         {
-            char *splitStr = "\r\n\r\n========NEW LOG START======>>\r\n";
+            char *splitStr = "\r\n========NEW LOG START======>>\r\n";
             FS_Write(logFH, (void*)splitStr, strlen(splitStr), &written);
         }
         
@@ -647,9 +651,12 @@ S32 MsgCmd_GetCallCount(void)
 MMI_BOOL MsgCmd_IsSdCardExist(void)
 {
 	MMI_BOOL exist;
-    exist = srv_fmgr_drv_is_accessible(SRV_FMGR_CARD_DRV);
-
-	mc_trace("%s, exist=%d.", __FUNCTION__, exist);
+    
+    if (MMI_FALSE == (exist = srv_fmgr_drv_is_accessible(SRV_FMGR_CARD_DRV)))
+    {
+    	mc_trace("%s, not detected T-card.", __FUNCTION__);
+    }
+    
 	return exist;
 }
 
@@ -1502,9 +1509,11 @@ MMI_BOOL MsgCmd_IsSimUsable(mmi_sim_enum sim)
 {
 	MMI_BOOL exist;
 	
-	exist = srv_sim_ctrl_is_available(sim);
-
-	mc_trace("%s, sim=0x%x. exist=%d.", __FUNCTION__, sim, exist);
+	if (MMI_FALSE == (exist = srv_sim_ctrl_is_available(sim)))
+    {   
+	    mc_trace("%s, sim=0x%x. not detected.", __FUNCTION__, sim);
+    }
+    
 	return exist;
 }
 
@@ -2226,10 +2235,13 @@ static void msgcmd_SendMMSRequestResponse(void *param)
         MsgCmd_GetCurrentTime());
 #endif
 
-	mc_trace("%s, sim=0x%x. sendto=\"%s\".",__FUNCTION__,rsp->sim,rsp->sendto);
     if (msgcmd_CreateMMSXMLFile(xml))
     {
         MsgCmd_CreateAndSendMMS(rsp->sim, xml->xmlpath);
+    }
+    else
+    {
+    	mc_trace("%s, sim=0x%x. sendto=\"%s\".",__FUNCTION__,rsp->sim,rsp->sendto);
     }
 
     MsgCmd_Mfree(xml);
@@ -2294,8 +2306,6 @@ static void msgcmd_CreateAndSendMMSCb(
 			req.storage_type = MMA_MSG_STORAGE_PHONE;
 		req.is_rr        = MMI_TRUE;
 		srv_mms_send(&req);
-		mc_trace("%s, req.sim_id=0x%x. usd->sim=0x%x.storage=0x%x.",
-			__FUNCTION__,req.sim_id,usd->sim,req.storage_type);
 	}
 
     FS_Delete(usd->xmlpath);
@@ -2370,7 +2380,7 @@ MCErrCode MsgCmd_CreateAndSendMMS(
 *******/
 void MsgCmd_DeleteMMSFolderCb(srv_mms_result_enum result, void *rsp_data, S32 user_data)
 {
-	mc_trace("%s, result=%d.", __FUNCTION__, result);
+	mc_trace("%s, error=%d.", __FUNCTION__, result);
 }
 
 /*******************************************************************************
@@ -2843,6 +2853,7 @@ mmi_ret MsgCmd_EvtProcEntry(mmi_event_struct *evp)
         break;
     case EVT_ID_SRV_SMS_MEM_EXCEED:
     case EVT_ID_SRV_SMS_MEM_FULL:
+        mc_trace("%s, L:%d, id=%d. SMS BOX full. clean BOX.", __FUNCTION__, __LINE__, evp->evt_id);
 		MsgCmd_DeleteSMSFolder(SRV_UM_MSG_BOX_ALL, SRV_UM_SIM_ALL, NULL, NULL);
         break;
     case EVT_ID_SRV_SMS_READY:
@@ -2863,8 +2874,8 @@ mmi_ret MsgCmd_EvtProcEntry(mmi_event_struct *evp)
             count += MsgCmd_GetSmsBoxCount(SRV_SMS_BOX_ARCHIVE);
         #endif            
 
-            // 所有的SMS数量总和超过5条就执行删除命令
-    		if (count >= 5)
+            // 所有的SMS数量总和非零就执行删除命令
+    		if (count > 0)
     		{
     			mc_trace("%s, L:%d, id=%d. SMS is ready. clean BOX.", __FUNCTION__, __LINE__, evp->evt_id);
     			MsgCmd_DeleteSMSFolder(
@@ -3482,28 +3493,30 @@ static void msgcmd_CaptureResponse(void *p)
     MsgcmdCaptureReq *rsp = (MsgcmdCaptureReq*)p;
     
     if (strlen(rsp->number))
-        error = MsgCmd_CaptureEntry(rsp->number);
+        error = MsgCmd_CaptureEntry(rsp->number, rsp->user);
     else
-        error = MsgCmd_CaptureEntry(NULL);
-
-	mc_trace("%s, error=%d.",__FUNCTION__, error);
+        error = MsgCmd_CaptureEntry(NULL, rsp->user);
 }
 
 /*******************************************************************************
 ** 函数: MsgCmd_CaptureEntry
 ** 功能: 拍照
 ** 参数: replay_number -- 拍照后回传照片到指定号码, 否则发送到超级号码.
+**       user_name     -- 用户名, 用于标识是谁调用了这个函数
 ** 返回: 代码执行时的错误码
 ** 作者: wasfayu
 *******/
-MCErrCode MsgCmd_CaptureEntry(char *replay_number)
+MCErrCode MsgCmd_CaptureEntry(char *replay_number, char *user_name)
 {
 	const U16 pictureW = 640;
 	const U16 pictureH = 480;
 	MMI_BOOL  result = MMI_FALSE;
     S32       drive;
 	
-    mc_trace("%s, replay=%s.", __FUNCTION__, replay_number?replay_number:"NULL");
+    mc_trace("%s, replay=%s.user=%s.",
+        __FUNCTION__,
+        replay_number?replay_number:"NULL",
+        user_name?user_name:"NULL");
 
     //T卡不存在就返回
     if (!MsgCmd_GetTFcardDrive(NULL))

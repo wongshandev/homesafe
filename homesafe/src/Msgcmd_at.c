@@ -641,6 +641,8 @@ static void at_vdorecd(AtParam_t *vp)
 *******/
 static void at_capture(AtParam_t *vp)
 {
+    char *user = "AT COMMAND";
+    
     switch(vp->mode)
     {
     case AT_EM_SET_OR_EXEC:
@@ -659,6 +661,7 @@ static void at_capture(AtParam_t *vp)
             {
                 strcpy(req->number, vp->argv[0].pos);
             }
+            strcpy(req->user, user);
             MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_CAPTURE_REQ, (void *)req);
         }
         break;
@@ -675,6 +678,7 @@ static void at_capture(AtParam_t *vp)
             MsgcmdCaptureReq *req = (MsgcmdCaptureReq*)MsgCmd_ConstructPara(sizeof(MsgcmdCaptureReq));
 
             req->number[0] = '\0';
+            strcpy(req->user, user);
             MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_CAPTURE_REQ, (void *)req);
         }
         break;

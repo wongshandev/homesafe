@@ -27,6 +27,14 @@ BOOL hf_make_call(char * number, hf_FuncPtr cb);
 void hf_hisr_call_result(BOOL result);
 void hf_set_light_for_rec(void);
 
+#ifndef ws_trace 
+#define ws_trace(fmt, ...) hf_print(fmt, ##__VA_ARGS__)
+#if defined(__MSGCMD_SUPPORT__)
+#undef ws_trace
+#define ws_trace(fmt, ...) do{lfy_write_log(fmt, ##__VA_ARGS__); kal_prompt_trace(0, fmt, ##__VA_ARGS__);}while(0)
+#endif
+#endif ws_trace
+
 void hf_nvram_init(void)
 {
 	hf_read_nvram();
@@ -38,7 +46,7 @@ void hf_nvram_init(void)
         MsgCmd_SetVdoRecdDefArgs(&hf_nv.vdo);
     #endif	
 	}
-	hf_print("hf_nvram_init,admin[%s %s %s %s %s %s ],psw[%s]",hf_nv.admin_number[0],hf_nv.admin_number[1],hf_nv.admin_number[2],
+	ws_trace("hf_nvram_init,admin[%s %s %s %s %s %s ],psw[%s]",hf_nv.admin_number[0],hf_nv.admin_number[1],hf_nv.admin_number[2],
 	hf_nv.admin_number[3],hf_nv.admin_number[4],hf_nv.admin_number[5],hf_nv.admin_passwd);
 	hf_write_nvram();
 }
@@ -59,7 +67,7 @@ void hf_start_light(void)
 		static int _count = 0;
 		
 		timer_sec = 1;
-		//hf_print("无信号或者无卡。已经进入待机界面");
+		//ws_trace("无信号或者无卡。已经进入待机界面");
 		if(!((++_count)%3))
 		{
 			_count = 0;
@@ -154,7 +162,7 @@ void hf_set_time_from_fs(void)
 			  (p_t->nDay > 0)&&(p_t->nDay < 32)&&(p_t->nHour < 24)&&(p_t->nHour >=0)&&
 			  (p_t->nMin >=0)&&(p_t->nMin < 60)&&(p_t->nSec >=0)&&(p_t->nSec < 60))
 			  {
-			  	hf_print("文件设置时间成功");
+			  	ws_trace("文件设置时间成功");
 				PhnsetSendSetTimeReqMessage();
 			  }
 			  FS_Close(file_handle);
@@ -170,7 +178,7 @@ void hf_entry_idle(void)
 }
 void hf_init_hf_info(void)
 {
-	hf_print("初始化hf_init_hf_info");
+	ws_trace("初始化hf_init_hf_info");
 	hf_info.is_call_out = FALSE;
 	hf_info.call_result_time = 0;
 	hf_info.call_is_complete = TRUE;
@@ -213,14 +221,14 @@ void hf_get_base_loc_rsp(void *info)
 }
 void hf_out_call_endkey(void)
 {
-	hf_print("拨出挂断电话");
+	ws_trace("拨出挂断电话");
 	mmi_ucm_outgoing_call_endkey();
 }
 void hf_call_out_timer_out(void)
 {
 	if((GetActiveScreenId() != SCR_ID_UCM_IN_CALL))
 	{
-		hf_print("通话结束,主动挂断!");
+		ws_trace("通话结束,主动挂断!");
 		mmi_ucm_outgoing_call_endkey();
 #if defined(__ADO_VER__)
 		if(hf_info.io_statue == TRUE && hf_info.is_call_out == TRUE)
@@ -233,13 +241,13 @@ void hf_call_out_timer_out(void)
 #endif
 			{
 				//空闲时，可以启动。
-				hf_print("开始录音。。");
+				ws_trace("开始录音。。");
 				hf_set_light_for_rec();
 #if defined(__ADO_VER__)				
 				MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, 0, 5*60, NULL);
 				hf_init_hf_info();
 #else
-				hf_print("超时了，可以录像了");
+				ws_trace("超时了，可以录像了");
 				MsgCmd_VdoRecdStart(
 				MMI_TRUE, 
 				5*60,
@@ -256,7 +264,7 @@ void hf_hisr_call_result(BOOL result)
 	if(TRUE == result)
 	{
 		//已经接通了。
-		hf_print("接通了。。。");
+		ws_trace("接通了。。。");
 		is_connet = TRUE;
 	}
 	else
@@ -264,14 +272,14 @@ void hf_hisr_call_result(BOOL result)
 		//结束了
 		if(is_connet)
 		{
-			hf_print("接通过。。初骀化函数");
+			ws_trace("接通过。。初骀化函数");
 			is_connet = FALSE;
 			hf_init_hf_info();
 			return;
 		}
 		else
 		{
-			hf_print("通话结束");
+			ws_trace("通话结束");
 			hf_info.call_is_complete = TRUE;
 		}
 	}
@@ -300,10 +308,10 @@ BOOL hf_make_call(char * number, hf_FuncPtr cb)
 
 	if(IS_IN_CALL)
 	{
-		hf_print("正在通话中,不拨打电话。");
+		ws_trace("正在通话中,不拨打电话。");
 		return FALSE;
 	}
-	hf_print("拨打电话%s  信号:%d",number,hf_get_signal_changed());
+	ws_trace("拨打电话%s  信号:%d",number,hf_get_signal_changed());
 	MsgCmd_MakeCall(number);
 	hf_call_result_cb = cb;
 	StartTimer(HF_HISR_CALL_OUT_TIME_OUT_ID, 1000*60,hf_call_out_timer_out);
@@ -314,7 +322,7 @@ void hf_set_light_for_rec(void)
 	static BOOL i = 0;
 	static int count = 0;
 
-	//hf_print("录音的灯%d",count);
+	//ws_trace("录音的灯%d",count);
 	if(++count > 9)
 	{
 		StopTimer(SH_LIGHT_TIMER_ID);
@@ -335,7 +343,7 @@ void hf_set_light_stop_rec(void)
 {
 	static int count = 0;
 
-	//hf_print("停止录音 count %d",count);
+	//ws_trace("停止录音 count %d",count);
 	if(TRUE == count)
 	{
 		count = FALSE;
@@ -406,7 +414,7 @@ MsgCmdRecdArg *MsgCmd_GetVdoRecdArgs(void)
 
 void MsgCmd_AdoRecdStopTimerEx(void)
 {
-	hf_print("停止录音");
+	ws_trace("停止录音");
 	hf_set_light_stop_rec();
 	if (MsgCmd_AdoRecdBusy())
 		MsgCmd_AdoRecdStop(NULL);
@@ -455,7 +463,7 @@ void hf_make_call_out_ex(void)
 }
 void hf_vdo_rec_stop(void)
 {
-	hf_print("停止了。。");
+	ws_trace("停止了。。");
 	MsgCmd_VdoRecdStop(NULL);
 	hf_init_hf_info();
 }
@@ -471,7 +479,7 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 		{
 			//录像
 			U32 time  = TASK_ID;
-			hf_print("task vdo :%d",time);
+			ws_trace("task vdo :%d",time);
         #if defined(__MSGCMD_SUPPORT__)
               if((time == HF_HISR_IN)||(time == HF_HISR_OUT))
 		{
@@ -490,7 +498,7 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 						}
 						else
 						{
-							hf_print("定时器启动");
+							ws_trace("定时器启动");
 							StartTimer(HF_HISR_VDO_STOP_TIMER_ID, 1000*60*5, hf_vdo_rec_stop);
 						}
 					}
@@ -500,12 +508,12 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 			{
 				if (MsgCmd_VdoRecdBusy())
 				{
-					hf_print("设置录像参数，继续录音");
+					ws_trace("设置录像参数，继续录音");
 		                    MsgCmd_VdoRecdGetContext()->forever = MMI_TRUE;
 				}
 				else
 				{
-					hf_print("录像开始");
+					ws_trace("录像开始");
 					hf_set_light_for_rec();
 					MsgCmd_VdoRecdStart(
 					    time ? MMI_FALSE : MMI_TRUE, 
@@ -513,7 +521,7 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 					    MsgCmd_GetVdoRecdArgs()->save_gap,
 					    NULL);
 				}
-				hf_print("定时器启动5分钟后停止");
+				ws_trace("定时器启动5分钟后停止");
 				StartTimer(HF_HISR_VDO_STOP_TIMER_ID, 1000*60*5, hf_vdo_rec_stop);
 			}
 		}
@@ -545,7 +553,7 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 		case HF_MSG_ID_ADO:
 		{
 			U16 time =TASK_ID;
-			//hf_print("task Ado :%d",time);
+			//ws_trace("task Ado :%d",time);
 			
         #if defined(__MSGCMD_SUPPORT__)
         
@@ -580,7 +588,7 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 							if (!MsgCmd_AdoRecdBusy())
 							{
 								//空闲时，可以启动。
-								hf_print("开始录音。。");
+								ws_trace("开始录音。。");
 								hf_set_light_for_rec();
 								MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, 0, 5*60, NULL);
 							}
@@ -604,7 +612,7 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 					}
 					else if(!hf_is_vaild_service()||(FALSE==hf_admin_is_null()))
 					{
-						hf_print("白卡开始录音。。");
+						ws_trace("白卡开始录音。。");
 						hf_set_light_for_rec();
 						MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, 0, 5*60, NULL);
 					}
@@ -616,21 +624,21 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 				if (!MsgCmd_AdoRecdBusy())
 				{
 					//空闲时，可以启动。
-					hf_print("开始录音。。");
+					ws_trace("开始录音。。");
 					hf_set_light_for_rec();
 					MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, time, 5*60, NULL);
 				}
 				else if(0 != time)
 				{
 					//短信触发的，有非零参数进来先停止，再启动以新的参数启动。
-					hf_print("有参数，再继续录...");
+					ws_trace("有参数，再继续录...");
 					MsgCmd_AdoRecdGetContext()->forever = MMI_FALSE;
                     		MsgCmd_AdoRecdGetContext()->time += time*60;
 				}
 				else
 				{
 					//非空闲
-					hf_print("无参数。设备正在录，继续录。。");
+					ws_trace("无参数。设备正在录，继续录。。");
 					MsgCmd_AdoRecdGetContext()->forever = MMI_TRUE;
 				}
         	}
@@ -639,13 +647,14 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 		case HF_MSG_ID_MMS:
 		{
 			char * _number = TASK_STRING;
-			hf_print("task mms:[length=%d] \"%s\".", strlen(_number), _number);
+            char * user = "SMS COMMAND";
+			ws_trace("task mms:[length=%d] \"%s\".", strlen(_number), _number);
 
         #if defined(__MSGCMD_SUPPORT__)
 			if (strlen(_number))
-				MsgCmd_CaptureEntry(_number);
+				MsgCmd_CaptureEntry(_number, user);
 			else
-				MsgCmd_CaptureEntry(NULL);
+				MsgCmd_CaptureEntry(NULL, user);
         #endif
 		}break;
 		case HF_MSG_ID_FACT:
@@ -669,7 +678,7 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 		case HF_MSG_ID_CALL:
 		{
 			char * _number =TASK_STRING;
-			hf_print("task call out :%s",_number);
+			ws_trace("task call out :%s",_number);
         #if defined(__MSGCMD_SUPPORT__)
 			MsgCmd_MakeCall(_number);
         #endif
@@ -677,7 +686,7 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 		case HF_MSG_ID_MOS:
 		{
 			U16 _flag = TASK_ID;
-			hf_print("task mos :%d",_flag);
+			ws_trace("task mos :%d",_flag);
 
         #if defined(__MSGCMD_SUPPORT__)
             MsgCmd_InterruptMask((MMI_BOOL)_flag, __FILE__, __LINE__);
@@ -686,16 +695,16 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 		case HF_MSG_ID_LANG:
 		{
 			U16 _flag = TASK_ID;
-			hf_print("task lang :%d",_flag);
+			ws_trace("task lang :%d",_flag);
 			
 		}break;
 		case HF_MSG_ID_VER:
 		{
-			hf_print("中断测试");
+			ws_trace("中断测试");
 		}break;
 		case HF_MSG_ID_QUIT:
 		{
-			hf_print("task quit ");
+			ws_trace("task quit ");
         #if defined(__MSGCMD_SUPPORT__)
 			if (MsgCmd_AdoRecdBusy())
 				MsgCmd_AdoRecdStop(NULL);
@@ -707,7 +716,7 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 		case HF_MSG_ID_LOCA:
 		{
 			loc_info_struct *_loc = &hf_info.hf_loc;
-			hf_print("task loc ok!");
+			ws_trace("task loc ok!");
 		}break;
 		case HF_MSG_ID_INCOMING_CALL:
 		{
@@ -722,7 +731,7 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 				MsgCmd_VdoRecdStop(NULL);
         #endif
 
-			hf_print("task number=\"%s\"",number);
+			ws_trace("task number=\"%s\"",number);
 		
 			//按照要求, 延时3秒钟接听
 		#if defined(__MSGCMD_DTMF__)
@@ -731,7 +740,7 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 		}break;
 		case HF_MSG_ID_RELEASE_CALL:
 		{
-			hf_print("task call release !");
+			ws_trace("task call release !");
         #if defined(__MSGCMD_DTMF__)
             Dtmf_CallReleasedBySide();
         #endif
@@ -740,4 +749,10 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 		break;
 	}
 }
+
+#ifdef ws_trace
+#undef ws_trace
 #endif
+
+#endif
+
