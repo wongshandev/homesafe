@@ -16,6 +16,7 @@
 #include "ucmsrvgprot.h"
 #include "UcmProt.h"
 #include "AlarmFrameworkProt.h"
+#include "app_str.h"
 
 /*
  * 必须在提示音播放完毕之后才能开启按键检测, 否则会造成按键误检测
@@ -475,8 +476,6 @@ static void dtmf_ReleaseAllActivedCall(MMI_BOOL exec)
 *******/
 static void dtmf_KeyDetectTimeoutCb(void)
 {
-    MMI_BOOL playOK;
-
     dtmf_StopKeyDetect();
 
     //达到最大次数, 直接挂断电话

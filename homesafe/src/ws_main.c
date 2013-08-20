@@ -1,8 +1,10 @@
 #if defined(__WS_HOME_SAFE__)
 #include "ws_main.h"
+#if defined(__MSGCMD_SUPPORT__)
 #include "./../inc/Msgcmd_process.h"
 #if defined(__MSGCMD_DTMF__)
 #include "./../inc/msgcmd_dtmf.h"
+#endif
 #endif
 #include "UcmProt.h"
 #include "FileMgrType.h"

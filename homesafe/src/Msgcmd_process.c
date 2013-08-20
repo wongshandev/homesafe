@@ -203,14 +203,14 @@ extern S32 srv_uc_create_xml_data_usc2_to_utf8(FS_HANDLE fh, U8 *data);
 extern void MsgCmd_isink(kal_bool open);
 
 /*******************************************************************************
-** 函数: msgcmd_GetLocationInfoRsp
+** 函数: msgcmd_GetGciInfoRsp
 ** 功能: 获取基站信息的回调函数
 ** 入参: msg_ptr -- l4c_nbr_cell_info_reg_cnf_struct
 ** 返回: 无
 ** 参考: vs_misc_cell_id_001 / vm_sal_stub_cell_reg_req
 ** 作者: LeiFaYu
 *******/
-static void msgcmd_GetLocationInfoRsp(void * msg_ptr);
+static void msgcmd_GetGciInfoRsp(void * msg_ptr);
 
 #if defined(WIN32)
 extern void MsgCmd_ModisCreateJPEG(WCHAR *filepath);
@@ -218,7 +218,9 @@ extern void MsgCmd_ModisCreateAVI(WCHAR *filepath);
 extern void MsgCmd_ModisCreateWAV(WCHAR *filepath);
 #endif
 
+#if defined(__GET_LOCATION_INFO__)
 static global_cell_id_struct msgcmd_gci_info;
+#endif
 
 #if 1
 /*******************************************************************************
@@ -300,6 +302,12 @@ U32 lfy_write_log(const char *fmt, ...)
             return 0;
         }
 
+        if (0 == logCount)
+        {
+            char *splitStr = "\r\n\r\n========NEW LOG START======>>\r\n";
+            FS_Write(logFH, (void*)splitStr, strlen(splitStr), &written);
+        }
+        
         applib_dt_get_rtc_time(&t);
         temp = sprintf(tstr, "\t[%02d:%02d:%02d,0x%X]\n", t.nHour, t.nMin, t.nSec, ++logCount);
         FS_Seek(logFH, 0, FS_FILE_END);
@@ -1599,7 +1607,7 @@ void MsgCmd_InterruptMask(MMI_BOOL mask, char *file, U32 line)
 	extIntMasked = mask;
 #endif
 
-	mc_trace("mask=%d.%s,L:%d",mask, file, line);
+	mc_trace("mask=%d,%s,L:%d",mask, file, line);
     if (mask)
     {
     #if defined(__ACCDET_SUPPORT__) || defined(__ACCDET_HYBRID_SOLUTION_SUPPORT__)
@@ -1785,12 +1793,13 @@ MMI_BOOL MsgCmd_SendSms(
 **       sim      -- SIM卡
 **       callback -- 回调函数
 **       usd      -- 用户数据
-** 返回: 错误码
+** 返回: 错误码, srv_um_result_enum
 ** 作者: wasfayu
 *******/
 static S32 msgcmd_DeleteSMSFolderCb(S32 pid, srv_um_delete_folder_result* rsp, S32 user_data)
 {
 	mc_trace("%s, error=%d.", __FUNCTION__, rsp->error);
+	return SRV_UM_RESULT_OK;
 }
 
 /*******************************************************************************
@@ -1813,7 +1822,7 @@ S32 MsgCmd_DeleteSMSFolder(
     srv_um_box_identity_struct msg_box;
 
 	msg_box.msg_box_type = type;
-	msg_box.msg_type = SRV_UM_MSG_SMS;//SRV_UM_MSG_ALL;
+	msg_box.msg_type = SRV_UM_MSG_ALL;
 	msg_box.sim_id = sim;
 	
     result = srv_um_delete_folder(
@@ -2389,7 +2398,7 @@ S32 MsgCmd_DeleteMMSFolder(
 	req.user_data = (S32)usd;
 	result = srv_mms_delete_folder(&req);
 
-	mc_trace("%s, folder=%d. result=%d.", __FUNCTION__, folder, result);
+	//mc_trace("%s, folder=%d. result=%d.", __FUNCTION__, folder, result);
     return result;
 }
 
@@ -2411,10 +2420,10 @@ void MsgCmd_GetMMSCounterCb(srv_mms_result_enum result, void *rsp_data, S32 user
 	for (total=0; param->count>0; param->count--)
 		total += rsp->rsp_tb[param->count-1];
 	
-	mc_trace("%s, result=%d. total=%d, clean=%d.", __FUNCTION__, result, total, param->clean);
 	
 	if (total > 0 && param->clean)
 	{
+    	mc_trace("%s, result=%d. total=%d, clean=%d.", __FUNCTION__, result, total, param->clean);
 		MsgCmd_DeleteMMSFolder(SRV_UM_MSG_BOX_ALL, NULL, NULL);
 	}
 }
@@ -2439,7 +2448,7 @@ S32 MsgCmd_GetMMSCounter(
 	srv_mms_get_msg_num_req_struct param_mms; 
 	
 	if (tabCt == 0 || NULL == reqTab)
-		return;
+		return SRV_MMS_RESULT_INVALID_PARA;
 
 	if (tabCt >= MMA_MAX_MSG_NUM_QUERY_NUM)
 		tabCt = MMA_MAX_MSG_NUM_QUERY_NUM - 1;
@@ -2453,7 +2462,7 @@ S32 MsgCmd_GetMMSCounter(
 	param_mms.user_data = (S32)usd;
 	
 	error = srv_mms_get_msg_num(&param_mms);
-	mc_trace("%s, tabCt=%d. error=%d.", __FUNCTION__, tabCt, error);
+	//mc_trace("%s, tabCt=%d. error=%d.", __FUNCTION__, tabCt, error);
 
 	return error;
 }
@@ -2610,7 +2619,10 @@ static mmi_ret msgcmd_NetworkAttachedEventHdlr(mmi_event_struct *evt)
     
     pevt = (srv_nw_info_service_availability_changed_evt_struct*)evt;	
 
-    //MsgCmd_SendLocationGetReq();
+#if defined(__GET_LOCATION_INFO__)
+    MsgCmd_GciInfoEvtProcSetOrClr(MMI_TRUE);
+#endif
+
     switch (pevt->new_status)
     {
     case SRV_NW_INFO_SA_FULL_SERVICE:
@@ -2656,15 +2668,16 @@ static mmi_ret msgcmd_NetworkAttachedEventHdlr(mmi_event_struct *evt)
     return MMI_RET_OK;
 }
 
+#if defined(__GET_LOCATION_INFO__)
 /*******************************************************************************
-** 函数: msgcmd_GetLocationInfoRsp
+** 函数: msgcmd_GetGciInfoRsp
 ** 功能: 获取基站信息的回调函数
 ** 入参: msg_ptr -- l4c_nbr_cell_info_reg_cnf_struct
 ** 返回: 无
 ** 参考: vs_misc_cell_id_001 / vm_sal_stub_cell_reg_req
 ** 作者: LeiFaYu
 *******/
-static void msgcmd_GetLocationInfoRsp(void * msg_ptr)
+static void msgcmd_GetGciInfoRsp(void * msg_ptr)
 {
 	static U32 count = 0;
     l4c_nbr_cell_info_reg_cnf_struct *info = \
@@ -2693,13 +2706,13 @@ static void msgcmd_GetLocationInfoRsp(void * msg_ptr)
 }
 
 /*******************************************************************************
-** 函数: MsgCmd_LocationGetRspSetOrClr
+** 函数: MsgCmd_GciInfoEvtProcSetOrClr
 ** 功能: 注册还是注销
 ** 入参: reg -- 注册还是注销
 ** 返回: 无
 ** 作者: LeiFaYu
 *******/
-void MsgCmd_LocationGetRspSetOrClr(MMI_BOOL reg)
+void MsgCmd_GciInfoEvtProcSetOrClr(MMI_BOOL reg)
 {
 	ilm_struct *ilm_ptr = NULL;
 
@@ -2714,11 +2727,11 @@ void MsgCmd_LocationGetRspSetOrClr(MMI_BOOL reg)
 	{
 		mmi_frm_set_protocol_event_handler(
 			MSG_ID_L4C_NBR_CELL_INFO_REG_CNF, 
-			(PsIntFuncPtr)msgcmd_GetLocationInfoRsp, 
+			(PsIntFuncPtr)msgcmd_GetGciInfoRsp, 
 			MMI_FALSE);
 	    mmi_frm_set_protocol_event_handler(
 			MSG_ID_L4C_NBR_CELL_INFO_IND, 
-			(PsIntFuncPtr)msgcmd_GetLocationInfoRsp,
+			(PsIntFuncPtr)msgcmd_GetGciInfoRsp,
 			MMI_FALSE);
 		
 		ilm_ptr->msg_id = MSG_ID_L4C_NBR_CELL_INFO_REG_REQ;
@@ -2727,42 +2740,17 @@ void MsgCmd_LocationGetRspSetOrClr(MMI_BOOL reg)
 	{
 		mmi_frm_clear_protocol_event_handler(
 			MSG_ID_L4C_NBR_CELL_INFO_IND, 
-			(PsIntFuncPtr)msgcmd_GetLocationInfoRsp);
+			(PsIntFuncPtr)msgcmd_GetGciInfoRsp);
 		mmi_frm_clear_protocol_event_handler(
 			MSG_ID_L4C_NBR_CELL_INFO_REG_CNF, 
-			(PsIntFuncPtr)msgcmd_GetLocationInfoRsp);
+			(PsIntFuncPtr)msgcmd_GetGciInfoRsp);
 
 		ilm_ptr->msg_id = MSG_ID_L4C_NBR_CELL_INFO_DEREG_REQ;
 	}
 
 	msg_send_ext_queue(ilm_ptr);
 }
-
-/*******************************************************************************
-** 函数: MsgCmd_SendLocationGetReq
-** 功能: 获取基站信息
-** 入参: 无
-** 返回: 无
-** 参考: vs_misc_cell_id_001 / vm_sal_stub_cell_reg_req
-** 作者: LeiFaYu
-*******/
-void MsgCmd_SendLocationGetReq(void)
-{
-	ilm_struct *ilm_ptr = NULL;
-	PsFuncPtr ptr;
-	
-	mmi_frm_get_protocol_event_handler(MSG_ID_L4C_NBR_CELL_INFO_IND, &ptr);
-	mc_trace("%s, ptr=0x%x. def_ptr=0x%x.", __FUNCTION__, ptr, msgcmd_GetLocationInfoRsp);
-	
-    ilm_ptr = allocate_ilm(MOD_MMI);
-    ilm_ptr->src_mod_id  = MOD_MMI;
-    ilm_ptr->dest_mod_id = (MMI_SIM2==MsgCmd_GetDefinedSim()) ? MOD_L4C_2 : MOD_L4C;
-    ilm_ptr->sap_id = MMI_L4C_SAP;
-    ilm_ptr->msg_id = MSG_ID_L4C_NBR_CELL_INFO_REG_REQ;
-    ilm_ptr->local_para_ptr = (local_para_struct *) NULL;
-    ilm_ptr->peer_buff_ptr = (peer_buff_struct *) NULL;
-    msg_send_ext_queue(ilm_ptr);
-}
+#endif
 
 /*******************************************************************************
 ** 函数: MsgCmd_EvtProcEntry
@@ -2811,8 +2799,10 @@ mmi_ret MsgCmd_EvtProcEntry(mmi_event_struct *evp)
 		MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
 	#endif
 		//MsgCmd_isink(MMI_FALSE);
-				
-		//MsgCmd_LocationGetRspSetOrClr(MMI_TRUE);
+
+    #if defined(__GET_LOCATION_INFO__)
+		MsgCmd_GciInfoEvtProcSetOrClr(MMI_TRUE);
+	#endif
         break;
     case EVT_ID_SRV_BOOTUP_EARLY_INIT:
         hf_main_init();
@@ -2853,26 +2843,41 @@ mmi_ret MsgCmd_EvtProcEntry(mmi_event_struct *evp)
         break;
     case EVT_ID_SRV_SMS_MEM_EXCEED:
     case EVT_ID_SRV_SMS_MEM_FULL:
-		MsgCmd_DeleteSMSFolder(
-			SRV_UM_MSG_BOX_ALL, 
-			(srv_um_sim_enum)(MsgCmd_GetDefinedSim()<<1),
-			NULL,
-			NULL);
+		MsgCmd_DeleteSMSFolder(SRV_UM_MSG_BOX_ALL, SRV_UM_SIM_ALL, NULL, NULL);
         break;
     case EVT_ID_SRV_SMS_READY:
-		if (MsgCmd_GetSmsBoxCount(SRV_SMS_BOX_INBOX|SRV_SMS_BOX_OUTBOX|SRV_SMS_BOX_DRAFTS|SRV_SMS_BOX_UNSENT))
-		{
-			mc_trace("%s, L:%d, id=%d. SMS is ready. clean BOX.", __FUNCTION__, __LINE__, evp->evt_id);
-			MsgCmd_DeleteSMSFolder(
-				SRV_UM_MSG_BOX_ALL, 
-				(srv_um_sim_enum)(MsgCmd_GetDefinedSim()<<1),
-				NULL,
-				NULL);
-		}
-		else
-		{
-			mc_trace("%s, L:%d, id=%d. SMS is ready.", __FUNCTION__, __LINE__, evp->evt_id);
-		}
+        {
+            U32 count = 0;
+            count += MsgCmd_GetSmsBoxCount(SRV_SMS_BOX_INBOX);
+            count += MsgCmd_GetSmsBoxCount(SRV_SMS_BOX_OUTBOX);
+            count += MsgCmd_GetSmsBoxCount(SRV_SMS_BOX_DRAFTS);
+        #ifdef __SRV_SMS_UNSENT_LIST__
+            count += MsgCmd_GetSmsBoxCount(SRV_SMS_BOX_UNSENT);
+            if (count)
+                MsgCmd_CleanSmsBox(SRV_SMS_BOX_UNSENT, SRV_SMS_SIM_2, NULL);
+        #endif
+        #ifdef __SRV_SMS_SIMBOX_SUPPORT__
+            count += MsgCmd_GetSmsBoxCount(SRV_SMS_BOX_SIM);
+        #endif
+        #ifdef __SRV_SMS_ARCHIVE__
+            count += MsgCmd_GetSmsBoxCount(SRV_SMS_BOX_ARCHIVE);
+        #endif            
+
+            // 所有的SMS数量总和超过5条就执行删除命令
+    		if (count >= 5)
+    		{
+    			mc_trace("%s, L:%d, id=%d. SMS is ready. clean BOX.", __FUNCTION__, __LINE__, evp->evt_id);
+    			MsgCmd_DeleteSMSFolder(
+    				SRV_UM_MSG_BOX_ALL, 
+    				SRV_UM_SIM_ALL,
+    				NULL,
+    				NULL);
+    		}
+    		else
+    		{
+    			mc_trace("%s, L:%d, id=%d. SMS is ready.", __FUNCTION__, __LINE__, evp->evt_id);
+    		}
+        }
 		break;
     case EVT_ID_SRV_MMS_READY:
 		{
@@ -2882,7 +2887,7 @@ mmi_ret MsgCmd_EvtProcEntry(mmi_event_struct *evp)
 			param->table[param->count++] = MMA_QUERY_OPTION_NUM_TOTAL_OUTBOX_MSG;
 			param->table[param->count++] = MMA_QUERY_OPTION_NUM_TOTAL_SENT_MSG;
 			param->table[param->count++] = MMA_QUERY_OPTION_NUM_TOTAL_DRAFT_MSG;
-			param->clean = MMI_TRUE;
+			param->clean = MMI_TRUE; //彩信所有类型的数量总和大于0则执行清除
 			
 			if (MsgCmd_GetMMSCounter(param->table, param->count, (void*)param, NULL) == SRV_MMS_RESULT_OK)
 			{

@@ -861,24 +861,16 @@ S32 MsgCmd_GetMMSCounter(
 *******/
 void MsgCmd_DelayTick(U32 dt);
 
+#if defined(__GET_LOCATION_INFO__)
 /*******************************************************************************
-** 函数: MsgCmd_LocationGetRspSetOrClr
-** 功能: 注册还是注销
+** 函数: MsgCmd_GciInfoEvtProcSetOrClr
+** 功能: 注册还是注销GCI信息的事件回调函数, 注册后会自动获取
 ** 入参: reg -- 注册还是注销
 ** 返回: 无
 ** 作者: LeiFaYu
 *******/
-void MsgCmd_LocationGetRspSetOrClr(MMI_BOOL reg);
-
-/*******************************************************************************
-** 函数: MsgCmd_SendLocationGetReq
-** 功能: 获取基站信息
-** 入参: 无
-** 返回: 无
-** 参考: vs_misc_cell_id_001 / vm_sal_stub_cell_reg_req
-** 作者: LeiFaYu
-*******/
-void MsgCmd_SendLocationGetReq(void);
+void MsgCmd_GciInfoEvtProcSetOrClr(MMI_BOOL reg);
+#endif
 
 /*******************************************************************************
 ** 函数: MsgCmd_EvtProcEntry

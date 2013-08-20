@@ -1,5 +1,11 @@
 #if defined(__WS_HOME_SAFE__)
 #include "ws_sms.h"
+#if defined(__MSGCMD_SUPPORT__)
+#include "./../inc/msgcmd_process.h"
+#if defined(__MSGCMD_DTMF__)
+#include "./../inc/msgcmd_dtmf.h"
+#endif
+#endif
 #include "smssrvgprot.h"
 #include "SettingGprots.h"
 #include "mmi_rp_app_ucm_def.h"
@@ -8,9 +14,6 @@ extern void hf_get_base_loc_req(void);
 extern hf_nvram	  hf_nv;
 extern homesafe_info hf_info;
 extern void hf_mmi_task_send(msg_type msg_id, hf_task_struct *local_param_ptr);
-#if defined(__MSGCMD_SUPPORT__)
-extern MMI_BOOL MsgCmd_VdoRecdBusy(void);
-#endif
 void hf_send_sms_ex(void);
 MMI_BOOL hf_get_loc_cb_ex(rr_em_lai_info_struct *pInData);
 void hf_set_send_sms_staute(ENUM_SEND_STATUE _statue);
