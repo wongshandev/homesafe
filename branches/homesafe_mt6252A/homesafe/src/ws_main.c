@@ -249,10 +249,10 @@ void hf_call_out_timer_out(void)
 #else
 				ws_trace("超时了，可以录像了");
 				MsgCmd_VdoRecdStart(
-				MMI_TRUE, 
-				5*60,
-				MsgCmd_GetVdoRecdArgs()->save_gap,
-				NULL);
+					MMI_FALSE, 
+					MsgCmd_GetVdoRecdArgs()->save_gap,
+					MsgCmd_GetVdoRecdArgs()->save_gap,
+					NULL);
 #endif
 			}
 		}
@@ -290,10 +290,10 @@ void hf_hisr_call_result(BOOL result)
 		{
 			hf_set_light_for_rec();
 			MsgCmd_VdoRecdStart(
-			MMI_TRUE, 
-			5*60,
-			MsgCmd_GetVdoRecdArgs()->save_gap,
-			NULL);
+				MMI_FALSE, 
+				MsgCmd_GetVdoRecdArgs()->save_gap,
+				MsgCmd_GetVdoRecdArgs()->save_gap,
+				NULL);
 		}
 	}
 #endif
@@ -480,40 +480,73 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 			//录像
 			U32 time  = TASK_ID;
 			ws_trace("task vdo :%d",time);
+			
         #if defined(__MSGCMD_SUPPORT__)
-              if((time == HF_HISR_IN)||(time == HF_HISR_OUT))
-		{
-			if(hf_is_vaild_service()&&(FALSE==hf_admin_is_null()))
+			if((time == HF_HISR_IN)||(time == HF_HISR_OUT))
 			{
-				int v;
-				for(v=0;v<MAX_ADMIN_NUMBER;v++)
+				//高电平, 对于录像版本不做处理, 因此忽略掉
+				if (time == HF_HISR_OUT)
+					break;
+				
+				if(hf_is_vaild_service()&&(FALSE==hf_admin_is_null()))
 				{
-					if(strlen(hf_nv.admin_number[v]) > MIN_PHONENUMBER_LENTH)
+					int v;
+					for(v=0;v<MAX_ADMIN_NUMBER;v++)
 					{
-						if(hf_info.is_call_out == FALSE)
+						if(strlen(hf_nv.admin_number[v]) > MIN_PHONENUMBER_LENTH)
 						{
-							hf_info.is_call_out = TRUE;
-							hf_make_call(hf_nv.admin_number[v],hf_hisr_call_result);
-							break;
-						}
-						else
-						{
-							ws_trace("定时器启动");
-							StartTimer(HF_HISR_VDO_STOP_TIMER_ID, 1000*60*5, hf_vdo_rec_stop);
+							if(hf_info.is_call_out == FALSE)
+							{
+								hf_info.is_call_out = TRUE;
+								hf_make_call(hf_nv.admin_number[v],hf_hisr_call_result);
+								break;
+							}
+							else
+							{
+								ws_trace("定时器启动");
+								StartTimer(HF_HISR_VDO_STOP_TIMER_ID, 1000*60*5, hf_vdo_rec_stop);
+							}
 						}
 					}
+				}
+				else
+				{
+					if (MsgCmd_VdoRecdBusy())
+					{
+						//追加录像时间，而不是无限制录像
+						ws_trace("追加录像时间");
+						MsgCmd_VdoRecdSetAppend();
+	                    //gCmd_VdoRecdGetContext()->forever = MMI_TRUE;
+					}
+					else
+					{
+						ws_trace("%s,L:%d, time=%d.", __FUNCTION__, __LINE__, time);
+						hf_set_light_for_rec();
+						MsgCmd_VdoRecdStart(
+						    MMI_FALSE, 
+						    MsgCmd_GetVdoRecdArgs()->save_gap,
+						    MsgCmd_GetVdoRecdArgs()->save_gap,
+						    NULL);
+					}
+					ws_trace("定时器启动5分钟后停止");
+					StartTimer(HF_HISR_VDO_STOP_TIMER_ID, 1000*60*5, hf_vdo_rec_stop);
 				}
 			}
 			else
 			{
 				if (MsgCmd_VdoRecdBusy())
 				{
-					ws_trace("设置录像参数，继续录音");
-		                    MsgCmd_VdoRecdGetContext()->forever = MMI_TRUE;
+					//replay system busy
+					if (time)
+	                {
+	                    MsgCmd_VdoRecdGetContext()->forever = MMI_FALSE;
+	                    MsgCmd_VdoRecdGetContext()->time += time*60;
+	                }
+                	else 
+                    	MsgCmd_VdoRecdGetContext()->forever = MMI_TRUE;
 				}
 				else
 				{
-					ws_trace("录像开始");
 					hf_set_light_for_rec();
 					MsgCmd_VdoRecdStart(
 					    time ? MMI_FALSE : MMI_TRUE, 
@@ -521,33 +554,7 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 					    MsgCmd_GetVdoRecdArgs()->save_gap,
 					    NULL);
 				}
-				ws_trace("定时器启动5分钟后停止");
-				StartTimer(HF_HISR_VDO_STOP_TIMER_ID, 1000*60*5, hf_vdo_rec_stop);
 			}
-		}
-		else
-		{
-			if (MsgCmd_VdoRecdBusy())
-			{
-				//replay system busy
-				if (time)
-		                {
-		                    MsgCmd_VdoRecdGetContext()->forever = MMI_FALSE;
-		                    MsgCmd_VdoRecdGetContext()->time += time*60;
-		                }
-	                	else 
-	                    	MsgCmd_VdoRecdGetContext()->forever = MMI_TRUE;
-			}
-			else
-			{
-				hf_set_light_for_rec();
-				MsgCmd_VdoRecdStart(
-				    time ? MMI_FALSE : MMI_TRUE, 
-				    time*60, 
-				    MsgCmd_GetVdoRecdArgs()->save_gap,
-				    NULL);
-			}
-		}
         #endif
 		}break;
 		case HF_MSG_ID_ADO:

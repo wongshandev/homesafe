@@ -2,7 +2,8 @@
 SRC_PATH = homesafe\src
 
 # Define include path lists to INC_DIR
-INC_DIR = homesafe\inc
+INC_DIR = homesafe\inc \
+          verno
 
 #define source file
 SRC_LIST = homesafe\src\ws_sms.c \
