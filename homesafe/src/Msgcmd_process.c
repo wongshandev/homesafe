@@ -63,6 +63,7 @@
 #include "Eint.h"
 #include "lcd_sw_inc.h"
 #include "usbsrvgprot.h"
+#include "verno.h"
 #if defined(__ACCDET_SUPPORT__) || defined(__ACCDET_HYBRID_SOLUTION_SUPPORT__)
 #include "drv_hisr.h"
 #include "accdet_hw.h"
@@ -308,8 +309,9 @@ U32 lfy_write_log(const char *fmt, ...)
 
         if (0 == logCount)
         {
-            char *splitStr = "\r\n========NEW LOG START======>>\r\n";
+            #define splitStr "\r\n==NEW LOG==>>"##BUILD_DATE_TIME_STR##"<<==\r\n"
             FS_Write(logFH, (void*)splitStr, strlen(splitStr), &written);
+			#undef splitStr
         }
         
         applib_dt_get_rtc_time(&t);
@@ -327,7 +329,7 @@ U32 lfy_write_log(const char *fmt, ...)
 #ifdef mc_trace
 #undef mc_trace
 #endif
-#define mc_trace(fmt, ...) do{lfy_write_log(fmt, ##__VA_ARGS__); kal_prompt_trace(0, fmt, ##__VA_ARGS__);}while(0)
+#define mc_trace(fmt, ...) do{lfy_write_log(fmt, ##__VA_ARGS__); kal_prompt_trace(MOD_NIL, fmt, ##__VA_ARGS__);}while(0)
 
 #else
 U32 lfy_write_log(const char *fmt, ...)
@@ -1111,44 +1113,6 @@ void MsgCmd_FactoryExt(U16 delayS)
 }
 
 /*******************************************************************************
-** 函数: MsgCmd_IntRecheckTimerCb
-** 功能: 外部中断重新检测的定时器操作函数的回调函数
-** 入参: 无
-** 返回: 无
-** 作者: wasfayu
-*******/
-static void msgcmd_IntRecheckTimerCb(void)
-{
-    mc_trace("%s", __FUNCTION__);
-#if defined(__VDORECD_VERSION_FEATRUE__)
-	if (MsgCmd_VdoRecdBusy() && 
-		MsgCmd_IsSimUsable(MsgCmd_GetDefinedSim()) && 
-		!hf_admin_is_null())
-	{
-	    MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
-	}
-#endif
-}
-
-/*******************************************************************************
-** 函数: msgcmd_IntRecheckTimer
-** 功能: 外部中断重新检测的定时器操作函数
-** 入参: open  -- 打开或者关闭定时器
-**       dlyS  -- 打开定时器时传入的定时时间, 毫秒为单位, 如果为0则默认为3秒钟
-** 返回: 无
-** 作者: wasfayu
-*******/
-static void msgcmd_IntRecheckTimer(MMI_BOOL open, U16 dlyMS)
-{
-    dlyMS = dlyMS ? dlyMS : (MsgCmd_GetAdoRecdArgs()->int_check * 1000);
-    
-    if (open)
-        StartTimer(MSGCMD_TIMER_INT_RECHECK, dlyMS, msgcmd_IntRecheckTimerCb);
-    else
-        StopTimer(MSGCMD_TIMER_INT_RECHECK);
-}
-
-/*******************************************************************************
 ** 函数: MsgCmd_DeleteFileFront
 ** 功能: 删除文件的前部
 ** 入参: fname   -- 文件名, UCS格式, 如 L"E:\\videos\\test.avi"
@@ -1520,10 +1484,6 @@ MMI_BOOL MsgCmd_IsSimUsable(mmi_sim_enum sim)
 #if 1
 extern const unsigned char AUX_EINT_NO;
 
-#if defined(__VDORECD_VERSION_FEATRUE__)
-static MMI_BOOL extIntMasked;
-#endif
-
 #define MC_EINT_NO         AUX_EINT_NO
 #define MSGCMD_INTERRUPT_DIFF_LEVEL  0 //低电平出发外部中断
 
@@ -1539,6 +1499,15 @@ static void msgcmd_InterruptRespond(void *p)
 	MsgCmdExtIntReq *rsp = (MsgCmdExtIntReq*)p;
 
 	mc_trace("%s, level=%d.", __FUNCTION__, rsp->level);
+
+#if defined(__VDORECD_VERSION_FEATRUE__)
+	if (!rsp->level)
+	{
+		//低电平产生中断, 然后屏蔽之
+		MsgCmd_InterruptMask(MMI_TRUE, __FILE__, __LINE__);
+	}
+#endif
+
 	//MsgCmd_isink(rsp->level);
 	//发消息到hf_mmi_task_process() 统一处理。响应的消息ID还是HF_MSG_ID_ADO或者HF_MSG_ID_VDO
 	{
@@ -1612,13 +1581,8 @@ void MsgCmd_TestInterrupt(int level)
 *******/
 void MsgCmd_InterruptMask(MMI_BOOL mask, char *file, U32 line)
 {
-#if defined(__VDORECD_VERSION_FEATRUE__)
-	extIntMasked = mask;
-#endif
-
-	mc_trace("mask=%d,%s,L:%d",mask, file, line);
     if (mask)
-    {
+    { 
     #if defined(__ACCDET_SUPPORT__) || defined(__ACCDET_HYBRID_SOLUTION_SUPPORT__)
         IRQMask(IRQ_ACCDET_CODE);
     #else
@@ -1628,9 +1592,15 @@ void MsgCmd_InterruptMask(MMI_BOOL mask, char *file, U32 line)
         mmi_frm_clear_protocol_event_handler(
     		MSG_ID_MC_EXT_INTERRUPT,
     		(PsIntFuncPtr)msgcmd_InterruptRespond);
+	
+		mc_trace("interrupt masked by %s,L:%d",file, line);
     }
     else
     {
+    	// T卡不存在或有SIM卡但是无超级号码, 禁止开启中断
+    	if (!MsgCmd_IsSdCardExist() || hf_admin_is_null())
+			return;
+
         mmi_frm_set_protocol_event_handler(
     		MSG_ID_MC_EXT_INTERRUPT,
     		(PsIntFuncPtr)msgcmd_InterruptRespond,
@@ -1642,6 +1612,7 @@ void MsgCmd_InterruptMask(MMI_BOOL mask, char *file, U32 line)
     #else
         EINT_UnMask(MC_EINT_NO);
     #endif
+		mc_trace("interrupt opened by %s,L:%d",file, line);
     }
 }
 
@@ -1656,7 +1627,11 @@ void MsgCmd_InterruptMask(MMI_BOOL mask, char *file, U32 line)
 *******/
 MMI_BOOL MsgCmd_GetExtIntMaskFlag(void)
 {
-	return extIntMasked;
+	MMI_BOOL masked;
+	//masked: 0x7F, opened: 0x7E.
+	masked = (MMI_BOOL)(*EINT_MASK & (0x0001 << (MC_EINT_NO)));
+	mc_trace("%s, masked=%d.", __FUNCTION__, masked);
+	return masked;
 }
 #endif
 
@@ -2800,8 +2775,7 @@ mmi_ret MsgCmd_EvtProcEntry(mmi_event_struct *evp)
 		   (1) 无T卡, 不响应中断, 不执行录音/录像/拍照
 		   (2) 无SIM卡, 不响应中断, 但是响应录音/录像/拍照
 		   (3) 有SIM卡, 未绑定号码, 不响应中断, 但是响应录音/录像/拍照 */
-		if (!MsgCmd_IsSdCardExist() ||
-			(MsgCmd_IsSimUsable(MsgCmd_GetDefinedSim()) && hf_admin_is_null()))
+		if (MsgCmd_IsSimUsable(MsgCmd_GetDefinedSim() && hf_admin_is_null()))
 			MsgCmd_InterruptMask(MMI_TRUE, __FILE__, __LINE__);
 		else
 			MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
@@ -3209,7 +3183,8 @@ MCErrCode MsgCmd_AdoRecdStart(
     char    *replay_number)
 {
     S32 drive;
-    
+    MCErrCode error = MC_ERR_NONE;
+	
     mc_trace(
         "%s, ENTRY. forever=%d, time=%d, replay=%s.",
         __FUNCTION__, 
@@ -3217,72 +3192,94 @@ MCErrCode MsgCmd_AdoRecdStart(
         time_in_sec, 
         replay_number?replay_number:"NULL");
 
-    if (arm)
-        return MC_ERR_ADORECD_BUSY;
+	do {
+	    if (arm)
+	    {
+	    	error = MC_ERR_ADORECD_BUSY;
+			break;
+    	}
 
-    //T卡不存在就返回
-    if (!MsgCmd_GetTFcardDrive(NULL))
-        return MC_ERR_NO_TCARD;
+	    //T卡不存在就返回
+	    if (!MsgCmd_GetTFcardDrive(NULL))
+	    {    
+	    	error = MC_ERR_NO_TCARD;
+			break;
+    	}
 
-    if (!forever && time_in_sec <= MsgCmd_GetAdoRecdArgs()->ignore_time)
-        return MC_ERR_IGNORE_TIME;
+	    if (!forever && time_in_sec <= MsgCmd_GetAdoRecdArgs()->ignore_time)
+	    {
+	    	error = MC_ERR_IGNORE_TIME;
+			break;
+    	}
 
 
-    //有电话在忙
-    if (MsgCmd_GetCallCount() > 0)
-        return MC_ERR_CALL_BUSY;
+	    //有电话在忙
+	    if (MsgCmd_GetCallCount() > 0)
+	    {
+	    	error = MC_ERR_CALL_BUSY;
+			break;
+    	}
 
-    //磁盘未获取到
-    if ((drive = MsgCmd_GetUsableDrive()) <= 0)
-        return MC_ERR_DRIVE_ERROR;
+	    //磁盘未获取到
+	    if ((drive = MsgCmd_GetUsableDrive()) <= 0)
+	    {
+	    	error = MC_ERR_DRIVE_ERROR;
+			break;
+    	}
 
-    //保证路径存在
-    if (!MsgCmd_CreatePath(drive, MSGCMD_AUDIOS_FOLDER_NAME))
-        return MC_ERR_PATH_NOT_EXIST;
+	    //保证路径存在
+	    if (!MsgCmd_CreatePath(drive, MSGCMD_AUDIOS_FOLDER_NAME))
+	    {
+	    	error = MC_ERR_PATH_NOT_EXIST;
+			break;
+    	}
 
-    //获取的盘符是否正确挂载--就是是否存在的一个意思
-    if (!MsgCmd_CheckValidDrive(drive))
-        return MC_ERR_DRIVE_ERROR;
+	    //获取的盘符是否正确挂载--就是是否存在的一个意思
+	    if (!MsgCmd_CheckValidDrive(drive))
+	    {
+	    	error = MC_ERR_DRIVE_ERROR;
+			break;
+    	}
+		
+	    //正在录像
+	    if (MsgCmd_VdoRecdBusy())
+	    {
+	    	error = MC_ERR_VDORECD_BUSY;
+			break;
+    	}
+	    
+	    arm = (AdoRecdMngr*)MsgCmd_Malloc(sizeof(AdoRecdMngr), 0);
+	    arm->saveGap = auto_save_gap ? auto_save_gap : MsgCmd_GetAdoRecdArgs()->save_gap;
+	    arm->time    = time_in_sec ? time_in_sec : arm->saveGap;
+	    arm->forever = forever;
+	    if (!arm->forever && arm->time < arm->saveGap)
+	        arm->saveGap = arm->time;
+	    
+	    if (replay_number && replay_number[0] != '\0')
+	        strcpy(arm->number, replay_number);
+	    else
+	        arm->number[0] = '\0';
 
-    //正在录像
-    if (MsgCmd_VdoRecdBusy())
-        return MC_ERR_VDORECD_BUSY;
-    
-    //MsgCmd_isink(MMI_TRUE);
-    arm = (AdoRecdMngr*)MsgCmd_Malloc(sizeof(AdoRecdMngr), 0);
-    arm->saveGap = auto_save_gap ? auto_save_gap : MsgCmd_GetAdoRecdArgs()->save_gap;
-    arm->time    = time_in_sec ? time_in_sec : arm->saveGap;
-    arm->forever = forever;
-    if (!arm->forever && arm->time < arm->saveGap)
-        arm->saveGap = arm->time;
-    
-    if (replay_number && replay_number[0] != '\0')
-        strcpy(arm->number, replay_number);
-    else
-        arm->number[0] = '\0';
-
-    
-    MsgCmd_CombineFilePath(
-        arm->filepath, 
-        MSGCMD_FILE_PATH_LENGTH*sizeof(WCHAR),
-        MSGCMD_AUDIOS_FOLDER_NAME,
-        L".wav");
-    
-    if (!msgcmd_AdoRecdDoing(arm->filepath, arm->saveGap))
-    {
-        MsgCmd_Mfree(arm);
-        arm = NULL;
-        //MsgCmd_isink(MMI_FALSE);
-        return MC_ERR_DOING_FAILED;
-    }
-    else
-    {
-    	mc_trace("%s, start OK.", __FUNCTION__);
+	    
+	    MsgCmd_CombineFilePath(
+	        arm->filepath, 
+	        MSGCMD_FILE_PATH_LENGTH*sizeof(WCHAR),
+	        MSGCMD_AUDIOS_FOLDER_NAME,
+	        L".wav");
+	    
+	    if (!msgcmd_AdoRecdDoing(arm->filepath, arm->saveGap))
+	    {
+	        MsgCmd_Mfree(arm);
+	        arm = NULL;
+	        error = MC_ERR_DOING_FAILED;
+			break;
+	    }
+		
         arm->status = ADO_STATUS_RECODING;
-        //msgcmd_IntRecheckTimer(MMI_TRUE, MsgCmd_GetAdoRecdArgs()->int_check*1000);
-    }
+	}while(0);
 
-    return MC_ERR_NONE;
+	mc_trace("%s, EXIT, error=%d.", __FUNCTION__, error);
+    return error;
 }
 #endif
 
@@ -3510,60 +3507,77 @@ MCErrCode MsgCmd_CaptureEntry(char *replay_number, char *user_name)
 {
 	const U16 pictureW = 640;
 	const U16 pictureH = 480;
-	MMI_BOOL  result = MMI_FALSE;
     S32       drive;
+	MCErrCode error = MC_ERR_NONE;
 	
-    mc_trace("%s, replay=%s.user=%s.",
+    mc_trace("%s, ENTRY. replay=%s.user=%s.",
         __FUNCTION__,
         replay_number?replay_number:"NULL",
         user_name?user_name:"NULL");
 
-    //T卡不存在就返回
-    if (!MsgCmd_GetTFcardDrive(NULL))
-        return MC_ERR_NO_TCARD;
+	do {
+	    //T卡不存在就返回
+	    if (!MsgCmd_GetTFcardDrive(NULL))
+	    {
+	    	error = MC_ERR_NO_TCARD;
+			break;
+    	}
 
-    if ((drive = MsgCmd_GetUsableDrive()) <= 0)
-        return MC_ERR_DRIVE_ERROR;
-    
-    //获取的盘符是否正确挂载--就是是否存在的一个意思
-    if (!MsgCmd_CheckValidDrive(drive))
-        return MC_ERR_DRIVE_ERROR;
+	    if ((drive = MsgCmd_GetUsableDrive()) <= 0)
+	    {
+	    	error = MC_ERR_DRIVE_ERROR;
+			break;
+    	}
+	    
+	    //获取的盘符是否正确挂载--就是是否存在的一个意思
+	    if (!MsgCmd_CheckValidDrive(drive))
+	    {
+	    	error = MC_ERR_DRIVE_ERROR;
+			break;
+    	}
 
-    //保证路径存在
-    if (!MsgCmd_CreatePath(drive, MSGCMD_VIDEOS_FOLDER_NAME))
-        return MC_ERR_PATH_NOT_EXIST;
-    
-	if (msgcmd_CapturePreview(pictureW, pictureH))
-	{
-	    MsgCmdMMSReq *req = (MsgCmdMMSReq*)MsgCmd_ConstructPara(sizeof(MsgCmdMMSReq));
-        
-		req->picname = MsgCmd_CombineFilePath(
-                        req->picpath, 
-                        MSGCMD_FILE_PATH_LENGTH*sizeof(WCHAR), 
-                        MSGCMD_PHOTOS_FOLDER_NAME, 
-                        L".jpg");
-		
-		//MsgCmd_DelayTick(MSGCMD_CAPTURE_DLY_TICK);
-		result = msgcmd_CaptureDoing((S8 *)req->picpath);
-        
-		if (result && NULL != replay_number && replay_number[0] != '\0')
+	    //保证路径存在
+	    if (!MsgCmd_CreatePath(drive, MSGCMD_VIDEOS_FOLDER_NAME))
+	    {
+	    	error = MC_ERR_PATH_NOT_EXIST;
+			break;
+    	}
+	    
+		if (msgcmd_CapturePreview(pictureW, pictureH))
 		{
-			//send MMS
-            req->sim = (mma_sim_id_enum)MsgCmd_GetDefinedSim();
-		    strcpy(req->sendto, replay_number);            
-            kal_wsprintf(req->subject, "%w", req->picname);
-            MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_SEND_MMS_REQ, (void *)req);
-		}
-        else
-        {
-            MsgCmd_DestructPara(req);
-        }
-	}
+			MMI_BOOL  result = MMI_FALSE;
 
-	//MsgCmd_DelayTick(MSGCMD_CAPTURE_DLY_TICK);
-	msgcmd_CaptureFinish();
-	
-    return result;
+		    MsgCmdMMSReq *req = (MsgCmdMMSReq*)MsgCmd_ConstructPara(sizeof(MsgCmdMMSReq));
+	        
+			req->picname = MsgCmd_CombineFilePath(
+	                        req->picpath, 
+	                        MSGCMD_FILE_PATH_LENGTH*sizeof(WCHAR), 
+	                        MSGCMD_PHOTOS_FOLDER_NAME, 
+	                        L".jpg");
+			
+			result = msgcmd_CaptureDoing((S8 *)req->picpath);
+	        error = result ? MC_ERR_NONE : MC_ERR_DOING_FAILED;
+			
+			if (result && NULL != replay_number && replay_number[0] != '\0')
+			{
+				//send MMS
+	            req->sim = (mma_sim_id_enum)MsgCmd_GetDefinedSim();
+			    strcpy(req->sendto, replay_number);            
+	            kal_wsprintf(req->subject, "%w", req->picname);
+	            MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_SEND_MMS_REQ, (void *)req);
+			}
+	        else
+	        {
+	            MsgCmd_DestructPara(req);
+	        }
+		}
+
+		msgcmd_CaptureFinish();
+	}while(0);
+
+	mc_trace("%s, EXIT. error=%s.", __FUNCTION__, error);
+        
+    return error;
 }
 #endif
 
@@ -3738,13 +3752,12 @@ static void msgcmd_VdoRecdSaveCb(MDI_RESULT result)
         
         if (!vrm->forever)
         {
-            vrm->time -= vrm->saveGap;
             
-            //如果有追加, 则增加一段时间, 时长为默认的保存间隔时长
-            if (vrm->append)
+            //如果没有追加标志, 则减去一段savegap的时间
+            if (!vrm->append)
             {
-				mc_trace("%s, time=%dS, add time(%dS).", __FUNCTION__, vrm->time, MsgCmd_GetVdoRecdArgs()->save_gap);
-                vrm->time  += MsgCmd_GetVdoRecdArgs()->save_gap;
+				mc_trace("%s, time=%dS, gap=%d.", __FUNCTION__, vrm->time, vrm->saveGap);
+				vrm->time -= vrm->saveGap;
             }
 
             //剩余时间小于xx秒则忽略掉
@@ -4107,10 +4120,20 @@ static void msgcmd_VdoRecdTimerCyclic(void)
 #else
     vrm->timeCount = (U32)(time/1000);
 #endif
+
 {
 	//static U32 ct = 0;
 	//MsgCmd_isink(++ct%2);
 }
+
+#if defined(__VDORECD_VERSION_FEATRUE__)
+	//录像间隔的第4/5的时间点, 开启中断检测
+	if (vrm->timeCount == ((vrm->saveGap<<2)/5)/* && MsgCmd_GetExtIntMaskFlag()*/)
+	{
+		MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
+	}
+#endif
+
     //mc_trace("%s, timeCount=%dS. saveGap=%dS.", __FUNCTION__, vrm->timeCount, vrm->saveGap);
     if (vrm->timeCount >= vrm->saveGap)
     {
@@ -4292,6 +4315,7 @@ MCErrCode MsgCmd_VdoRecdStart(
     char    *replay_number)
 {
     S32 drive;
+	MCErrCode error = MC_ERR_NONE;
     
     mc_trace(
         "%s, ENTRY. forever=%d, time=%d, replay=%s.",
@@ -4300,107 +4324,120 @@ MCErrCode MsgCmd_VdoRecdStart(
         time_in_sec, 
         replay_number?replay_number:"NULL");
 
-#if defined(__VDORECD_VERSION_FEATRUE__)
-	{
-		U32 maskTime;
-	
-		if (MsgCmd_GetVdoRecdArgs()->save_gap > 60*2)
-			maskTime = MsgCmd_GetVdoRecdArgs()->save_gap - 60;
-		else
-			maskTime = MsgCmd_GetVdoRecdArgs()->save_gap / 2;
+	do {
+	    if (MsgCmd_VdoRecdBusy())
+	    {
+	    	error = MC_ERR_VDORECD_BUSY;
+			break;
+    	}
+
+		if (MsgCmd_AdoRecdBusy())
+		{
+			error = MC_ERR_ADORECD_BUSY;
+			break;
+    	}
 		
-		//屏蔽中断一段时间后再开启
-		MsgCmd_InterruptMask(MMI_TRUE, __FILE__, __LINE__);
-		msgcmd_IntRecheckTimer(MMI_TRUE, maskTime*1000);
-	}
-#endif
+	    if (!forever && time_in_sec <= MsgCmd_GetVdoRecdArgs()->ignore_time)
+	    {
+	    	error = MC_ERR_IGNORE_TIME;
+			break;
+    	}
+	    
+	    //T卡不存在就返回
+	    if (!MsgCmd_GetTFcardDrive(NULL))
+	    {
+	    	error = MC_ERR_NO_TCARD;
+			break;
+    	}
+	    
+	    //有电话在忙
+	    if (MsgCmd_GetCallCount() > 0)
+	    {
+	    	error = MC_ERR_CALL_BUSY;
+			break;
+    	}
 
-    if (MsgCmd_VdoRecdBusy())
-        return MC_ERR_VDORECD_BUSY;
+	    //磁盘未获取到
+	    if ((drive = MsgCmd_GetUsableDrive()) <= 0)
+	    {
+	    	error = MC_ERR_DRIVE_ERROR;
+			break;
+    	}
 
-	if (MsgCmd_AdoRecdBusy())
-		return MC_ERR_ADORECD_BUSY;
-	
-    if (!forever && time_in_sec <= MsgCmd_GetVdoRecdArgs()->ignore_time)
-        return MC_ERR_IGNORE_TIME;
-    
-    //T卡不存在就返回
-    if (!MsgCmd_GetTFcardDrive(NULL))
-        return MC_ERR_NO_TCARD;
-    
-    //有电话在忙
-    if (MsgCmd_GetCallCount() > 0)
-        return MC_ERR_CALL_BUSY;
+	    //保证路径存在
+	    if (!MsgCmd_CreatePath(drive, MSGCMD_VIDEOS_FOLDER_NAME))
+	    {
+	    	error = MC_ERR_PATH_NOT_EXIST;
+			break;
+    	}
+	    
+	    //获取的盘符是否正确挂载--就是是否存在的一个意思
+	    if (!MsgCmd_CheckValidDrive(drive))
+	    {
+	    	error = MC_ERR_DRIVE_ERROR;
+			break;
+    	}
+	    else
+	    {
+	        WCHAR buffer[MSGCMD_FILE_PATH_LENGTH+1];
 
-    //磁盘未获取到
-    if ((drive = MsgCmd_GetUsableDrive()) <= 0)
-        return MC_ERR_DRIVE_ERROR;
+	        msgcmd_VdoRecdGetSavePath(
+	            buffer, 
+	            MSGCMD_FILE_PATH_LENGTH*sizeof(WCHAR));
+	        
+	        //是否有未保存过的视频
+	        if (mdi_video_rec_has_unsaved_file((S8*)buffer))
+	        {
+	            //保存之?删除之?
+	            mc_trace("%s, L:%d, has unsaved video, delete.", __FUNCTION__, __LINE__);
+	            msgcmd_VdoRecdDelete(buffer);
+	        }
+	    }
+	    
+	    vrm = (VdoRecdMngr*)MsgCmd_Malloc(sizeof(VdoRecdMngr), 0);
+	    vrm->forever = forever;
+	    vrm->saveGap = auto_save_gap ? auto_save_gap : MsgCmd_GetVdoRecdArgs()->save_gap;
+	    vrm->time    = time_in_sec ? time_in_sec : vrm->saveGap;
+	    
+	    if (!vrm->forever && vrm->time < vrm->saveGap)
+	        vrm->saveGap = vrm->time;
+	    
+	    if (replay_number && replay_number[0] != '\0')
+	        strcpy(vrm->number, replay_number);
+	    else
+	        vrm->number[0] = '\0';
 
-    //保证路径存在
-    if (!MsgCmd_CreatePath(drive, MSGCMD_VIDEOS_FOLDER_NAME))
-        return MC_ERR_PATH_NOT_EXIST;
-    
-    //获取的盘符是否正确挂载--就是是否存在的一个意思
-    if (!MsgCmd_CheckValidDrive(drive))
-        return MC_ERR_DRIVE_ERROR;
-    else
-    {
-        WCHAR buffer[MSGCMD_FILE_PATH_LENGTH+1];
+	    msgcmd_VdoRecdGetFilePath(vrm->filepath, (MSGCMD_FILE_PATH_LENGTH+1)*sizeof(WCHAR));
+	    msgcmd_VdoRecdLayerMngr(MMI_TRUE, &vrm->dispLayer);
+	    
+	    if (msgcmd_VdoRecdPowerMngr(MMI_TRUE) &&
+	        msgcmd_VdoRecdPreview(MMI_TRUE, vrm->dispLayer))
+	    {
+	        vrm->status = VDO_STATUS_PREVIEW;
+	        
+	        kal_sleep_task(20);
+	        if (msgcmd_VdoRecdDoing(vrm->filepath))
+	        {
+	            vrm->status = VDO_STATUS_RECODING;
+	        }
+	        else
+	        {
+	            MsgCmd_VdoRecdStop(vrm->number);
+				error = MC_ERR_DOING_FAILED;
+	        }
+	    }
+	    else
+	    {
+	        msgcmd_VdoRecdPowerMngr(MMI_FALSE);
+	        msgcmd_VdoRecdLayerMngr(MMI_FALSE, &vrm->dispLayer);
+	        MsgCmd_Mfree(vrm);
+	        vrm = NULL;
+			error = MC_ERR_PREVIEW_FAILED;
+	    }
+	}while(0);
 
-        msgcmd_VdoRecdGetSavePath(
-            buffer, 
-            MSGCMD_FILE_PATH_LENGTH*sizeof(WCHAR));
-        
-        //是否有未保存过的视频
-        if (mdi_video_rec_has_unsaved_file((S8*)buffer))
-        {
-            //保存之?删除之?
-            mc_trace("%s, L:%d, has unsaved video, delete.", __FUNCTION__, __LINE__);
-            msgcmd_VdoRecdDelete(buffer);
-        }
-    }
-    
-    vrm = (VdoRecdMngr*)MsgCmd_Malloc(sizeof(VdoRecdMngr), 0);
-    vrm->forever = forever;
-    vrm->saveGap = auto_save_gap ? auto_save_gap : MsgCmd_GetVdoRecdArgs()->save_gap;
-    vrm->time    = time_in_sec ? time_in_sec : vrm->saveGap;
-    
-    if (!vrm->forever && vrm->time < vrm->saveGap)
-        vrm->saveGap = vrm->time;
-    
-    if (replay_number && replay_number[0] != '\0')
-        strcpy(vrm->number, replay_number);
-    else
-        vrm->number[0] = '\0';
-
-    msgcmd_VdoRecdGetFilePath(vrm->filepath, (MSGCMD_FILE_PATH_LENGTH+1)*sizeof(WCHAR));
-    msgcmd_VdoRecdLayerMngr(MMI_TRUE, &vrm->dispLayer);
-    
-    if (msgcmd_VdoRecdPowerMngr(MMI_TRUE) &&
-        msgcmd_VdoRecdPreview(MMI_TRUE, vrm->dispLayer))
-    {
-        vrm->status = VDO_STATUS_PREVIEW;
-        
-        kal_sleep_task(20);
-        if (msgcmd_VdoRecdDoing(vrm->filepath))
-        {
-        	mc_trace("%s, start OK.", __FUNCTION__);
-            vrm->status = VDO_STATUS_RECODING;
-        }
-        else
-        {
-            MsgCmd_VdoRecdStop(vrm->number);
-        }
-    }
-    else
-    {
-        msgcmd_VdoRecdPowerMngr(MMI_FALSE);
-        msgcmd_VdoRecdLayerMngr(MMI_FALSE, &vrm->dispLayer);
-        MsgCmd_Mfree(vrm);
-        vrm = NULL;
-    }
-    
-    return (vrm != NULL ? MC_ERR_NONE : MC_ERR_UNKOWN);
+	mc_trace("%s, EXIT. error=%d.", __FUNCTION__, error);
+    return error;
 }
 #endif
 
