@@ -177,10 +177,8 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 				
 				hf_write_nvram();
 			#if defined(__VDORECD_VERSION_FEATRUE__)
-				if (MsgCmd_GetExtIntMaskFlag() && MsgCmd_IsSdCardExist())
-				{
-					MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
-				}
+				//这里是短信设置超级号码, 按照张工的要求, 既然有超级号码了, 那么就要打开中断了.
+				MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
 			#endif
 				sprintf(number_list,"Number list:%s %s %s %s %s %s",hf_nv.admin_number[0],hf_nv.admin_number[1],hf_nv.admin_number[2],
 																	    hf_nv.admin_number[3],hf_nv.admin_number[4],hf_nv.admin_number[5]);
@@ -236,7 +234,8 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 				}
 			}
 		#if defined(__VDORECD_VERSION_FEATRUE__)
-			if (!MsgCmd_GetExtIntMaskFlag() && MsgCmd_IsSdCardExist() && hf_admin_is_null())
+			//这里是清除超级号码, 按照张工的要求, 没有超级号码了就要屏蔽中断
+			if (hf_admin_is_null())
 			{
 				MsgCmd_InterruptMask(MMI_TRUE, __FILE__, __LINE__);
 			}
@@ -585,10 +584,21 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 				hf_send_sms_req(_phone,"Set error,password error!");
 				return 0xff;
 			}
-			memset(hf_nv.admin_number,0,sizeof(hf_nv.admin_number));
-			memset(hf_nv.admin_passwd,0,sizeof(hf_nv.admin_passwd));
+			//山歌: 你这里的命令怎么能将密码清除成0x00呢? 应该是"123456";
+			memset(&hf_nv, 0, sizeof(hf_nvram));
+			strcpy(hf_nv.admin_passwd,"123456");
+			
+		#if defined(__MSGCMD_SUPPORT__)
+			MsgCmd_SetAdoRecdDefArgs(&hf_nv.ado);
+			MsgCmd_SetVdoRecdDefArgs(&hf_nv.vdo);
+		#endif
 			hf_write_nvram();
 			hf_send_sms_req(_phone,"All data was clearned up.");
+			
+		#if defined(__VDORECD_VERSION_FEATRUE__)
+			//超级命令清除数据, 那么绑定的超级号码什么的就没了, 所以按照张工的要求, 没有超级号码是要屏蔽中断的
+			MsgCmd_InterruptMask(MMI_TRUE, __FILE__, __LINE__);
+		#endif
 		}
 		else
 		{
