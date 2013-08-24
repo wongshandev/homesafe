@@ -104,6 +104,8 @@ typedef enum {
 	MC_ERR_MMS_NOT_READY,
 	MC_ERR_NW_NOT_AVALIABLE,
 	MC_ERR_SIM_NOT_AVALIABLE, /* 20 */
+	//系统正在忙, 但是会设置一个append标志
+	MC_ERR_RECD_BUSY_APPEND,
 }MCErrCode;
 
 /* 录像状态枚举 */
@@ -356,6 +358,15 @@ char *MsgCmd_strsep(char **s, const char *ct);
 ** 作者: wasfayu
 *******/
 S32 MsgCmd_GetCallCount(void);
+
+/*******************************************************************************
+** 函数: MsgCmd_GetCallCountEx
+** 功能: 获取呼出/呼入的电话个数
+** 参数: 呼出/呼入
+** 返回: 返回电话个数
+** 作者: wasfayu
+*******/
+S32 MsgCmd_GetCallCountEx(MMI_BOOL out);
 
 /*******************************************************************************
 ** 函数: MsgCmd_IsSdCardExist
@@ -712,18 +723,6 @@ MMI_BOOL MsgCmd_IsSimUsable(mmi_sim_enum sim);
 ** 作者: wasfayu
 *******/
 void MsgCmd_InterruptMask(MMI_BOOL mask, char *file, U32 line);
-
-#if defined(__VDORECD_VERSION_FEATRUE__)
-/*******************************************************************************
-** 函数: MsgCmd_GetExtIntMaskFlag
-** 功能: 获取中断屏蔽标志
-** 说明: 这种方法并不科学, 应该读取寄存器. EINT_STATUS
-** 参数: 无
-** 返回: 屏蔽标志
-** 作者: wasfayu
-*******/
-MMI_BOOL MsgCmd_GetExtIntMaskFlag(void);
-#endif
 
 /*******************************************************************************
 ** 函数: MsgCmd_InterruptRegister

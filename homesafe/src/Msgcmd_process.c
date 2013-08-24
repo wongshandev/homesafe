@@ -644,6 +644,25 @@ S32 MsgCmd_GetCallCount(void)
 }
 
 /*******************************************************************************
+** 函数: MsgCmd_GetCallCountEx
+** 功能: 获取呼出/呼入的电话个数
+** 参数: 呼出/呼入
+** 返回: 返回电话个数
+** 作者: wasfayu
+*******/
+S32 MsgCmd_GetCallCountEx(MMI_BOOL out)
+{
+	srv_ucm_call_state_enum state = SRV_UCM_ACTIVE_STATE | SRV_UCM_HOLD_STATE;
+
+	if (out)
+		state |= SRV_UCM_OUTGOING_STATE;
+	else
+		state |= SRV_UCM_INCOMING_STATE;
+	
+	return srv_ucm_query_call_count(state, SRV_UCM_CALL_TYPE_ALL, NULL);
+}
+
+/*******************************************************************************
 ** 函数: MsgCmd_IsSdCardExist
 ** 功能: 判断存储卡是否存在
 ** 参数: 无
@@ -1203,6 +1222,12 @@ void MsgCmd_MakeCall(char *pnumber)
     app_asc_str_to_ucs2_wcs(Hotline_number, pnumber);
 	
 #ifndef __MMI_DUAL_SIM_MASTER__ 
+
+	if (MsgCmd_AdoRecdBusy())
+		MsgCmd_AdoRecdStop(NULL);
+	if (MsgCmd_VdoRecdBusy())
+		MsgCmd_VdoRecdStop(NULL);
+
 	MakeCall(Hotline_number);
 #else
     if (!mmi_bootup_is_network_service_available() || !srv_mode_switch_is_network_service_available())
@@ -1210,6 +1235,11 @@ void MsgCmd_MakeCall(char *pnumber)
         mc_trace("%s, network not available. number=%s.", __FUNCTION__, pnumber);
         return;
     }
+
+	if (MsgCmd_AdoRecdBusy())
+		MsgCmd_AdoRecdStop(NULL);
+	if (MsgCmd_VdoRecdBusy())
+		MsgCmd_VdoRecdStop(NULL);
 
     mc_trace("%s, number=%s.", __FUNCTION__, pnumber);
 	mmi_ucm_init_call_para_for_sendkey(&param); 
@@ -1483,6 +1513,7 @@ MMI_BOOL MsgCmd_IsSimUsable(mmi_sim_enum sim)
 
 #if 1
 extern const unsigned char AUX_EINT_NO;
+extern void hf_task_sent_hisr(BOOL level);
 
 #define MC_EINT_NO         AUX_EINT_NO
 #define MSGCMD_INTERRUPT_DIFF_LEVEL  0 //低电平出发外部中断
@@ -1508,12 +1539,8 @@ static void msgcmd_InterruptRespond(void *p)
 	}
 #endif
 
-	//MsgCmd_isink(rsp->level);
-	//发消息到hf_mmi_task_process() 统一处理。响应的消息ID还是HF_MSG_ID_ADO或者HF_MSG_ID_VDO
-	{
-		extern void hf_task_sent_hisr(BOOL level);
-		hf_task_sent_hisr(rsp->level);
-	}
+	//发消息到hf_mmi_task_process() 统一处理。响应的消息ID还是HF_MSG_ID_ADO或者HF_MSG_ID_VDO		
+	hf_task_sent_hisr(rsp->level);
 }
 
 /*******************************************************************************
@@ -1601,6 +1628,10 @@ void MsgCmd_InterruptMask(MMI_BOOL mask, char *file, U32 line)
     	if (!MsgCmd_IsSdCardExist() || hf_admin_is_null())
 			return;
 
+		//监控禁止
+		if (hf_monitor_disabled())
+			return;
+
         mmi_frm_set_protocol_event_handler(
     		MSG_ID_MC_EXT_INTERRUPT,
     		(PsIntFuncPtr)msgcmd_InterruptRespond,
@@ -1615,25 +1646,6 @@ void MsgCmd_InterruptMask(MMI_BOOL mask, char *file, U32 line)
 		mc_trace("interrupt opened by %s,L:%d",file, line);
     }
 }
-
-#if defined(__VDORECD_VERSION_FEATRUE__)
-/*******************************************************************************
-** 函数: MsgCmd_GetExtIntMaskFlag
-** 功能: 获取中断屏蔽标志
-** 说明: 这种方法并不科学, 应该读取寄存器. EINT_STATUS
-** 参数: 无
-** 返回: 屏蔽标志
-** 作者: wasfayu
-*******/
-MMI_BOOL MsgCmd_GetExtIntMaskFlag(void)
-{
-	MMI_BOOL masked;
-	//masked: 0x7F, opened: 0x7E.
-	masked = (MMI_BOOL)(*EINT_MASK & (0x0001 << (MC_EINT_NO)));
-	mc_trace("%s, masked=%d.", __FUNCTION__, masked);
-	return masked;
-}
-#endif
 
 /*******************************************************************************
 ** 函数: msgcmd_InterruptLISR
@@ -2611,38 +2623,33 @@ static mmi_ret msgcmd_NetworkAttachedEventHdlr(mmi_event_struct *evt)
     switch (pevt->new_status)
     {
     case SRV_NW_INFO_SA_FULL_SERVICE:
+        mc_trace("network attached!");
 	#if defined(__VDORECD_VERSION_FEATRUE__)
-		if (MsgCmd_IsSdCardExist() && !MsgCmd_GetExtIntMaskFlag() && hf_admin_is_null())
-		{
+		//有效SIM情况下, 如果超级号码为空且T卡存在则相应中断
+		if (MsgCmd_IsSdCardExist())
+			MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
+		else
 			MsgCmd_InterruptMask(MMI_TRUE, __FILE__, __LINE__);
-		}
 	#endif
 	
-        //注销本事件的回调
-        mmi_frm_cb_dereg_event( \
-            EVT_ID_SRV_NW_INFO_SERVICE_AVAILABILITY_CHANGED, \
-            msgcmd_NetworkAttachedEventHdlr, \
-            NULL);
+        //本项目只有一张SIM卡, 不用注销这个了
+        //mmi_frm_cb_dereg_event( \
+        //    EVT_ID_SRV_NW_INFO_SERVICE_AVAILABILITY_CHANGED, \
+        //    msgcmd_NetworkAttachedEventHdlr, \
+        //    NULL);
         
-        mc_trace("network attached!");
         break;
     case SRV_NW_INFO_SA_NO_SERVICE:
-	#if defined(__VDORECD_VERSION_FEATRUE__)
-		if (MsgCmd_IsSdCardExist() && MsgCmd_GetExtIntMaskFlag())
-		{
-			MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
-		}
-	#endif
         mc_trace("network no service!");
+	#if defined(__VDORECD_VERSION_FEATRUE__)
+		MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
+	#endif
         break;
     case SRV_NW_INFO_SA_LIMITED_SERVICE:
-	#if defined(__VDORECD_VERSION_FEATRUE__)
-		if (MsgCmd_IsSdCardExist() && MsgCmd_GetExtIntMaskFlag())
-		{
-			MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
-		}
-	#endif
         mc_trace("network limited service!");
+	#if defined(__VDORECD_VERSION_FEATRUE__)
+		MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
+	#endif
         break;
         
     case SRV_NW_INFO_SA_SEARCHING:
@@ -2764,26 +2771,16 @@ mmi_ret MsgCmd_EvtProcEntry(mmi_event_struct *evp)
 				inp->new_location.cell_id);
 		}
 		break;
+		
     case EVT_ID_SRV_BOOTUP_NORMAL_INIT:
         MsgCmd_ProcessInit();
         break;
+		
     case EVT_ID_SRV_BOOTUP_BEFORE_IDLE:
+		//mc_trace("%s, L:%d, id=%d. EVT_ID_SRV_BOOTUP_BEFORE_IDLE", __FUNCTION__, __LINE__, evp->evt_id);
         break;
+	
     case EVT_ID_SRV_BOOTUP_COMPLETED:
-	#if defined(__VDORECD_VERSION_FEATRUE__)
-		/* 录像版本的特征: 
-		   (1) 无T卡, 不响应中断, 不执行录音/录像/拍照
-		   (2) 无SIM卡, 不响应中断, 但是响应录音/录像/拍照
-		   (3) 有SIM卡, 未绑定号码, 不响应中断, 但是响应录音/录像/拍照 */
-		if (MsgCmd_IsSimUsable(MsgCmd_GetDefinedSim() && hf_admin_is_null()))
-			MsgCmd_InterruptMask(MMI_TRUE, __FILE__, __LINE__);
-		else
-			MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
-	#else
-		MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
-	#endif
-		//MsgCmd_isink(MMI_FALSE);
-
     #if defined(__GET_LOCATION_INFO__)
 		MsgCmd_GciInfoEvtProcSetOrClr(MMI_TRUE);
 	#endif
@@ -2794,12 +2791,29 @@ mmi_ret MsgCmd_EvtProcEntry(mmi_event_struct *evp)
             EVT_ID_SRV_NW_INFO_SERVICE_AVAILABILITY_CHANGED, \
             msgcmd_NetworkAttachedEventHdlr, \
             NULL);
-        //MsgCmd_isink(MMI_TRUE);
         break;
+		
     case EVT_ID_IDLE_ENTER:
+		//mc_trace("%s, L:%d, id=%d. EVT_ID_IDLE_ENTER", __FUNCTION__, __LINE__, evp->evt_id);
+		break;
     case EVT_ID_IDLE_LAUNCHED:
+		//mc_trace("%s, L:%d, id=%d. EVT_ID_IDLE_LAUNCHED", __FUNCTION__, __LINE__, evp->evt_id);
+	#if defined(__VDORECD_VERSION_FEATRUE__)
+		/* 中断在以下几种情况中，不响应：
+			1、无T卡；
+			2、有效SIM卡，且未绑定号码；
+			已经将T卡的判断和是否绑定号码给弄到中断屏蔽函数里面去了, 这里只判断SIM卡是否有效.
+			这里判断SIM卡是否有效, 如果无效就立即打开中断, 如果有效就看看搜网情况来决定是否打开中断.
+		*/
+		if (!MsgCmd_IsSimUsable(MsgCmd_GetDefinedSim()))
+			MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
+	#else
+		MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
+	#endif
+		break;
+
     case EVT_ID_IDLE_EXIT:
-        //mc_trace("%s, L:%d, id=%d.", __FUNCTION__, __LINE__, evp->evt_id);
+        //mc_trace("%s, L:%d, id=%d. EVT_ID_IDLE_EXIT", __FUNCTION__, __LINE__, evp->evt_id);
         break;
     case EVT_ID_SRV_SHUTDOWN_DEINIT:
     case EVT_ID_SRV_SHUTDOWN_NORMAL_START:
@@ -4295,6 +4309,12 @@ void MsgCmd_VdoRecdStop(char *replay_number)
     {
         vrm->stop = MMI_TRUE;
         msgcmd_VdoRecdSave(vrm->filepath);
+
+	#if defined(__VDORECD_VERSION_FEATRUE__)
+			MsgCmd_InterruptMask(
+				(MMI_BOOL)(MsgCmd_IsSimUsable(MsgCmd_GetDefinedSim()) && hf_admin_is_null() && MsgCmd_IsSdCardExist()), 
+				__FILE__, __LINE__);
+	#endif
     }
 }
 
@@ -4327,6 +4347,17 @@ MCErrCode MsgCmd_VdoRecdStart(
 	do {
 	    if (MsgCmd_VdoRecdBusy())
 	    {
+	    #if defined(__VDORECD_VERSION_FEATRUE__)
+			//录像过程中, 追加时间
+	    	if (vrm->timeCount >= ((vrm->saveGap<<2)/5))
+			{
+				MsgCmd_VdoRecdSetAppend();
+				mc_trace("%s, append time. timeCount=%dS.", __FUNCTION__, vrm->timeCount);
+				error = MC_ERR_RECD_BUSY_APPEND;
+				break;
+			}
+		#endif
+		
 	    	error = MC_ERR_VDORECD_BUSY;
 			break;
     	}

@@ -41,6 +41,7 @@ void hf_nvram_init(void)
 	if(strlen(hf_nv.admin_passwd) == 0)
 	{
 		strcpy(hf_nv.admin_passwd,"123456");
+		hf_nv.monitor_disable = (U8)MMI_FALSE; //监控默认是打开的
     #if defined(__MSGCMD_SUPPORT__)
         MsgCmd_SetAdoRecdDefArgs(&hf_nv.ado);
         MsgCmd_SetVdoRecdDefArgs(&hf_nv.vdo);
@@ -288,6 +289,11 @@ void hf_hisr_call_result(BOOL result)
 	{
 		if (!MsgCmd_VdoRecdBusy())
 		{
+		#if defined(__VDORECD_VERSION_FEATRUE__)
+			if (MsgCmd_AdoRecdBusy())
+				MsgCmd_AdoRecdStop(NULL);
+		#endif
+		
 			hf_set_light_for_rec();
 			MsgCmd_VdoRecdStart(
 				MMI_FALSE, 
@@ -301,7 +307,7 @@ void hf_hisr_call_result(BOOL result)
 BOOL hf_make_call(char * number, hf_FuncPtr cb)
 {
 #define IS_IN_CALL	((GetActiveScreenId() >= SCR_ID_UCM_OUTGOING)&&\
-					(GetActiveScreenId() <SCR_ID_UCM_DUMMY))
+					(GetActiveScreenId() <SCR_ID_UCM_DUMMY) && (MsgCmd_GetCallCount() > 0))
 					
 	char w_call_out[MAX_PHONENUMBER_LENTH*2] = {0};
 	if(number == NULL) return FALSE;
@@ -422,6 +428,13 @@ void MsgCmd_AdoRecdStopTimerEx(void)
 	mmi_ucm_outgoing_call_endkey();
 }
 #endif
+
+//判断监控是否禁止
+MMI_BOOL hf_monitor_disabled(void)
+{
+	return (MMI_BOOL)hf_nv.monitor_disable;
+}
+
 void hf_enit_hisr(void)
 {
 	static BOOL act = FALSE;
@@ -484,11 +497,16 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
         #if defined(__MSGCMD_SUPPORT__)
 			if((time == HF_HISR_IN)||(time == HF_HISR_OUT))
 			{
+			#if defined(__VDORECD_VERSION_FEATRUE__)
 				//高电平, 对于录像版本不做处理, 因此忽略掉
 				if (time == HF_HISR_OUT)
+				{
+					ws_trace("%s, L:%d. HF_HISR_OUT, return.", __FUNCTION__, __LINE__);
 					break;
+				}
+			#endif
 				
-				if(hf_is_vaild_service()&&(FALSE==hf_admin_is_null()))
+				if(hf_is_vaild_service() && (FALSE==hf_admin_is_null()) && !MsgCmd_VdoRecdBusy())
 				{
 					int v;
 					for(v=0;v<MAX_ADMIN_NUMBER;v++)
@@ -503,6 +521,7 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 							}
 							else
 							{
+								//这里应该修改下, 你在这个for循环里面有时候会连续多次掉用starttimer函数, 搞不好会引起异常的, 最好把它弄到for循环外面去
 								ws_trace("定时器启动");
 								StartTimer(HF_HISR_VDO_STOP_TIMER_ID, 1000*60*5, hf_vdo_rec_stop);
 							}
@@ -511,29 +530,40 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 				}
 				else
 				{
-					if (MsgCmd_VdoRecdBusy())
+					MCErrCode error;
+						
+				#if defined(__VDORECD_VERSION_FEATRUE__)
+					//张工要求在这里如果有录音则先停止录音
+					if (MsgCmd_AdoRecdBusy())
+						MsgCmd_AdoRecdStop(NULL);
+				#endif
+
+					//启动录像, start函数里面已经有设置append的标志处理了
+					error = MsgCmd_VdoRecdStart(
+							    MMI_FALSE, 
+							    MsgCmd_GetVdoRecdArgs()->save_gap,
+							    MsgCmd_GetVdoRecdArgs()->save_gap,
+							    NULL);
+				
+				#if defined(__VDORECD_VERSION_FEATRUE__)
+					if (!(MC_ERR_RECD_BUSY_APPEND == error || MC_ERR_NONE == error))
 					{
-						//追加录像时间，而不是无限制录像
-						ws_trace("追加录像时间");
-						MsgCmd_VdoRecdSetAppend();
-	                    //gCmd_VdoRecdGetContext()->forever = MMI_TRUE;
+						//说明处理失败, 需要重新打开中断, 当然最好的方法是延迟再打开
+						MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
 					}
-					else
-					{
-						ws_trace("%s,L:%d, time=%d.", __FUNCTION__, __LINE__, time);
-						hf_set_light_for_rec();
-						MsgCmd_VdoRecdStart(
-						    MMI_FALSE, 
-						    MsgCmd_GetVdoRecdArgs()->save_gap,
-						    MsgCmd_GetVdoRecdArgs()->save_gap,
-						    NULL);
-					}
-					ws_trace("定时器启动5分钟后停止");
+				#endif
+				
+					//保留山歌的定时器让山歌自己来修改
 					StartTimer(HF_HISR_VDO_STOP_TIMER_ID, 1000*60*5, hf_vdo_rec_stop);
 				}
 			}
 			else
 			{
+			#if defined(__VDORECD_VERSION_FEATRUE__)
+				if (MsgCmd_AdoRecdBusy())
+					MsgCmd_AdoRecdStop(NULL);
+			#endif
+				
 				if (MsgCmd_VdoRecdBusy())
 				{
 					//replay system busy
@@ -592,6 +622,11 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 							//拨电话已经结束
 						if(hf_info.call_is_complete == TRUE)
 						{
+						#if defined(__VDORECD_VERSION_FEATRUE__)
+							if (MsgCmd_VdoRecdBusy())
+								MsgCmd_VdoRecdStop(NULL);
+						#endif
+						
 							if (!MsgCmd_AdoRecdBusy())
 							{
 								//空闲时，可以启动。
@@ -610,6 +645,11 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 				}
 				else
 				{
+				#if defined(__VDORECD_VERSION_FEATRUE__)
+					if (MsgCmd_VdoRecdBusy())
+						MsgCmd_VdoRecdStop(NULL);
+				#endif
+						
 					if(HF_HISR_OUT == time)
 					{
 						StopTimer(MSGCMD_TIMER_ADO_STOP);
@@ -627,6 +667,11 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
         	}
         	else
         	{
+        	#if defined(__VDORECD_VERSION_FEATRUE__)
+				if (MsgCmd_VdoRecdBusy())
+					MsgCmd_VdoRecdStop(NULL);
+			#endif
+			
 				//短信触发的
 				if (!MsgCmd_AdoRecdBusy())
 				{
@@ -666,21 +711,18 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 		}break;
 		case HF_MSG_ID_FACT:
 		{
-		#if defined(__VDORECD_VERSION_FEATRUE__)
-			if (!MsgCmd_GetExtIntMaskFlag() && MsgCmd_IsSdCardExist())
-			{
-				MsgCmd_InterruptMask(MMI_TRUE, __FILE__, __LINE__);
-			}
-		#endif
-
 			memset(&hf_nv, 0, sizeof(hf_nvram));
 			strcpy(hf_nv.admin_passwd,"123456");
 		#if defined(__MSGCMD_SUPPORT__)
 			MsgCmd_SetAdoRecdDefArgs(&hf_nv.ado);
 			MsgCmd_SetVdoRecdDefArgs(&hf_nv.vdo);
 		#endif
-
 			hf_write_nvram();
+		
+		#if defined(__VDORECD_VERSION_FEATRUE__)
+			//恢复出厂设置, 那么绑定的超级号码什么的就没了, 所以按照张工的要求, 没有超级号码是要屏蔽中断的
+			MsgCmd_InterruptMask(MMI_TRUE, __FILE__, __LINE__);
+		#endif
 		}break;
 		case HF_MSG_ID_CALL:
 		{
@@ -696,6 +738,10 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 			ws_trace("task mos :%d",_flag);
 
         #if defined(__MSGCMD_SUPPORT__)
+			hf_nv.monitor_disable = (MMI_BOOL)_flag;
+			hf_write_nvram();
+			
+			//开关控制监控是否开启, 这里应该是直接注销中断, 而不是屏蔽, 因为系统其他地方会重新打开这个
             MsgCmd_InterruptMask((MMI_BOOL)_flag, __FILE__, __LINE__);
         #endif
 		}break;
