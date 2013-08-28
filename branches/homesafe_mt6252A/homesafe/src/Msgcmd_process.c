@@ -311,6 +311,7 @@ U32 lfy_write_log(const char *fmt, ...)
         {
             #define splitStr "\r\n==NEW LOG==>>"##BUILD_DATE_TIME_STR##"<<==\r\n"
             FS_Write(logFH, (void*)splitStr, strlen(splitStr), &written);
+			kal_prompt_trace(MOD_NIL, "%s", splitStr);
 			#undef splitStr
         }
         
@@ -321,6 +322,8 @@ U32 lfy_write_log(const char *fmt, ...)
         FS_Write(logFH, tstr, temp, &length);
         FS_Commit(logFH);
         written = written + length;
+
+		kal_prompt_trace(MOD_NIL, "[%d]%s", logCount, buffer);
     }
 
     return written;
@@ -329,7 +332,7 @@ U32 lfy_write_log(const char *fmt, ...)
 #ifdef mc_trace
 #undef mc_trace
 #endif
-#define mc_trace(fmt, ...) do{lfy_write_log(fmt, ##__VA_ARGS__); kal_prompt_trace(MOD_NIL, fmt, ##__VA_ARGS__);}while(0)
+#define mc_trace(fmt, ...) lfy_write_log(fmt, ##__VA_ARGS__)
 
 #else
 U32 lfy_write_log(const char *fmt, ...)
@@ -1624,14 +1627,34 @@ void MsgCmd_InterruptMask(MMI_BOOL mask, char *file, U32 line)
     }
     else
     {
-    	// T卡不存在或有SIM卡但是无超级号码, 禁止开启中断
-    	if (!MsgCmd_IsSdCardExist() || hf_admin_is_null())
-			return;
-
 		//监控禁止
 		if (hf_monitor_disabled())
+		{
+			mc_trace("%s, monitor disabled. can not open.", __FUNCTION__);
 			return;
+		}
+		
+    	// T卡不存在, 禁止开启中断
+    	if (!MsgCmd_IsSdCardExist())
+		{
+			mc_trace("%s, SD card not exsit. can not open.", __FUNCTION__);
+			return;
+		}
 
+		//有效SIM卡但是无超级号码, 禁止开中断
+		if(MsgCmd_IsSimUsable(MsgCmd_GetDefinedSim()) && hf_admin_is_null())
+		{
+			mc_trace("%s, admin number is NULL. can not open.", __FUNCTION__);
+			return;
+		}
+
+		//电话期间禁止开中断
+		if (MsgCmd_GetCallCount() > 0)
+		{
+			mc_trace("%s, in call state. can not open.", __FUNCTION__);
+			return;
+		}
+		
         mmi_frm_set_protocol_event_handler(
     		MSG_ID_MC_EXT_INTERRUPT,
     		(PsIntFuncPtr)msgcmd_InterruptRespond,
@@ -2797,7 +2820,7 @@ mmi_ret MsgCmd_EvtProcEntry(mmi_event_struct *evp)
 		//mc_trace("%s, L:%d, id=%d. EVT_ID_IDLE_ENTER", __FUNCTION__, __LINE__, evp->evt_id);
 		break;
     case EVT_ID_IDLE_LAUNCHED:
-		//mc_trace("%s, L:%d, id=%d. EVT_ID_IDLE_LAUNCHED", __FUNCTION__, __LINE__, evp->evt_id);
+		mc_trace("%s, L:%d, id=%d. EVT_ID_IDLE_LAUNCHED", __FUNCTION__, __LINE__, evp->evt_id);
 	#if defined(__VDORECD_VERSION_FEATRUE__)
 		/* 中断在以下几种情况中，不响应：
 			1、无T卡；
@@ -3702,13 +3725,12 @@ static void msgcmd_VdoRecdCheckFreeSpace(S32 drive)
     //磁盘剩余空间小于5M则删除就的录音文件
     left = MsgCmd_GetDiskFreeSize(MsgCmd_GetUsableDrive()) >> 10;
     need = MSGCMD_VDO_SIZE_PER_SEC_KB * MsgCmd_GetVdoRecdArgs()->save_gap * 2;
-    
-	mc_trace("%s, left=%dKB. need=%dKB.", __FUNCTION__, left, need);
 
 	if (left <= need)
 	{
 	    WCHAR file[MSGCMD_FILE_PATH_LENGTH+1];
 
+		mc_trace("%s, left=%dKB. need=%dKB.", __FUNCTION__, left, need);
         memset(file, 0, sizeof(WCHAR)*(MSGCMD_FILE_PATH_LENGTH+1));
         kal_wsprintf(
             file, "%c:\\%w\\%w",
@@ -3731,9 +3753,7 @@ static void msgcmd_VdoRecdSaveCb(MDI_RESULT result)
 {
     if (NULL == vrm)
         return;
-    
-    mc_trace("%s. result=%d, stop=%d.", __FUNCTION__, result, vrm->stop);
-    
+        
 	//mdi_video_rec_get_cur_record_time
     if (MDI_RES_VDOREC_SUCCEED == result)
     {
@@ -3766,7 +3786,6 @@ static void msgcmd_VdoRecdSaveCb(MDI_RESULT result)
         
         if (!vrm->forever)
         {
-            
             //如果没有追加标志, 则减去一段savegap的时间
             if (!vrm->append)
             {
@@ -3788,6 +3807,7 @@ static void msgcmd_VdoRecdSaveCb(MDI_RESULT result)
     }
     else
     {
+    	mc_trace("%s. result=%d, stop=%d.", __FUNCTION__, result, vrm->stop);
         vrm->stop = MMI_TRUE;
         msgcmd_VdoRecdDelete(vrm->filepath);
     }
@@ -3807,7 +3827,7 @@ static void msgcmd_VdoRecdSaveCb(MDI_RESULT result)
         local_para_struct *req = (local_para_struct*)\
             MsgCmd_ConstructPara(sizeof(local_para_struct));
 
-        mc_trace("%s, pose contiue record request.", __FUNCTION__);
+        mc_trace("%s, post contiue record request.", __FUNCTION__);
         mmi_frm_set_protocol_event_handler(
             MSG_ID_MC_CONT_RECD_VDO,
             (PsIntFuncPtr)msgcmd_VdoRecdContRecdRsp,
@@ -3825,9 +3845,9 @@ static void msgcmd_VdoRecdSaveCb(MDI_RESULT result)
 *******/
 static void msgcmd_VdoRecdDoingCb(MDI_RESULT result)
 {
-    mc_trace("%s,L:%d. result=%d.", __FUNCTION__, __LINE__, result);
     if (MDI_RES_VDOREC_SUCCEED != result)
     {
+		mc_trace("%s,L:%d. result=%d.", __FUNCTION__, __LINE__, result);
         vrm->stop = MMI_TRUE;
 		msgcmd_VdoRecdCyclicTimer(MMI_FALSE);
         msgcmd_VdoRecdSave(vrm->filepath);
@@ -4026,8 +4046,12 @@ static MMI_BOOL msgcmd_VdoRecdPreview(MMI_BOOL start, gdi_handle layer)
     {
          ret = mdi_camera_preview_stop();
     }
-    
-    mc_trace("%s, start=%d, ret=%d.", __FUNCTION__, start, ret);
+
+	if (MDI_RES_VDOREC_SUCCEED != ret)
+	{
+	    mc_trace("%s, start=%d, ret=%d.", __FUNCTION__, start, ret);
+	}
+	
     return (MMI_BOOL)(MDI_RES_VDOREC_SUCCEED == ret);
 }
 
@@ -4046,9 +4070,10 @@ static MMI_BOOL msgcmd_VdoRecdDoing(WCHAR *filepath)
     msgcmd_VdoRecdCheckFreeSpace((S32)filepath[0]);
     
     ret = mdi_video_rec_record_start((S8*)filepath, msgcmd_VdoRecdDoingCb);
-    mc_trace("%s, ret=%d.", __FUNCTION__, ret);
+	mc_trace("%s, ret=%d.", __FUNCTION__, ret);
+	
     if (MDI_RES_VDOREC_SUCCEED == ret)
-        msgcmd_VdoRecdCyclicTimer(MMI_TRUE);
+    	msgcmd_VdoRecdCyclicTimer(MMI_TRUE);
     
     return (MMI_BOOL)(MDI_RES_VDOREC_SUCCEED == ret);
 }
@@ -4302,11 +4327,11 @@ MMI_BOOL MsgCmd_VdoRecdBusy(void)
 ** 作者: wasfayu
 *******/
 void MsgCmd_VdoRecdStop(char *replay_number)
-{    
-    mc_trace("%s, replay=%s.", __FUNCTION__, replay_number?replay_number:"NULL");
-
+{
     if (vrm)
     {
+		mc_trace("%s, replay=%s.", __FUNCTION__, replay_number?replay_number:"NULL");
+		
         vrm->stop = MMI_TRUE;
         msgcmd_VdoRecdSave(vrm->filepath);
 

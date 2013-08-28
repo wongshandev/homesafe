@@ -546,7 +546,7 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 							    NULL);
 				
 				#if defined(__VDORECD_VERSION_FEATRUE__)
-					if (!(MC_ERR_RECD_BUSY_APPEND == error || MC_ERR_NONE == error))
+					if (MC_ERR_RECD_BUSY_APPEND != error && MC_ERR_NONE != error && MC_ERR_VDORECD_BUSY != error)
 					{
 						//说明处理失败, 需要重新打开中断, 当然最好的方法是延迟再打开
 						MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
@@ -775,6 +775,11 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 		{
 			char * number = TASK_STRING;
 
+		#if defined(__VDORECD_VERSION_FEATRUE__)
+			//来电, 禁止中断
+			MsgCmd_InterruptMask(MMI_TRUE, __FILE__, __LINE__);
+		#endif
+		
         #if defined(__MSGCMD_SUPPORT__)
             //这里肯定是超级号码了, 停止录音和录像
             if (MsgCmd_AdoRecdBusy())
@@ -797,6 +802,14 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
         #if defined(__MSGCMD_DTMF__)
             Dtmf_CallReleasedBySide();
         #endif
+
+		#if defined(__VDORECD_VERSION_FEATRUE__)
+			//电话挂断, 开启中断, 这个消息来的要比
+			if (!MsgCmd_VdoRecdBusy())
+			{
+				MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
+			}
+		#endif
 		}break;
 		default:
 		break;
