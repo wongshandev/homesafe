@@ -613,9 +613,14 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 	else
 		return 0xff;
 }
+
+#ifndef __INT_MMS_VDO_VER__
+//#define __INT_MMS_VDO_VER__
+#endif
+
 void hf_task_sent_hisr(MMI_BOOL level)
 {
-    hf_task_struct * p = (hf_task_struct*) construct_local_para(sizeof(hf_task_struct), TD_CTRL);
+    hf_task_struct * p = (hf_task_struct*) construct_local_para(sizeof(hf_task_struct), TD_CTRL|TD_RESET);
 
 	if(level)
 	{
@@ -625,8 +630,38 @@ void hf_task_sent_hisr(MMI_BOOL level)
 	{
 		p->id = HF_HISR_IN;
 	}
+	
 #if defined(__ADO_VER__)	
 	hf_mmi_task_send(HF_MSG_ID_ADO, p);
+#elif defined(__INT_MMS_VDO_VER__)//INT-->MMS->VDO
+	if (!hf_admin_is_null() && !level && !MsgCmd_VdoRecdBusy())
+	{
+		U16 v;
+		
+		for(v=0;v<MAX_ADMIN_NUMBER;v++)
+		{
+			if(strlen(hf_nv.admin_number[v]) > MIN_PHONENUMBER_LENTH)
+			{
+				strcpy(p->string, hf_nv.admin_number[v]);
+				MsgCmd_CaptureEntry(hf_nv.admin_number[v], "interrupt");
+				break;
+			}
+		}
+
+		free_local_para((local_para_struct*)p);
+		
+		{
+            MsgcmdVdoProcReq *req = (MsgcmdVdoProcReq*)\
+                MsgCmd_ConstructPara(sizeof(MsgcmdVdoProcReq));
+
+            req->saveGap = MsgCmd_GetVdoRecdArgs()->save_gap;
+            req->number[0] = '\0';          
+            req->record  = MMI_TRUE;
+            req->forever = MMI_FALSE;
+            
+            MsgCmd_SendIlm2Mmi((msg_type)MSG_ID_MC_VDORECD_REQ, (void *)req);
+        }
+	}
 #else
 	hf_mmi_task_send(HF_MSG_ID_VDO, p);
 #endif

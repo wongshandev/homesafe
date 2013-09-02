@@ -126,7 +126,7 @@ kal_uint8 hf_get_signal_changed(void)
 }
 void hf_juge_t_card(void)
 {
-	if('C' ==MsgCmd_GetUsableDrive())
+	if('C' ==MsgCmd_GetUsableDrive()) //建议使用这个函数: MsgCmd_IsSdCardExist()
 	{
 		int v;
 		for(v=0;v<MAX_ADMIN_NUMBER;v++)
