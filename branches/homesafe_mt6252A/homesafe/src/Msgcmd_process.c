@@ -3612,7 +3612,7 @@ MCErrCode MsgCmd_CaptureEntry(char *replay_number, char *user_name)
 		msgcmd_CaptureFinish();
 	}while(0);
 
-	mc_trace("%s, EXIT. error=%s.", __FUNCTION__, error);
+	mc_trace("%s, EXIT. error=%d.", __FUNCTION__, error);
         
     return error;
 }
