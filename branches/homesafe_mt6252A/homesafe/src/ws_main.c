@@ -244,16 +244,16 @@ void hf_call_out_timer_out(void)
 				//空闲时，可以启动。
 				ws_trace("开始录音。。");
 				hf_set_light_for_rec();
-#if defined(__ADO_VER__)				
-				MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, 0, 5*60, NULL);
-				hf_init_hf_info();
-#else
+#if defined(__VDO_VER__)
 				ws_trace("超时了，可以录像了");
 				MsgCmd_VdoRecdStart(
 					MMI_FALSE, 
 					MsgCmd_GetVdoRecdArgs()->save_gap,
 					MsgCmd_GetVdoRecdArgs()->save_gap,
 					NULL);
+#elif defined(__ADO_VER__)
+				MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, 0, 5*60, NULL);
+				hf_init_hf_info();
 #endif
 			}
 		}
