@@ -152,7 +152,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			if(VAILD_PSW)
 			{
 				ws_trace("password  error.");
-				hf_send_sms_req(_phone,"Set error,password error!");
+				//hf_send_sms_req(_phone,"Set error,password error!");
 				return 0xff;
 			}
 			for(_count=0;_count<MAX_ADMIN_NUMBER;_count++)
@@ -193,7 +193,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 		else
 		{
 			ws_trace("Set advance number error.");
-			hf_send_sms_req(_phone,"Set error!");
+			//hf_send_sms_req(_phone,"Set error!");
 			return 0xff;
 		}
 		
@@ -214,7 +214,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			if(VAILD_PSW)
 			{
 				ws_trace("password  error.");
-				hf_send_sms_req(_phone,"Set error,Password error!");
+				//hf_send_sms_req(_phone,"Set error,Password error!");
 				return 0xff;
 			}
 			for(_count=0;_count<MAX_ADMIN_NUMBER;_count++)
@@ -226,8 +226,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 					{
 						if(!strcmp(_temp_number[_count],hf_nv.admin_number[v]))
 						{
-							//strcpy(hf_nv.admin_number[v],"");
-							memset(hf_nv.admin_number[v], 0, MAX_PHONENUMBER_LENTH+1);
+							strcpy(hf_nv.admin_number[v],"");
 							break;
 						}
 					}
@@ -248,7 +247,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 		else
 		{
 			ws_trace("clear advance number error.");
-			hf_send_sms_req(_phone,"Clear error!");
+			//hf_send_sms_req(_phone,"Clear error!");
 			return 0xff;
 		}
 	}
@@ -260,12 +259,12 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 		_is_null = FALSE;
 		if(STR_LEN > MAX_STR_LEN("ado123456=100"))
 		return 0xfe;
-		if(hf_scanf(_content, strlen(_content), "ado%s %d",_psw,&p->id))
+		if(hf_scanf(_content, strlen(_content), "ado%s t%d",_psw,&p->id))
 		{
 			if(VAILD_PSW)
 			{
 				ws_trace("password  error.");
-				hf_send_sms_req(_phone,"set error,password error!");
+				//hf_send_sms_req(_phone,"set error,password error!");
 				return 0xff;
 			}
 			if(p->id > MAX_LENTH_REC_TIME)
@@ -283,7 +282,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 		else
 		{
 			ws_trace("set error.");
-			hf_send_sms_req(_phone,"Set error!Please retry!");
+			//hf_send_sms_req(_phone,"Set error!Please retry!");
 		}
 	}
 #if defined(__VDO_VER__)
@@ -299,7 +298,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			if(VAILD_PSW)
 			{
 				ws_trace("password  error.");
-				hf_send_sms_req(_phone,"Set error,password error!");
+				//hf_send_sms_req(_phone,"Set error,password error!");
 				return 0xff;
 			}
 			if(p->id > MAX_LENTH_REC_TIME)
@@ -396,7 +395,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			if(VAILD_PSW)
 			{
 				ws_trace("password  error.");
-				hf_send_sms_req(_phone,"Set error,password error!");
+				//hf_send_sms_req(_phone,"Set error,password error!");
 				return 0xff;
 			}
 			hf_send_sms_req(_phone,"Restore factory mode successfully!");
@@ -405,7 +404,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 		else
 		{
 			ws_trace("Set error.");
-			hf_send_sms_req(_phone,"Set error!Please retry!");
+			//hf_send_sms_req(_phone,"Set error!Please retry!");
 		}
 	}
 	if((_addr_set = strstr(_content,STR_CMD_CALL)) != NULL)
@@ -420,7 +419,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			if(VAILD_PSW)
 			{
 				ws_trace("password  error.");
-				hf_send_sms_req(_phone,"Set error,password error!");
+				//hf_send_sms_req(_phone,"Set error,password error!");
 				return 0xff;
 			}
 			strcpy(p->string,_phone);
@@ -430,7 +429,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 		else
 		{
 			ws_trace("Set error.");
-			hf_send_sms_req(_phone,"Set error!Please retry!");
+			//hf_send_sms_req(_phone,"Set error!Please retry!");
 		}
 	}	
 	if((_addr_set = strstr(_content,STR_CMD_MOS)) != NULL)
@@ -445,7 +444,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			if(VAILD_PSW)
 			{
 				ws_trace("password  error.");
-				hf_send_sms_req(_phone,"Set error,password error!");
+				//hf_send_sms_req(_phone,"Set error,password error!");
 				return 0xff;
 			}
 			hf_send_sms_req(_phone,"Set monitor successfully!");
@@ -454,7 +453,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 		else
 		{
 			ws_trace("Set error.");
-			hf_send_sms_req(_phone,"Set error!Please retry!");
+			//hf_send_sms_req(_phone,"Set error!Please retry!");
 		}
 	}
 	if((_addr_set = strstr(_content,STR_CMD_LANG)) != NULL)
@@ -469,7 +468,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			if(VAILD_PSW)
 			{
 				ws_trace("password  error.");
-				hf_send_sms_req(_phone,"Set error,password error!");
+				//hf_send_sms_req(_phone,"Set error,password error!");
 				return 0xff;
 			}
 			hf_send_sms_req(_phone,"Set language successfully!");
@@ -478,7 +477,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 		else
 		{
 			ws_trace("Set error.");
-			hf_send_sms_req(_phone,"Set error!Please retry!");
+			//hf_send_sms_req(_phone,"Set error!Please retry!");
 		}
 	}
 	if((_addr_set = strstr(_content,STR_CMD_TIME)) != NULL)
@@ -493,7 +492,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			if(VAILD_PSW)
 			{
 				ws_trace("password  error.");
-				hf_send_sms_req(_phone,"Set error,password error!");
+				//hf_send_sms_req(_phone,"Set error,password error!");
 				return 0xff;
 			}
 			hf_sms_set_time(p->string,_phone);
@@ -502,7 +501,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 		else
 		{
 			ws_trace("Set error.");
-			hf_send_sms_req(_phone,"Set error!Please retry!");
+			//hf_send_sms_req(_phone,"Set error!Please retry!");
 		}
 	}
 	if((_addr_set = strstr(_content,STR_CMD_VER)) != NULL)
@@ -515,7 +514,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			if(VAILD_PSW)
 			{
 				ws_trace("password  error.");
-				hf_send_sms_req(_phone,"Set error,password error!");
+				//hf_send_sms_req(_phone,"Set error,password error!");
 				return 0xff;
 			}
 			hf_send_sms_req(_phone,HF_STR_VER);
@@ -523,7 +522,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 		else
 		{
 			ws_trace("Set error.");
-			hf_send_sms_req(_phone,"Set error!Please retry!");
+			//hf_send_sms_req(_phone,"Set error!Please retry!");
 		}
 	}
 	if((_addr_set = strstr(_content,STR_CMD_Q)) != NULL)
@@ -536,7 +535,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			if(VAILD_PSW)
 			{
 				ws_trace("password  error.");
-				hf_send_sms_req(_phone,"Set error,password error!");
+				//hf_send_sms_req(_phone,"Set error,password error!");
 				return 0xff;
 			}
 			hf_send_sms_req(_phone,"Set quit successfully!");
@@ -545,7 +544,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 		else
 		{
 			ws_trace("Set error.");
-			hf_send_sms_req(_phone,"Set error!Please retry!");
+			//hf_send_sms_req(_phone,"Set error!Please retry!");
 		}
 	}
 	if((_addr_set = strstr(_content,STR_CMD_LOCA)) != NULL)
@@ -558,7 +557,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			if(VAILD_PSW)
 			{
 				ws_trace("password  error.");
-				hf_send_sms_req(_phone,"Set error,password error!");
+				//hf_send_sms_req(_phone,"Set error,password error!");
 				return 0xff;
 			}
 			hf_info.hf_loc.cb = hf_get_loc_cb_ex;
@@ -568,7 +567,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 		else
 		{
 			ws_trace("Set error.");
-			hf_send_sms_req(_phone,"Set error!Please retry!");
+			//hf_send_sms_req(_phone,"Set error!Please retry!");
 		}
 	}
 	if((_addr_set = strstr(_content,STR_CMD_CLEAR)) != NULL)
@@ -581,7 +580,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			if(VAILD_PSW)
 			{
 				ws_trace("password  error.");
-				hf_send_sms_req(_phone,"Set error,password error!");
+				//hf_send_sms_req(_phone,"Set error,password error!");
 				return 0xff;
 			}
 			//山歌: 你这里的命令怎么能将密码清除成0x00呢? 应该是"123456";
@@ -603,7 +602,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 		else
 		{
 			ws_trace("Set error.");
-			hf_send_sms_req(_phone,"Set error!Please retry!");
+			//hf_send_sms_req(_phone,"Set error!Please retry!");
 		}
 	}
 	if(_is_null)
@@ -777,13 +776,7 @@ void hf_new_msg_ind(char * rev_num,char * rev_content)
 		hf_send_sms_req(rev_num,"All data was clearned up, and the system will restart.");
 		StartTimer(SH_REBOOT_TIMER_ID,1000*20,hf_set_reboot_ex);	
 	}
-	
-#if defined(__VDORECD_VERSION_FEATRUE__)
-	/* 当前这种处理方式, 一旦有一个号码先发送消息绑定, 那么以后就只能使用这个号码来绑定/解绑其他号码了. */
-	if (hf_admin_is_null() || hf_is_admin_number(rev_num))
-#else
-	if((TRUE == hf_admin_is_null()&&((addr=strstr(rev_content,STR_CMD_SET))!=NULL))||(hf_is_admin_number(rev_num)))
-#endif
+	if(1)//((TRUE == hf_admin_is_null()&&((addr=strstr(rev_content,STR_CMD_SET))!=NULL))||(hf_is_admin_number(rev_num)))
 	{
 		if(0xfe==hf_msg_deal_cmd(msg_num,low_msg_content))
 		{
