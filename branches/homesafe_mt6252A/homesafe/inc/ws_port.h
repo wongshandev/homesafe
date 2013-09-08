@@ -44,6 +44,7 @@ extern void hf_main_init(void);
 extern pBOOL mmi_bootup_is_network_service_available(void);
 extern BOOL hf_is_vaild_service(void);
 extern void mmi_ucm_outgoing_call_endkey(void);
+extern BOOL hf_is_incoming_call;
 #if defined(__MSGCMD_SUPPORT__)
 #ifndef mc_trace
 #define mc_trace hf_print

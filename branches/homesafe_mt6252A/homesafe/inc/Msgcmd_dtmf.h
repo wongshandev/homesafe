@@ -13,11 +13,12 @@
 #ifndef __MSGCMD_DTMF_H__
 #define __MSGCMD_DTMF_H__
 
-#if defined(__MSGCMD_DTMF__)
 #include "./msgcmd_process.h"
 #include "GlobalConstants.h"
 #include "mdi_datatype.h"
 #include "ucmsrvgprot.h"
+
+#if defined(__MSGCMD_DTMF__)
 
 //老版本, 电话接通后, 等待按#键后才进入系统选择录音或者录像, 选择之后播放提示语然后再挂机
 #ifndef __MSGCMD_DTMF_OLD_VERSION__
@@ -209,6 +210,15 @@ void Dtmf_AutoAnswerReqSend(WCHAR *name, char *number);
 ** 作者: wasfayu
 *******/
 void Dtmf_CallReleasedBySide(void);
+
+/*******************************************************************************
+** 函数: DTMF_IsWaitingExecCmd
+** 功能: 判断是否有等待执行的命令
+** 参数: 无
+** 返回: 是否有等待执行的命令
+** 作者: wasfayu
+*******/
+MMI_BOOL DTMF_IsWaitingExecCmd(void);
 
 /*******************************************************************************
 ** 函数: Dtmf_DelayToAnswerCall

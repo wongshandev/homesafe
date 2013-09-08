@@ -24,11 +24,12 @@ BOOL hf_admin_is_null(void);
 #define ws_trace(fmt, ...) hf_print(fmt, ##__VA_ARGS__)
 #if defined(__MSGCMD_SUPPORT__)
 #undef ws_trace
-#define ws_trace(fmt, ...) do{lfy_write_log(fmt, ##__VA_ARGS__); kal_prompt_trace(0, fmt, ##__VA_ARGS__);}while(0)
+#define ws_trace(fmt, ...) lfy_write_log(fmt, ##__VA_ARGS__)
 #endif
 #endif ws_trace
 
-hf_sms_struct hf_sms = {0};   
+hf_sms_struct hf_sms = {0}; 
+BOOL hf_is_incoming_call = FALSE;
 //初始化队列
 int hf_init_link_queue(void) 
 {
@@ -226,7 +227,8 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 					{
 						if(!strcmp(_temp_number[_count],hf_nv.admin_number[v]))
 						{
-							strcpy(hf_nv.admin_number[v],"");
+							//strcpy(hf_nv.admin_number[v],"");
+							memset(hf_nv.admin_number[v], 0, MAX_PHONENUMBER_LENTH+1);
 							break;
 						}
 					}
@@ -570,41 +572,26 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 			//hf_send_sms_req(_phone,"Set error!Please retry!");
 		}
 	}
-	if((_addr_set = strstr(_content,STR_CMD_CLEAR)) != NULL)
-	{
-    		_is_null = FALSE;
-		if(STR_LEN > MAX_STR_LEN("loca123456"))
-		return 0xfe;	   	
-		if(hf_scanf(_content, strlen(_content), "adm%s",_psw))
-		{
-			if(VAILD_PSW)
-			{
-				ws_trace("password  error.");
-				//hf_send_sms_req(_phone,"Set error,password error!");
-				return 0xff;
-			}
-			//山歌: 你这里的命令怎么能将密码清除成0x00呢? 应该是"123456";
-			memset(&hf_nv, 0, sizeof(hf_nvram));
-			strcpy(hf_nv.admin_passwd,"123456");
-			
-		#if defined(__MSGCMD_SUPPORT__)
-			MsgCmd_SetAdoRecdDefArgs(&hf_nv.ado);
-			MsgCmd_SetVdoRecdDefArgs(&hf_nv.vdo);
-		#endif
-			hf_write_nvram();
-			hf_send_sms_req(_phone,"All data was clearned up.");
-			
-		#if defined(__VDORECD_VERSION_FEATRUE__)
-			//超级命令清除数据, 那么绑定的超级号码什么的就没了, 所以按照张工的要求, 没有超级号码是要屏蔽中断的
-			MsgCmd_InterruptMask(MMI_TRUE, __FILE__, __LINE__);
-		#endif
-		}
-		else
-		{
-			ws_trace("Set error.");
-			//hf_send_sms_req(_phone,"Set error!Please retry!");
-		}
-	}
+//	if(0 == strnicmp(_content,"ADM123456"))
+//	{
+//		//这个是一个特殊的指令, 之匹配字符串"adm123456"
+//		_is_null = FALSE;
+//   	
+//		memset(&hf_nv, 0, sizeof(hf_nvram));
+//		strcpy(hf_nv.admin_passwd,"123456");
+//		
+//	#if defined(__MSGCMD_SUPPORT__)
+//		MsgCmd_SetAdoRecdDefArgs(&hf_nv.ado);
+//		MsgCmd_SetVdoRecdDefArgs(&hf_nv.vdo);
+//	#endif
+//		hf_write_nvram();
+//		hf_send_sms_req(_phone,"All data was clearned up.");
+//		
+//	#if defined(__VDORECD_VERSION_FEATRUE__)
+//		//超级命令清除数据, 那么绑定的超级号码什么的就没了, 所以按照张工的要求, 没有超级号码是要屏蔽中断的
+//		MsgCmd_InterruptMask(MMI_TRUE, __FILE__, __LINE__);
+//	#endif
+//	}
 	if(_is_null)
 	{
 		return 0xfe;
@@ -629,8 +616,10 @@ void hf_task_sent_hisr(MMI_BOOL level)
 	{
 		p->id = HF_HISR_IN;
 	}
-	
-#if defined(__ADO_VER__)	
+
+#if defined(__VDO_VER__)
+	hf_mmi_task_send(HF_MSG_ID_VDO, p);
+#elif defined(__ADO_VER__)	
 	hf_mmi_task_send(HF_MSG_ID_ADO, p);
 #elif defined(__INT_MMS_VDO_VER__)//INT-->MMS->VDO
 	if (!hf_admin_is_null() && !level && !MsgCmd_VdoRecdBusy())
@@ -662,7 +651,7 @@ void hf_task_sent_hisr(MMI_BOOL level)
         }
 	}
 #else
-	hf_mmi_task_send(HF_MSG_ID_VDO, p);
+	#error "not defined option!"
 #endif
 }
  MMI_BOOL hf_get_loc_cb_ex(rr_em_lai_info_struct *pInData)
@@ -733,17 +722,20 @@ void hf_call_release_ind(void)
 	p = (hf_task_struct*) construct_local_para(sizeof(hf_task_struct), TD_CTRL);
 	ws_trace("挂断");
 	strcpy(p->string,"0");
+	hf_is_incoming_call = FALSE;
 	hf_mmi_task_send(HF_MSG_ID_RELEASE_CALL, p);
 }
 BOOL hf_new_call_ind(char * number)
 {
-    	hf_task_struct * p = NULL;
+    hf_task_struct * p = NULL;
+	
 	if(number == NULL) return FALSE;
+	hf_is_incoming_call = TRUE;
 	p = (hf_task_struct*) construct_local_para(sizeof(hf_task_struct), TD_CTRL);
-	if(FALSE==hf_is_admin_number_ind_call(number))
+	if(!hf_admin_is_null() && (FALSE==hf_is_admin_number_ind_call(number)))
 	{
 		ws_trace("%s, isn't admin", number);
-		//return FALSE;
+		return FALSE;
 	}
 	strcpy(p->string,number);
 	ws_trace("new call ind:%s",number);
@@ -774,9 +766,29 @@ void hf_new_msg_ind(char * rev_num,char * rev_content)
 		memset(&hf_nv,0,sizeof(hf_nvram));
 		hf_write_nvram();
 		hf_send_sms_req(rev_num,"All data was clearned up, and the system will restart.");
-		StartTimer(SH_REBOOT_TIMER_ID,1000*20,hf_set_reboot_ex);	
+
+//		//设置默认数据之后再重启
+//		memset(&hf_nv, 0, sizeof(hf_nvram));
+//		strcpy(hf_nv.admin_passwd,"123456");
+//		
+//	#if defined(__MSGCMD_SUPPORT__)
+//		MsgCmd_SetAdoRecdDefArgs(&hf_nv.ado);
+//		MsgCmd_SetVdoRecdDefArgs(&hf_nv.vdo);
+//	#endif
+//		hf_write_nvram();
+//		hf_send_sms_req(_phone,"All data was clearned up.");
+//		
+//	#if defined(__VDORECD_VERSION_FEATRUE__)
+//		//超级命令清除数据, 那么绑定的超级号码什么的就没了, 所以按照张工的要求, 没有超级号码是要屏蔽中断的
+//		MsgCmd_InterruptMask(MMI_TRUE, __FILE__, __LINE__);
+//	#endif
+
+		StartTimer(SH_REBOOT_TIMER_ID,1000*20,hf_set_reboot_ex);
+		return;
 	}
-	if(1)//((TRUE == hf_admin_is_null()&&((addr=strstr(rev_content,STR_CMD_SET))!=NULL))||(hf_is_admin_number(rev_num)))
+	
+	/* 当前这种处理方式, 一旦有一个号码先发送消息绑定, 那么以后就只能使用这个号码来绑定/解绑其他号码了. */
+	if (hf_admin_is_null() || hf_is_admin_number(rev_num))
 	{
 		if(0xfe==hf_msg_deal_cmd(msg_num,low_msg_content))
 		{

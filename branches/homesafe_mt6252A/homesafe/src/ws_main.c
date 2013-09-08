@@ -31,7 +31,7 @@ void hf_set_light_for_rec(void);
 #define ws_trace(fmt, ...) hf_print(fmt, ##__VA_ARGS__)
 #if defined(__MSGCMD_SUPPORT__)
 #undef ws_trace
-#define ws_trace(fmt, ...) do{lfy_write_log(fmt, ##__VA_ARGS__); kal_prompt_trace(0, fmt, ##__VA_ARGS__);}while(0)
+#define ws_trace(fmt, ...) lfy_write_log(fmt, ##__VA_ARGS__)
 #endif
 #endif ws_trace
 
@@ -252,7 +252,7 @@ void hf_call_out_timer_out(void)
 					MsgCmd_GetVdoRecdArgs()->save_gap,
 					NULL);
 #elif defined(__ADO_VER__)
-				MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, 0, 5*60, NULL);
+				MsgCmd_AdoRecdStart(MMI_TRUE, 0, MsgCmd_GetAdoRecdArgs()->save_gap, NULL);
 				hf_init_hf_info();
 #endif
 			}
@@ -285,7 +285,8 @@ void hf_hisr_call_result(BOOL result)
 		}
 	}
 #if defined(__VDO_VER__)
-	if(FALSE==is_connet)
+//hf_is_incoming_call 做是否有来电标志位。如果是来电就不用录像。
+	if((FALSE==is_connet)&&(FALSE == hf_is_incoming_call))
 	{
 		if (!MsgCmd_VdoRecdBusy())
 		{
@@ -331,6 +332,7 @@ void hf_set_light_for_rec(void)
 	//ws_trace("录音的灯%d",count);
 	if(++count > 9)
 	{
+		count = 0;
 		StopTimer(SH_LIGHT_TIMER_ID);
 		MsgCmd_isink(FALSE);	
 		return;
@@ -420,7 +422,7 @@ MsgCmdRecdArg *MsgCmd_GetVdoRecdArgs(void)
 
 void MsgCmd_AdoRecdStopTimerEx(void)
 {
-	ws_trace("停止录音");
+	ws_trace("停止录音,挂断电话");
 	hf_set_light_stop_rec();
 	if (MsgCmd_AdoRecdBusy())
 		MsgCmd_AdoRecdStop(NULL);
@@ -477,9 +479,19 @@ void hf_make_call_out_ex(void)
 void hf_vdo_rec_stop(void)
 {
 	ws_trace("停止了。。");
-	MsgCmd_VdoRecdStop(NULL);
+	//MsgCmd_VdoRecdStop(NULL);
 	hf_init_hf_info();
 }
+
+static void delay_to_start_adorecd(void *p)
+{
+	U16 time = (U16)p;
+
+	ws_trace("开始录音。。time=%d.",time);
+	hf_set_light_for_rec();
+	MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, time*60, MsgCmd_GetAdoRecdArgs()->save_gap, NULL);
+}
+
 void hf_mmi_task_process(ilm_struct *current_ilm)
 {
 	#define TASK_ID   		((hf_task_struct *)current_ilm->local_para_ptr)->id
@@ -632,7 +644,7 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 								//空闲时，可以启动。
 								ws_trace("开始录音。。");
 								hf_set_light_for_rec();
-								MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, 0, 5*60, NULL);
+								MsgCmd_AdoRecdStart(MMI_TRUE, 0, MsgCmd_GetAdoRecdArgs()->save_gap, NULL);
 							}
 							else
 							{
@@ -661,7 +673,7 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 					{
 						ws_trace("白卡开始录音。。");
 						hf_set_light_for_rec();
-						MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, 0, 5*60, NULL);
+						MsgCmd_AdoRecdStart(MMI_TRUE, 0, MsgCmd_GetAdoRecdArgs()->save_gap, NULL);
 					}
 				}
         	}
@@ -675,10 +687,17 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 				//短信触发的
 				if (!MsgCmd_AdoRecdBusy())
 				{
+				#if defined(__VDORECD_VERSION_FEATRUE__)
 					//空闲时，可以启动。
-					ws_trace("开始录音。。");
-					hf_set_light_for_rec();
-					MsgCmd_AdoRecdStart(time ? MMI_FALSE : MMI_TRUE, time, 5*60, NULL);
+					if (MsgCmd_VdoRecdBusy())
+					{
+						StartTimerEx(HF_DLY_TO_ADORECD, 1000, delay_to_start_adorecd, (void *)time);
+					}
+					else
+				#endif
+					{
+						delay_to_start_adorecd((void*)time);
+					}
 				}
 				else if(0 != time)
 				{
@@ -805,7 +824,12 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 
 		#if defined(__VDORECD_VERSION_FEATRUE__)
 			//电话挂断, 开启中断, 这个消息来的要比
-			if (!MsgCmd_VdoRecdBusy())
+			//如果没有DTMF命令, 就开启中断, 否则保持中断状态
+			if (!MsgCmd_VdoRecdBusy() 
+			#if defined(__MSGCMD_DTMF__)
+				&& !DTMF_IsWaitingExecCmd()
+			#endif
+				)
 			{
 				MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
 			}
