@@ -10,7 +10,6 @@
  *
  ******************************************************************************/
 
-#if defined(__MSGCMD_DTMF__)
 
 #include "./../inc/msgcmd_dtmf.h"
 #include "ucmsrvgprot.h"
@@ -18,13 +17,14 @@
 #include "AlarmFrameworkProt.h"
 #include "app_str.h"
 
+#if defined(__MSGCMD_DTMF__)
 /*
  * 必须在提示音播放完毕之后才能开启按键检测, 否则会造成按键误检测
  * 如果自定义提示音播放失败, 则要播放系统的提示音
  * 如果提示音播放失败, 则直接进入按键检测
  */
 
-#define dtmf_trace(fmt, ...) do{lfy_write_log(fmt, ##__VA_ARGS__); kal_prompt_trace(0, fmt, ##__VA_ARGS__);}while(0)
+#define dtmf_trace(fmt, ...) lfy_write_log(fmt, ##__VA_ARGS__)
 
 
 extern U8 *get_audio(MMI_ID_TYPE i, U8 *type, U32 *filelen);
@@ -337,15 +337,23 @@ static void dtmf_CmdExecRsp(void *p)
 {
     DtmfCmdExecReq *rsp = (DtmfCmdExecReq*)p;
 
+
 	//因为是延时执行的, 如果执行时, 有电话进来, 则取消执行
 	if (srv_ucm_query_call_count(SRV_UCM_CALL_STATE_ALL, SRV_UCM_CALL_TYPE_ALL, NULL) > 0)
     {
         return;
     }
 
+
     //如果命令已经执行, 则返回, 为了防止重复的消息或者函数调用
-    if (!dtmf_IsValidCommand(dtmfCnxt.command))
+    if (!dtmf_IsValidCommand(rsp->command))
     {
+	#if defined(__VDORECD_VERSION_FEATRUE__)
+		if (!MsgCmd_VdoRecdBusy())
+		{
+			MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
+		}
+	#endif
         return;
     }
     
@@ -411,7 +419,12 @@ static void dtmf_CmdExecRsp(void *p)
     MsgCmd_DestructPara(p);
 #endif
 
-    Dtmf_Reset();
+#if defined(__VDORECD_VERSION_FEATRUE__)
+	if (!MsgCmd_VdoRecdBusy())
+	{
+		MsgCmd_InterruptMask(MMI_FALSE, __FILE__, __LINE__);
+	}
+#endif
 }
 
 /*******************************************************************************
@@ -437,10 +450,12 @@ static void dtmf_PostCmdExecReq(DtmfCommand cmd, char *number, void *param)
     dtmf_trace("%s, cmd=%d.", __FUNCTION__, cmd);
 		//延时2秒钟去执行, 否则容易引起问题
 #if defined(__EXEC_IN_TIMER_CBF__)
-	StartTimerEx(TIMER_DTMF_DELAY_EXEC, 2000, dtmf_CmdExecRsp, (void *)req);
+	StartTimerEx(TIMER_DTMF_DELAY_EXEC, 5000, dtmf_CmdExecRsp, (void *)req);
 #else
     MsgCmd_SendIlm2Mmi(MSG_ID_DTMF_EXEC_CMD_REQ, (void*)req);
-#endif
+#endif	
+
+	Dtmf_Reset();
 }
 
 /*******************************************************************************
@@ -1455,6 +1470,22 @@ static void dtmf_DelayToAnswerCallCb(void *inp)
 	    Dtmf_AutoAnswerReqSend(NULL, (char*)inp);
 	else
 		dtmf_ReleaseAllActivedCall(MMI_FALSE);
+}
+
+/*******************************************************************************
+** 函数: DTMF_IsWaitingExecCmd
+** 功能: 判断是否有等待执行的命令
+** 参数: 无
+** 返回: 是否有等待执行的命令
+** 作者: wasfayu
+*******/
+MMI_BOOL DTMF_IsWaitingExecCmd(void)
+{
+#if defined(__EXEC_IN_TIMER_CBF__)
+	return IsMyTimerExist(TIMER_DTMF_DELAY_EXEC);
+#else
+	return MMI_FALSE;
+#endif
 }
 
 /*******************************************************************************

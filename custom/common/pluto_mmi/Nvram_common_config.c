@@ -1696,8 +1696,8 @@ static port_setting_struct const NVRAM_EF_PORT_SETTING_DEFAULT[]=
 /* under construction !*/
 /* under construction !*/
 	#elif defined(__MSGCMD_SUPPORT__)
-	    0x04,
 	    0x00,
+	    0x63,
     #else
         99,   /* tst-ps uses uart_port_null(value is 99) */
         0,   /* APP uses uart_port1 (value is 0) */

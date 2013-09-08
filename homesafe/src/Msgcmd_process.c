@@ -825,7 +825,7 @@ WCHAR *MsgCmd_CombineFilePath(
     filename = pathbuffer + app_ucs2_strlen((const kal_int8 *)pathbuffer);
     if (NULL != ext_name)
     {
-    	applib_dt_get_date_time(&mt);
+    	MsgCmd_GetDateTime(&mt);
     
         kal_wsprintf(
             filename,
