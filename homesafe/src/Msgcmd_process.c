@@ -309,7 +309,11 @@ U32 lfy_write_log(const char *fmt, ...)
 
         if (0 == logCount)
         {
-            #define splitStr "\r\n==NEW LOG==>>"##BUILD_DATE_TIME_STR##"<<==\r\n"
+        #if defined(__VDORECD_VERSION_FEATRUE__)
+			#define splitStr "\r\n==NEW LOG==>>"##BUILD_DATE_TIME_STR##"<<==video record==\r\n"
+		#elif defined(__ADO_VER__)
+			#define splitStr "\r\n==NEW LOG==>>"##BUILD_DATE_TIME_STR##"<<==audio record==\r\n"
+		#endif
             FS_Write(logFH, (void*)splitStr, strlen(splitStr), &written);
 			kal_prompt_trace(MOD_NIL, "%s", splitStr);
 			#undef splitStr
@@ -1630,31 +1634,33 @@ void MsgCmd_InterruptMask(MMI_BOOL mask, char *file, U32 line)
 		//监控禁止
 		if (hf_monitor_disabled())
 		{
-			mc_trace("%s, monitor disabled. can not open.", __FUNCTION__);
+			mc_trace("%s, %s,L:%d. monitor disabled. can not open.", __FUNCTION__,file, line);
 			return;
 		}
 		
     	// T卡不存在, 禁止开启中断
     	if (!MsgCmd_IsSdCardExist())
 		{
-			mc_trace("%s, SD card not exsit. can not open.", __FUNCTION__);
+			mc_trace("%s, %s,L:%d. SD card not exsit. can not open.", __FUNCTION__,file, line);
 			return;
 		}
 
+	#if defined(__VDORECD_VERSION_FEATRUE__)
 		//有效SIM卡但是无超级号码, 禁止开中断
 		if(MsgCmd_IsSimUsable(MsgCmd_GetDefinedSim()) && hf_admin_is_null())
 		{
-			mc_trace("%s, admin number is NULL. can not open.", __FUNCTION__);
+			mc_trace("%s, %s,L:%d. admin number is NULL. can not open.", __FUNCTION__,file, line);
 			return;
 		}
 
 		//电话期间禁止开中断
 		if (MsgCmd_GetCallCount() > 0)
 		{
-			mc_trace("%s, in call state. can not open.", __FUNCTION__);
+			mc_trace("%s, %s,L:%d. in call state. can not open.", __FUNCTION__,file, line);
 			return;
 		}
-		
+	#endif
+	
         mmi_frm_set_protocol_event_handler(
     		MSG_ID_MC_EXT_INTERRUPT,
     		(PsIntFuncPtr)msgcmd_InterruptRespond,
