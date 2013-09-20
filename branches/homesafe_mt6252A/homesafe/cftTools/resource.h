@@ -23,9 +23,6 @@
 #define IDC_BUTTON1                     1013
 #define IDC_BTN_SAVE                    1013
 #define IDC_BTN_LOAD                    1014
-#define IDC_RDO_BOTH                    1015
-#define IDC_RDO_ADO                     1016
-#define IDC_RDO_VDO                     1017
 #define IDC_STATIC_ADO_SAVE_GAP         1018
 #define IDC_STATIC_ADO_MIN_SAVE_SIZE    1020
 #define IDC_EDIT_ADO_SAVE_GAP           1021
@@ -39,12 +36,18 @@
 #define IDC_RDO_VDO_480X320             1035
 #define IDC_RDO_VDO_320X240             1036
 #define IDC_RDO_ADO_HIGH                1037
-#define IDC_RADIO5                      1038
 #define IDC_RDO_ADO_LOW                 1038
 #define IDC_RDO_PIC_640X480             1039
 #define IDC_RDO_PIC_480X320             1040
 #define IDC_RDO_PIC_320X240             1041
 #define IDC_RDO_PIC_1280X960            1042
+#define IDC_CHECK_NEW_PWD               1043
+#define IDC_EDIT_NEW_PWD                1044
+#define IDC_EDIT_OLD_PWD                1045
+#define IDC_EDIT_IMEI                   1046
+#define IDC_DATETIMEPICKER1             1050
+#define IDC_TIME                        1050
+#define IDC_DATE                        1051
 
 // Next default values for new objects
 // 
@@ -52,7 +55,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        129
 #define _APS_NEXT_COMMAND_VALUE         32771
-#define _APS_NEXT_CONTROL_VALUE         1043
+#define _APS_NEXT_CONTROL_VALUE         1052
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif
