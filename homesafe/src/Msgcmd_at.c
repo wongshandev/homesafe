@@ -25,6 +25,8 @@
 #include "custom_mmi_default_value.h"
 #include <ctype.h>
 #include <string.h>
+#include "imeisrvgprot.h"
+
 
 
 /*****************************************************************************
@@ -126,6 +128,15 @@ static void at_capture(AtParam_t *vp);
 *******/
 static void at_time(AtParam_t *vp);
 
+/*******************************************************************************
+** 函数: at_imei
+** 功能: AT命令, 读写IMEI号码
+** 入参: vp
+** 返回: 无  at$imei=1, 123456789012345
+** 作者: wasfayu
+*******/
+static void at_imei(AtParam_t *vp);
+
 
 
 #ifndef at_replay
@@ -148,6 +159,7 @@ static const AtCmdTab_t command_table[AT_CMD_IDX_MAX] = {
     {"$vdorecd",      8, AT_CMD_VDORECD,      at_vdorecd     },
     {"$capture",      8, AT_CMD_CAPTURE,      at_capture     },
     {"$time",         5, AT_CMD_TIME,         at_time        },
+    {"$imei",         5, AT_CMD_IMEI,         at_imei        },
 };
 
 /*******************************************************************************
@@ -757,6 +769,60 @@ static void at_time(AtParam_t *vp)
     }
 }
 
+/*******************************************************************************
+** 函数: at_imei
+** 功能: AT命令, 读写IMEI号码
+** 入参: vp
+** 返回: 无  at$imei=1, 123456789012345
+** 作者: wasfayu
+*******/
+static void at_imei(AtParam_t *vp)
+{
+    switch(vp->mode)
+    {
+    case AT_EM_SET_OR_EXEC:
+        if (2 != vp->argc)
+            vp->result = AT_RST_PARAM_ERR;
+        else
+        {
+			mmi_sim_enum sim = MMI_SIM1;
+			
+            if (vp->argv[0].len != 1 || 
+				!MsgCmd_IsDigStr((const char*)vp->argv[0].pos, vp->argv[0].len) ||
+				MsgCmd_Atoi((const char*)vp->argv[0].pos) > 2 ||
+				vp->argv[1].len != SRV_IMEI_MAX_LEN || 
+				!MsgCmd_IsDigStr((const char*)vp->argv[1].pos, vp->argv[1].len))
+            {
+                vp->result = AT_RST_PARAM_ERR;
+                break;
+            }
+
+			sim = (0x01) << (MsgCmd_Atoi((const char*)vp->argv[0].pos));
+            MsgCmd_WriteImei(vp->argv[1].pos, SRV_IMEI_MAX_LEN, sim, NULL);
+        }
+        break;
+        
+    case AT_EM_HELP:
+        at_replay(MMI_TRUE, "%s: \"yyyy-mm-dd,hh:mm:ss\"", vp->name);
+        break;
+        
+    case AT_EM_READ:
+    case AT_EM_ACTIVE:        
+       	{
+			char imei[18] = {0};
+			
+			if (srv_imei_get_imei(MsgCmd_GetDefinedSim(), imei, 17))
+			{
+				at_replay(MMI_TRUE, "IMEI: %s.", imei);
+			}
+		}
+        break;
+        
+    default:
+        vp->result = AT_RST_UNKOWN_ERR;
+        break;
+    }
+}
 /*******************************************************************************
 ** 函数: msgcmd_AtCmdLineParse
 ** 功能: AT命令行解析

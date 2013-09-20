@@ -129,6 +129,8 @@ void CCfgToolDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Text(pDX, IDC_EDIT_ADO_SAVE_SIZE, this->fContent.audio.minSaveSize);
 	DDX_Text(pDX, IDC_EDIT_VDO_SAVE_GAP, this->fContent.video.saveGap);
 	DDX_Text(pDX, IDC_EDIT_VDO_SAVE_SIZE, this->fContent.video.minSaveSize);
+	DDX_Control(pDX, IDC_DATE, m_date);
+	DDX_Control(pDX, IDC_TIME, m_time);
 }
 
 BEGIN_MESSAGE_MAP(CCfgToolDlg, CDialog)
@@ -138,12 +140,10 @@ BEGIN_MESSAGE_MAP(CCfgToolDlg, CDialog)
 	ON_BN_CLICKED(IDC_BTN_LOAD, &CCfgToolDlg::OnBtnLoadClicked)
 	ON_BN_CLICKED(IDC_BTN_SAVE, &CCfgToolDlg::OnBtnSaveClicked)
 
-	ON_BN_CLICKED(IDC_RDO_BOTH, &CCfgToolDlg::OnRadioBothAdoVdoClicked)
-	ON_BN_CLICKED(IDC_RDO_ADO,  &CCfgToolDlg::OnRadioOnlyAdoClicked)
-	ON_BN_CLICKED(IDC_RDO_VDO,  &CCfgToolDlg::OnRadioOnlyVdoClicked)
 
 	ON_BN_CLICKED(IDC_CHECK_ENABLE_LOG,   &CCfgToolDlg::OnCheckEnableLogFileClicked)
 	ON_BN_CLICKED(IDC_CHECK_ENABLE_DTMF,   &CCfgToolDlg::OnCheckEnableDtmfClicked)
+	ON_BN_CLICKED(IDC_CHECK_NEW_PWD, &CCfgToolDlg::OnCheckEnableNewPwdClicked)
 
 	ON_BN_CLICKED(IDC_RDO_PIC_1280X960,  &CCfgToolDlg::OnRadioCaptureSize1280x960Clicked)
 	ON_BN_CLICKED(IDC_RDO_PIC_640X480,  &CCfgToolDlg::OnRadioCaptureSize640x480Clicked)
@@ -199,19 +199,29 @@ BOOL CCfgToolDlg::OnInitDialog()
 	this->numNidSet[3] = IDC_EDIT_NUM_4;
 	this->numNidSet[4] = IDC_EDIT_NUM_5;
 	this->numNidSet[5] = IDC_EDIT_NUM_6;
+	for (UINT32 i=0; i<ADMIN_NUM_TOTAL; i++)
+	{
+		((CEdit*)this->GetDlgItem(this->numNidSet[i]))->SetLimitText(NUMBER_LENGTH);
+	}
+
+	//IMEI是15位数字
+	((CEdit*)this->GetDlgItem(IDC_EDIT_IMEI))->SetLimitText(MODULE_IMEI_LENGTH);
+	//密码是6位可见ASCII字符
+	((CEdit*)this->GetDlgItem(IDC_EDIT_OLD_PWD))->SetLimitText(PASSWORD_LENGTH);
+	((CEdit*)this->GetDlgItem(IDC_EDIT_NEW_PWD))->SetLimitText(PASSWORD_LENGTH);
 
 	// enable log file
 	this->fContent.enableLogFile = FALSE;
 	// enable DTMF
 	this->fContent.enableDTMF = TRUE;
-	// module feature
-	this->fContent.modFunction = MODULE_ADO_VDO_RECD;
 	// audio quality
 	this->fContent.audioQuality = ADO_QUALITY_HIGH;
 	// video size
 	this->fContent.videoSize    = VDO_SIZE_480X320;
 	// capture size
 	this->fContent.captureSize  = PIC_SIZE_640X480;
+	//禁止使用新密码
+	this->fContent.modifyPwdFlag = FALSE;
 
 	//CString cs;
 	//audio save gap
@@ -294,10 +304,25 @@ void CCfgToolDlg::UpdateDisplay(void)
 	this->CheckDlgButton(IDC_CHECK_ENABLE_LOG, this->fContent.enableLogFile);
 	// enable DTMF
 	this->CheckDlgButton(IDC_CHECK_ENABLE_DTMF, this->fContent.enableDTMF);
-	// module feature
-	this->CheckDlgButton(IDC_RDO_BOTH, this->fContent.modFunction==MODULE_ADO_VDO_RECD);
-	this->CheckDlgButton(IDC_RDO_ADO, this->fContent.modFunction==MODULE_ONLY_ADORECD);
-	this->CheckDlgButton(IDC_RDO_VDO, this->fContent.modFunction==MODULE_ONLY_VDORECD);
+	//old password
+	this->SetDlgItemText(IDC_EDIT_OLD_PWD, this->fContent.oldPwdStr);
+	// new password
+	if (this->fContent.modifyPwdFlag)
+	{
+		this->CheckDlgButton(IDC_CHECK_NEW_PWD, TRUE);
+		(this->GetDlgItem(IDC_EDIT_NEW_PWD))->EnableWindow(TRUE);
+		this->SetDlgItemText(IDC_EDIT_NEW_PWD, this->fContent.newPwdStr);
+	}
+	else
+	{
+		this->SetDlgItemText(IDC_EDIT_NEW_PWD, _T(""));
+		this->CheckDlgButton(IDC_CHECK_NEW_PWD, FALSE);
+		(this->GetDlgItem(IDC_EDIT_NEW_PWD))->EnableWindow(FALSE);
+	}
+
+	//IMEI
+	this->SetDlgItemText(IDC_EDIT_IMEI, this->fContent.imei);
+
 	// audio quality
 	this->CheckDlgButton(IDC_RDO_ADO_HIGH, this->fContent.audioQuality==ADO_QUALITY_HIGH);
 	this->CheckDlgButton(IDC_RDO_ADO_LOW, this->fContent.audioQuality==ADO_QUALITY_LOW);
@@ -338,7 +363,7 @@ void CCfgToolDlg::OnBtnLoadClicked()
 		CFile loadf(filepath, CFile::shareDenyRead);
 
 		//弹出选择预加载文件的对话框
-		if (this->LoadConfigData2File(loadf))
+		if (0 == this->LoadConfigData2File(loadf))
 		{
 			UpdateData(FALSE);
 			this->UpdateDisplay();
@@ -382,28 +407,86 @@ void CCfgToolDlg::OnBtnSaveClicked()
 	{ 
         CString cs;
 
+		//超级号码
 		for (int i=0; i<ADMIN_NUM_TOTAL; i++)
 		{
 			this->GetDlgItemText(this->numNidSet[i], cs);
 			this->fContent.adminNumber[i].length = cs.GetLength();
 			if (cs.GetLength())
 			{
+				if (NUMBER_LENGTH_MIN > cs.GetLength() || NUMBER_LENGTH < cs.GetLength())
+				{
+					cs.Format(_T("Admin NO.%d length error!"), i+1);
+					AfxMessageBox(cs);
+					break;
+				}
+
 				memcpy(this->fContent.adminNumber[i].number, cs.GetBuffer(), sizeof(TCHAR)*cs.GetLength());
 			}
 		}
 
+		//date
+		CTime time;
+		m_date.GetTime(time);
+		//time
+		m_time.GetTime(time);
+		//转换成秒
+
+
+		//密码
+		this->GetDlgItemText(IDC_EDIT_OLD_PWD, cs);
+		if (cs.GetLength() && cs.GetLength() <= PASSWORD_LENGTH)
+		{
+			memcpy(this->fContent.oldPwdStr, cs.GetBuffer(), sizeof(TCHAR)*cs.GetLength());
+		}
+		else
+		{
+			AfxMessageBox(_T("System password length error!"));
+		}
+		//新密码
+		if (this->fContent.modifyPwdFlag)
+		{
+			this->GetDlgItemText(IDC_EDIT_NEW_PWD, cs);
+			if (cs.GetLength() && cs.GetLength() <= PASSWORD_LENGTH)
+			{
+				memcpy(this->fContent.newPwdStr, cs.GetBuffer(), sizeof(TCHAR)*cs.GetLength());
+			}
+			else
+			{
+				AfxMessageBox(_T("New password length error!"));
+			}
+		}
+
+		//IMEI
+		this->GetDlgItemText(IDC_EDIT_IMEI, cs);
+		if (cs.GetLength() && cs.GetLength() != MODULE_IMEI_LENGTH)
+		{
+			AfxMessageBox(_T("IMEI length error!"));
+		}
+		else if (cs.GetLength() == MODULE_IMEI_LENGTH)
+		{
+			memcpy(this->fContent.imei, cs.GetBuffer(), sizeof(TCHAR)*cs.GetLength());
+		}
+		
 		// 如果点击了文件对话框上的“打开”按钮，则将选择的文件路径显示到编辑框里   
 		filepath = fileDlg.GetPathName();
 
 		CFile savef(filepath, CFile::modeCreate|CFile::modeWrite);
 
-		if (!this->SaveConfigData2File(savef))
+		if (0 != this->SaveConfigData2File(savef))
 		{
 			AfxMessageBox(_T("Save data failed!"));
 		}
 
 		savef.Close();
 	}
+}
+
+void CCfgToolDlg::OnCheckEnableNewPwdClicked()
+{
+	this->fContent.modifyPwdFlag = !this->fContent.modifyPwdFlag;
+	this->CheckDlgButton(IDC_CHECK_NEW_PWD, this->fContent.modifyPwdFlag);
+	(this->GetDlgItem(IDC_EDIT_NEW_PWD))->EnableWindow(this->fContent.modifyPwdFlag);
 }
 
 BOOL CCfgToolDlg::PreTranslateMessage(MSG* pMsg)
@@ -428,7 +511,7 @@ BOOL CCfgToolDlg::PreTranslateMessage(MSG* pMsg)
 	return CDialog::PreTranslateMessage(pMsg);;
 }
 
-BOOL CCfgToolDlg::SaveConfigData2File(CFile &recdf)
+INT32 CCfgToolDlg::SaveConfigData2File(CFile &recdf)
 {
 	//获取号码输入框里面的数据，判断是否正常
 	this->fHead.flag = FILE_HEAD_FLAG;
@@ -439,23 +522,29 @@ BOOL CCfgToolDlg::SaveConfigData2File(CFile &recdf)
 	this->fHead.dataPos = sizeof(CfgFileHeader);
 	this->fHead.dataCrc = applib_crc_update(0, (UINT8*)&this->fContent, this->fHead.dataLen);
 
+#if define (_TCHAR_DEFINED) && defined(UNICODE)
+	this->fHead.ascii = 1;
+#else
+	this->fHead.ascii = 0;
+#endif
+
 	recdf.SeekToBegin();
 	recdf.Write((const void*)&this->fHead, sizeof(CfgFileHeader));
 
 	recdf.Seek((LONGLONG)this->fHead.dataPos, CFile::begin);
 	recdf.Write((const void *)&this->fContent, this->fHead.dataLen);
 	
-	return TRUE;
+	return 0;
 }
 
-BOOL CCfgToolDlg::LoadConfigData2File(CFile &out)
+INT32 CCfgToolDlg::LoadConfigData2File(CFile &out)
 {
 	BOOL conver;
 
 	out.SeekToBegin();
 	if (sizeof(CfgFileHeader) != out.Read((void*)&this->fHead, sizeof(CfgFileHeader)))
 	{
-		return FALSE;
+		return _HEAD_DATA_LENGTH_ERROR;
 	}
 
 	if (this->fHead.flag == CONVER16(FILE_HEAD_FLAG) ||
@@ -476,18 +565,18 @@ BOOL CCfgToolDlg::LoadConfigData2File(CFile &out)
 
 		if (this->fHead.dataLen != sizeof(CfgDataStruct))
 		{
-			return FALSE;
+			return _CONTENT_DATA_ERROR;
 		}
 
 		if (this->fHead.dataPos + sizeof(CfgDataStruct) > out.GetLength())
 		{
-			return FALSE;
+			return _CONTENT_DATA_ERROR;
 		}
 
 		out.Seek((LONGLONG)this->fHead.dataPos, CFile::begin);
 		if (this->fHead.dataLen != out.Read((void*)&this->fContent, this->fHead.dataLen))
 		{
-			return FALSE;
+			return _CONTENT_LENGTH_ERROR;
 		}
 
 		if (conver)
@@ -502,13 +591,20 @@ BOOL CCfgToolDlg::LoadConfigData2File(CFile &out)
 			CONVER32(cntx->video.minSaveSize);
 			CONVER32(cntx->video.saveGap);
 		}
+
+		//检查CRC错误没
+		UINT32 crc = applib_crc_update(0, (UINT8*)&this->fContent, this->fHead.dataLen);
+		if (crc != this->fHead.dataCrc)
+		{
+			return _CONTENT_DATA_CRC_ERROR;
+		}
 	} 
 	else
 	{
 		/* 文件异常报错 */
-		return FALSE;
+		return _CONFIG_FILE_DATA_ERROR;
 	}
 
-	return TRUE;
+	return 0;
 }
 
