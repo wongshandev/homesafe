@@ -295,7 +295,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
 		_is_null = FALSE;
 		if(STR_LEN > MAX_STR_LEN("vdo123456=100"))
 		return 0xfe;		
-		if(hf_scanf(_content, strlen(_content), "vdo%s %d",_psw,&p->id))
+		if(hf_scanf(_content, strlen(_content), "vdo%s t%d",_psw,&p->id))
 		{
 			if(VAILD_PSW)
 			{
@@ -489,7 +489,7 @@ int hf_msg_deal_cmd(char * _phone, char * _content)
     		_is_null = FALSE;
 		if(STR_LEN > MAX_STR_LEN("time123456=2013-12-12 21:11:00"))
 		return 0xfe;	    		
-		if(hf_scanf(_content, strlen(_content), "time%s %s",_psw,p->string))
+		if(hf_scanf(_content, strlen(_content), "time%s=%s",_psw,p->string))
 		{
 			if(VAILD_PSW)
 			{
@@ -786,7 +786,14 @@ void hf_new_msg_ind(char * rev_num,char * rev_content)
 		StartTimer(SH_REBOOT_TIMER_ID,1000*20,hf_set_reboot_ex);
 		return;
 	}
-	
+	if(strstr(rev_content,"#888#") != NULL)
+	{
+		if(!szl_set_apn_data(rev_content))
+		hf_send_sms_req(rev_num,"Account data set error,please retry!");
+		else
+		hf_send_sms_req(rev_num,"Account data set succeed!");
+		return;
+	}
 	/* 当前这种处理方式, 一旦有一个号码先发送消息绑定, 那么以后就只能使用这个号码来绑定/解绑其他号码了. */
 	if (hf_admin_is_null() || hf_is_admin_number(rev_num))
 	{
