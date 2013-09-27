@@ -979,7 +979,7 @@ void MsgCmd_SendIlmMsg(
 *******/
 mmi_sim_enum MsgCmd_GetDefinedSim(void)
 {
-	return MMI_SIM2;
+	return MMI_SIM1;
 }
 
 /*******************************************************************************
@@ -1276,11 +1276,17 @@ void MsgCmd_MakeCall(char *pnumber)
 	mmi_ucm_init_call_para_for_sendkey(&param); 
 	
 	if (MMI_SIM1 == MsgCmd_GetDefinedSim())
+	{
 		param.dial_type = SRV_UCM_SIM1_CALL_TYPE_ALL;
+	}
 	else if (MMI_SIM2 == MsgCmd_GetDefinedSim())
+	{
 		param.dial_type = SRV_UCM_SIM2_CALL_TYPE_ALL;
+	}
 	else
+	{
 		ASSERT(0);
+	}
 	
 	param.ucs2_num_uri = (U16 *)Hotline_number;
     mmi_ucm_call_launch(0, &param);
@@ -2302,18 +2308,45 @@ static void msgcmd_SendMMSResultRespond(void *p)
 }
 
 /*******************************************************************************
-** 函数: msgcmd_MMSBgSendRstEvtCb
+** 函数: msgcmd_MMSBgSendReqRstEvtCb
+** 功能: 后台发送MMS的请求结果事件通知函数
+** 入参: p   -- mmi_event_struct
+** 返回: 无
+** 作者: wasfayu
+*******/
+static mmi_ret msgcmd_MMSBgSendReqRstEvtCb(mmi_event_struct *p)
+{
+    srv_mms_bgsr_result_struct *rst = (srv_mms_bgsr_result_struct*)p;
+
+	//result: mmi_mms_bgsr_result_enum
+	//bgsr_req_type: mms_bgsr_req_type_enum
+    mc_trace(
+	    "%s, result(1)=%d. type(1)=%d.", 
+	    __FUCNTION__, 
+	    rst->result, rst->bgsr_req_type);
+	
+    return MMI_RET_OK;   
+}
+
+/*******************************************************************************
+** 函数: msgcmd_MMSBgSendRstNoteCb
 ** 功能: 后台发送MMS的结果事件通知函数
 ** 入参: p   -- mmi_event_struct
 ** 返回: 无
 ** 作者: wasfayu
 *******/
-static mmi_ret msgcmd_MMSBgSendRstEvtCb(mmi_event_struct *p)
+static mmi_ret msgcmd_MMSBgSendRstNoteCb(mmi_event_struct *p)
 {
-    srv_mms_bgsr_result_struct *rst = (srv_mms_bgsr_result_struct*)p;
+	srv_mms_bgsr_popup_data *rst = (srv_mms_bgsr_popup_data *)evt->user_data;
 
-    mc_trace("%s, result=%d.", rst->result);
-    return MMI_RET_OK;   
+	//result: mmi_mms_bgsr_result_enum
+	//rsp_type: srv_mms_bgsr_rsp_type_enum
+	mc_trace(
+		"%s, msg_id=%d,rst(1)=%d,sim=0x%x.type(3)=%d.",
+		__FUCNTION__, 
+		rst->msg_id,rst->result,rst->sim_id,rst->rsp_type);
+	
+	return MMI_RET_OK;
 }
 
 /*******************************************************************************
@@ -2763,10 +2796,22 @@ void MsgCmd_GciInfoEvtProcSetOrClr(MMI_BOOL reg)
 
 	ilm_ptr = allocate_ilm(MOD_MMI);
 	ilm_ptr->src_mod_id  = MOD_MMI;
-    ilm_ptr->dest_mod_id = (MMI_SIM2==MsgCmd_GetDefinedSim()) ? MOD_L4C_2 : MOD_L4C;
     ilm_ptr->sap_id = MMI_L4C_SAP;
     ilm_ptr->local_para_ptr = (local_para_struct *) NULL;
     ilm_ptr->peer_buff_ptr = (peer_buff_struct *) NULL;
+
+	if (MMI_SIM2 == MsgCmd_GetDefinedSim())
+    {
+    	ilm_ptr->dest_mod_id = MOD_L4C_2;
+	}
+	else if (MMI_SIM1 == MsgCmd_GetDefinedSim())
+	{
+		ilm_ptr->dest_mod_id = MOD_L4C;
+	}
+	else
+	{
+		MMI_ASSERT(0);
+	}
 	
 	if (reg)
 	{
@@ -2971,7 +3016,8 @@ mmi_ret MsgCmd_EvtProcEntry(mmi_event_struct *evp)
 			{
 				mc_trace("%s, L:%d, id=%d. MMS is ready.", __FUNCTION__, __LINE__, evp->evt_id);
 			}
-	        mmi_frm_cb_reg_event(EVT_ID_SRV_BGSR_RESULT, msgcmd_MMSBgSendRstEvtCb , NULL);
+	        mmi_frm_cb_reg_event(EVT_ID_SRV_BGSR_RESULT, msgcmd_MMSBgSendReqRstEvtCb , NULL);
+			mmi_frm_cb_reg_event(EVT_ID_SRV_SHOW_BGSR_POPUP, msgcmd_MMSBgSendRstNoteCb, NULL);
     	}
 		break;
     case EVT_ID_SRV_SMS_MEM_AVAILABLE:
