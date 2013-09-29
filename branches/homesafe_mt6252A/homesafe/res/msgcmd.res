@@ -56,6 +56,9 @@
     <RECEIVER id="EVT_ID_SRV_SMS_MEM_EXCEED" proc="MsgCmd_EvtProcEntry"/>
     <RECEIVER id="EVT_ID_SRV_SMS_MEM_FULL" proc="MsgCmd_EvtProcEntry"/>
     <RECEIVER id="EVT_ID_SRV_SMS_MEM_AVAILABLE" proc="MsgCmd_EvtProcEntry"/>
+    <RECEIVER id="EVT_ID_SRV_BGSR_RESULT" proc="MsgCmd_EvtProcEntry"/>
+    <RECEIVER id="EVT_ID_SRV_SHOW_BGSR_POPUP" proc="MsgCmd_EvtProcEntry"/>
+    <RECEIVER id="EVT_ID_SRV_NEW_MMS_MSG" proc="MsgCmd_EvtProcEntry"/>
 
 #ifdef MMS_SUPPORT
 	<RECEIVER id="EVT_ID_SRV_NW_INFO_ROAMING_STATUS_CHANGED" proc="MsgCmd_EvtProcEntry"/>
