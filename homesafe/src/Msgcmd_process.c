@@ -52,6 +52,7 @@
 #include "UcmGProt.h"
 #include "SimDetectionGprot.h"
 #include "mmssrvgprot.h"
+#include "mmssrvprot.h"
 #include "SimDetectionStruct.h"
 #include "mms_sap_struct.h"
 #include "mma_api.h"
@@ -338,6 +339,7 @@ U32 lfy_write_log(const char *fmt, ...)
 		#elif defined(__ADO_VER__)
 			#define splitStr "\r\n==NEW LOG==>>"##BUILD_DATE_TIME_STR##"<<==audio record==\r\n"
 		#endif
+			FS_Seek(logFH, 0, FS_FILE_END);
             FS_Write(logFH, (void*)splitStr, strlen(splitStr), &written);
 			kal_prompt_trace(MOD_NIL, "%s", splitStr);
 			#undef splitStr
@@ -2304,7 +2306,7 @@ static void msgcmd_SendMMSResultRespond(void *p)
 {
     wap_mma_send_rsp_struct *rsp = (wap_mma_send_rsp_struct*)p;
 
-    mc_trace("%s, result=%d, msg_id=%d.",__FUNCTION__, rsp->result, rsp->msg_id);
+    mc_trace("%s, result=%d, msg_id=0x%x.",__FUNCTION__, rsp->result, rsp->msg_id);
 }
 
 /*******************************************************************************
@@ -2318,12 +2320,15 @@ static mmi_ret msgcmd_MMSBgSendReqRstEvtCb(mmi_event_struct *p)
 {
     srv_mms_bgsr_result_struct *rst = (srv_mms_bgsr_result_struct*)p;
 
-	//result: mmi_mms_bgsr_result_enum
-	//bgsr_req_type: mms_bgsr_req_type_enum
-    mc_trace(
-	    "%s, result(1)=%d. type(1)=%d.", 
-	    __FUCNTION__, 
-	    rst->result, rst->bgsr_req_type);
+	if (rst)
+	{
+		//result: mmi_mms_bgsr_result_enum
+		//bgsr_req_type: mms_bgsr_req_type_enum
+	    mc_trace(
+		    "%s, result(1)=%d. type(1)=%d.", 
+		    __FUNCTION__, 
+		    rst->result, rst->bgsr_req_type);
+	}
 	
     return MMI_RET_OK;   
 }
@@ -2337,15 +2342,18 @@ static mmi_ret msgcmd_MMSBgSendReqRstEvtCb(mmi_event_struct *p)
 *******/
 static mmi_ret msgcmd_MMSBgSendRstNoteCb(mmi_event_struct *p)
 {
-	srv_mms_bgsr_popup_data *rst = (srv_mms_bgsr_popup_data *)evt->user_data;
+	srv_mms_bgsr_popup_data *rst = (srv_mms_bgsr_popup_data *)p->user_data;
 
-	//result: mmi_mms_bgsr_result_enum
-	//rsp_type: srv_mms_bgsr_rsp_type_enum
-	mc_trace(
-		"%s, msg_id=%d,rst(1)=%d,sim=0x%x.type(3)=%d.",
-		__FUCNTION__, 
-		rst->msg_id,rst->result,rst->sim_id,rst->rsp_type);
-	
+	if (rst)
+	{
+		//result: mmi_mms_bgsr_result_enum
+		//rsp_type: srv_mms_bgsr_rsp_type_enum
+		mc_trace(
+			"%s, msg_id=0x%x,rst(1)=%d,sim=0x%x.type(3)=%d.",
+			__FUNCTION__, 
+			rst->msg_id,rst->result,rst->sim_id,rst->rsp_type);
+	}
+
 	return MMI_RET_OK;
 }
 
@@ -2384,7 +2392,7 @@ static void msgcmd_CreateAndSendMMSCb(
     FS_Delete(usd->xmlpath);
     MsgCmd_Mfree(usd);
         
-	mc_trace("%s, result=%d, msg_id=%d. rsp->result=%d. usd->sim=0x%x.",
+	mc_trace("%s, result(0)=%d, msg_id=0x%x. rsp->result(0)=%d. usd->sim=0x%x.",
 		__FUNCTION__, result, rsp->msg_id, rsp->result,usd->sim);
 }
 
@@ -3016,9 +3024,16 @@ mmi_ret MsgCmd_EvtProcEntry(mmi_event_struct *evp)
 			{
 				mc_trace("%s, L:%d, id=%d. MMS is ready.", __FUNCTION__, __LINE__, evp->evt_id);
 			}
-	        mmi_frm_cb_reg_event(EVT_ID_SRV_BGSR_RESULT, msgcmd_MMSBgSendReqRstEvtCb , NULL);
-			mmi_frm_cb_reg_event(EVT_ID_SRV_SHOW_BGSR_POPUP, msgcmd_MMSBgSendRstNoteCb, NULL);
     	}
+		break;
+	case EVT_ID_SRV_BGSR_RESULT:
+		msgcmd_MMSBgSendReqRstEvtCb(evp);
+		break;
+	case EVT_ID_SRV_SHOW_BGSR_POPUP:
+		msgcmd_MMSBgSendRstNoteCb(evp);
+		break;
+	case EVT_ID_SRV_NEW_MMS_MSG:
+		mc_trace("EVT_ID_SRV_NEW_MMS_MSG");
 		break;
     case EVT_ID_SRV_SMS_MEM_AVAILABLE:
         //mc_trace("%s, L:%d, id=%d.", __FUNCTION__, __LINE__, evp->evt_id);
