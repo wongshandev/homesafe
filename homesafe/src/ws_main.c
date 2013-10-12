@@ -15,6 +15,8 @@
 #include "mtpnp_sdk_common_if.h"
 #endif
 
+#define __CHAO_TA_MA_DE_GAI_CHENG_LU_YIN__
+
 homesafe_info hf_info = {0};
 hf_nvram	  hf_nv = {0};
 hf_FuncPtr		hf_call_result_cb;
@@ -246,11 +248,15 @@ void hf_call_out_timer_out(void)
 				hf_set_light_for_rec();
 #if defined(__VDO_VER__)
 				ws_trace("超时了，可以录像了");
+			#if !defined(__CHAO_TA_MA_DE_GAI_CHENG_LU_YIN__)
 				MsgCmd_VdoRecdStart(
 					MMI_FALSE, 
 					MsgCmd_GetVdoRecdArgs()->save_gap,
 					MsgCmd_GetVdoRecdArgs()->save_gap,
 					NULL);
+			#else
+				MsgCmd_AdoRecdStart(MMI_TRUE, 0, MsgCmd_GetAdoRecdArgs()->save_gap, NULL);
+			#endif
 #elif defined(__ADO_VER__)
 				MsgCmd_AdoRecdStart(MMI_TRUE, 0, MsgCmd_GetAdoRecdArgs()->save_gap, NULL);
 				hf_init_hf_info();
@@ -296,11 +302,15 @@ void hf_hisr_call_result(BOOL result)
 		#endif
 		
 			hf_set_light_for_rec();
+		#if !defined(__CHAO_TA_MA_DE_GAI_CHENG_LU_YIN__)
 			MsgCmd_VdoRecdStart(
 				MMI_FALSE, 
 				MsgCmd_GetVdoRecdArgs()->save_gap,
 				MsgCmd_GetVdoRecdArgs()->save_gap,
 				NULL);
+		#else
+			MsgCmd_AdoRecdStart(MMI_TRUE, MsgCmd_GetAdoRecdArgs()->save_gap, MsgCmd_GetAdoRecdArgs()->save_gap, NULL);
+		#endif
 		}
 	}
 #endif
@@ -551,11 +561,19 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 				#endif
 
 					//启动录像, start函数里面已经有设置append的标志处理了
+				#if !defined(__CHAO_TA_MA_DE_GAI_CHENG_LU_YIN__)
 					error = MsgCmd_VdoRecdStart(
 							    MMI_FALSE, 
 							    MsgCmd_GetVdoRecdArgs()->save_gap,
 							    MsgCmd_GetVdoRecdArgs()->save_gap,
 							    NULL);
+				#else
+					error = MsgCmd_AdoRecdStart(
+							    MMI_FALSE, 
+							    MsgCmd_GetAdoRecdArgs()->save_gap,
+							    MsgCmd_GetAdoRecdArgs()->save_gap,
+							    NULL);
+				#endif
 				
 				#if defined(__VDORECD_VERSION_FEATRUE__)
 					if (MC_ERR_RECD_BUSY_APPEND != error && MC_ERR_NONE != error && MC_ERR_VDORECD_BUSY != error)
@@ -576,6 +594,7 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 					MsgCmd_AdoRecdStop(NULL);
 			#endif
 				
+			#if !defined(__CHAO_TA_MA_DE_GAI_CHENG_LU_YIN__)
 				if (MsgCmd_VdoRecdBusy())
 				{
 					//replay system busy
@@ -596,6 +615,28 @@ void hf_mmi_task_process(ilm_struct *current_ilm)
 					    MsgCmd_GetVdoRecdArgs()->save_gap,
 					    NULL);
 				}
+			#else
+				if (MsgCmd_AdoRecdBusy())
+				{
+					//replay system busy
+					if (time)
+	                {
+	                    MsgCmd_AdoRecdGetContext()->forever = MMI_FALSE;
+	                    MsgCmd_AdoRecdGetContext()->time += time*60;
+	                }
+                	else 
+                    	MsgCmd_AdoRecdGetContext()->forever = MMI_TRUE;
+				}
+				else
+				{
+					hf_set_light_for_rec();
+					MsgCmd_AdoRecdStart(
+					    time ? MMI_FALSE : MMI_TRUE, 
+					    time*60, 
+					    MsgCmd_GetAdoRecdArgs()->save_gap,
+					    NULL);
+				}
+			#endif
 			}
         #endif
 		}break;
